@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html land="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billy Bjork</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <header>
+        <h1>Billy Bjork</h1>
+    </header>
+    <main>
+        <section id="project-list">
+            <ul>
+                {% for project in projects %}
+                    <li class="project-item" hx-get="/project/{{ project.id }}" hx-target="#project-detail" hx-trigger="click">
+                        <h2>{{ project.name }}</h2>
+                        <p>Created on: {{ project.creation_date }}</p>
+                        {% if project.show_preview_text %}
+                            <p>{{ project.preview_text }}</p>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+        <section id="project-detail">
+            <!-- Project details will be loaded here -->
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 Billy Bjork</p>
+    </footer>
+</body>
+</html>

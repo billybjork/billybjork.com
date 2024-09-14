@@ -1,17 +1,29 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 # Load environment variables
 load_dotenv()
 
-# FastAPI setup
 app = FastAPI()
+
+# CORS setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+# Static files and templates setup
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -56,19 +68,24 @@ def get_db():
         db.close()
 
 # Routes
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
-    projects = db.query(Project).order_by(Project.creation_date.desc()).all()
-    return templates.TemplateResponse("index.html", {"request": request, "projects": projects})
+    try:
+        projects = db.query(Project).order_by(Project.creation_date.desc()).all()
+        return templates.TemplateResponse("index.html", {"request": request, "projects": projects})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-@app.get("/project/{project_id}")
+@app.get("/project/{project_id}", response_class=HTMLResponse)
 async def read_project(request: Request, project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
-    return templates.TemplateResponse("project.html", {"request": request, "project": project})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return templates.TemplateResponse("project_detail.html", {"request": request, "project": project})
 
 @app.get("/api/projects")
-async def get_projects(db: Session = Depends(get_db)):
-    projects = db.query(Project).order_by(Project.creation_date.desc()).all()
+async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int = 10):
+    projects = db.query(Project).order_by(Project.creation_date.desc()).offset(skip).limit(limit).all()
     return [
         {
             "id": project.id,
@@ -83,20 +100,6 @@ async def get_projects(db: Session = Depends(get_db)):
         }
         for project in projects if project.show_project
     ]
-
-@app.get("/api/project/{project_id}")
-async def get_project(project_id: int, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if project and project.show_project:
-        return {
-            "id": project.id,
-            "name": project.name,
-            "creation_date": project.creation_date,
-            "main_text": project.main_text,
-            "video_link": project.video_link,
-            "youtube_link": project.youtube_link
-        }
-    return {"error": "Project not found or not visible"}
 
 if __name__ == "__main__":
     import uvicorn
