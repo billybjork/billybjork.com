@@ -5,12 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Billy Bjork</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        .video-reel {
+            width: 50%;
+            max-width: 1200px;
+            margin: 0 2rem 2rem 0;
+            text-align: left;
+        }
+        .video-reel video {
+            width: 100%;
+            height: auto;
+        }
+    </style>
 </head>
 <body>
     <header>
         <h1>Billy Bjork</h1>
     </header>
     <main>
+        <section class="video-reel">
+            <video controls autoplay muted loop>
+                <source src="{{ reel_url }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </section>
         <section id="project-list">
             <ul>
                 {% for project in projects %}
@@ -29,7 +47,7 @@
         </section>
     </main>
     <footer>
-        <p>&copy; 2024 Billy Bjork</p>
+        <p>&copy; {{ current_year }} Billy Bjork</p>
     </footer>
 </body>
 </html>

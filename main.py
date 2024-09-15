@@ -7,6 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 import os
 
 # Load environment variables
@@ -71,21 +72,32 @@ def get_db():
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
-        projects = db.query(Project).order_by(Project.creation_date.desc()).all()
-        return templates.TemplateResponse("index.html", {"request": request, "projects": projects})
+        # Filter projects where show_project is True
+        projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
+        reel_url = os.getenv("REEL_URL")
+        return templates.TemplateResponse("index.html", {
+            "request": request, 
+            "projects": projects,
+            "reel_url": reel_url,
+            "current_year": datetime.now().year
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
-
+    
 @app.get("/project/{project_id}", response_class=HTMLResponse)
 async def read_project(request: Request, project_id: int, db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return templates.TemplateResponse("project_detail.html", {"request": request, "project": project})
+    return templates.TemplateResponse("project_detail.html", {
+        "request": request, 
+        "project": project,
+        "current_year": datetime.now().year
+    })
 
 @app.get("/api/projects")
 async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int = 10):
-    projects = db.query(Project).order_by(Project.creation_date.desc()).offset(skip).limit(limit).all()
+    projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).offset(skip).limit(limit).all()
     return [
         {
             "id": project.id,
@@ -95,10 +107,9 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
             "thumbnail_link": project.thumbnail_link,
             "show_thumbnail": project.show_thumbnail,
             "show_preview_text": project.show_preview_text,
-            "show_project": project.show_project,
             "highlight_project": project.highlight_project
         }
-        for project in projects if project.show_project
+        for project in projects
     ]
 
 if __name__ == "__main__":
