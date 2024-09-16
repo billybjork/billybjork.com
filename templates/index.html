@@ -34,10 +34,7 @@
                 {% for project in projects %}
                     <li class="project-item" hx-get="/project/{{ project.id }}" hx-target="#project-detail" hx-trigger="click">
                         <h2>{{ project.name }}</h2>
-                        <p>Created on: {{ project.creation_date }}</p>
-                        {% if project.show_preview_text %}
-                            <p>{{ project.preview_text }}</p>
-                        {% endif %}
+                        <time>{{ project.creation_date }}</time>
                     </li>
                 {% endfor %}
             </ul>

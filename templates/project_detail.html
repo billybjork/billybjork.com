@@ -9,6 +9,8 @@
             font-family: Arial, sans-serif;
             line-height: 1.6;
             color: #333;
+            margin: 0;
+            padding: 0;
         }
         .container {
             max-width: 800px;
@@ -16,17 +18,22 @@
             padding: 20px;
         }
         .project-video {
-            width: 100%;
-            max-width: 600px;
-            margin: 20px 0;
+            max-width: 100%;
+            height: auto;
+        }
+        a {
+            color: blue;
+        }
+        a:visited {
+            color: blue;
         }
     </style>
 </head>
 <body>
-    <header>
+    <header class="container">
         <h1>{{ project.name }}</h1>
     </header>
-    <main>
+    <main class="container">
         <article class="project-detail">
             {% if project.video_link %}
             <section class="project-video">
@@ -36,13 +43,10 @@
                 </video>
             </section>
             {% endif %}
-            <section class="project-main-text">
-                {{ project.main_text | safe }}
+            <section class="project-content">
+                {{ project.content | safe }}
             </section>
         </article>
     </main>
-    <footer>
-        <p>&copy; {{ current_year }} Billy Bjork</p>
-    </footer>
 </body>
 </html>

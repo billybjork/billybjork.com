@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import os
+import re
+from unidecode import unidecode
 
 # Load environment variables
 load_dotenv()
@@ -32,7 +34,7 @@ templates = Jinja2Templates(directory="templates")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT", "5432")  # Default to 5432 if not specified
+DB_PORT = os.getenv("DB_PORT")
 DB_NAME = os.getenv("DB_NAME")
 
 SQLALCHEMY_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -47,12 +49,11 @@ class Project(Base):
     id = Column(Integer, primary_key=True, index=True)
     creation_date = Column(Date, nullable=False)
     name = Column(Text)
-    preview_text = Column(Text)
-    main_text = Column(Text)
+    slug = Column(String, unique=True, index=True)
+    content = Column(Text)
     thumbnail_link = Column(Text)
     video_link = Column(Text)
     show_thumbnail = Column(Boolean)
-    show_preview_text = Column(Boolean)
     show_project = Column(Boolean)
     youtube_link = Column(Text)
     highlight_project = Column(Boolean)
@@ -82,11 +83,12 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             "current_year": datetime.now().year
         })
     except Exception as e:
+        print(f"Error in read_root: {str(e)}")  # Add this line for deb
         raise HTTPException(status_code=500, detail="Internal Server Error")
     
-@app.get("/project/{project_id}", response_class=HTMLResponse)
-async def read_project(request: Request, project_id: int, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id).first()
+@app.get("/{project_slug}", response_class=HTMLResponse)
+async def read_project(request: Request, project_slug: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.slug == project_slug).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return templates.TemplateResponse("project_detail.html", {
@@ -102,11 +104,10 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
         {
             "id": project.id,
             "name": project.name,
+            "slug": project.slug,
             "creation_date": project.creation_date,
-            "preview_text": project.preview_text,
             "thumbnail_link": project.thumbnail_link,
             "show_thumbnail": project.show_thumbnail,
-            "show_preview_text": project.show_preview_text,
             "highlight_project": project.highlight_project
         }
         for project in projects
