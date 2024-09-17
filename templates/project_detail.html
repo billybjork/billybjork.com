@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ project.name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -12,41 +13,63 @@
             margin: 0;
             padding: 0;
         }
-        .container {
-            max-width: 800px;
+        .video-container {
+            width: 100%;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
         }
-        .project-video {
-            max-width: 100%;
+        #video-player {
+            width: 100%;
             height: auto;
         }
-        a {
-            color: blue;
-        }
-        a:visited {
+        a, a:visited {
             color: blue;
         }
     </style>
 </head>
 <body>
-    <header class="container">
+    <header>
         <h1>{{ project.name }}</h1>
     </header>
-    <main class="container">
-        <article class="project-detail">
-            {% if project.video_link %}
-            <section class="project-video">
-                <video controls>
-                    <source src="{{ project.video_link }}" type="video/mp4">
-                    Your browser does not support videos.
-                </video>
+    <main>
+        <article class="project">
+            <section class="video-container">
+                <video id="video-player" controls autoplay muted playsinline></video>
             </section>
-            {% endif %}
-            <section class="project-content">
+            <section class="project-details">
                 {{ project.html_content | safe }}
             </section>
         </article>
     </main>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var video = document.getElementById('video-player');
+            var videoSrc = "{{ project.video_link }}";
+
+            if (Hls.isSupported()) {
+                var hls = new Hls();
+                hls.loadSource(videoSrc);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log("HLS manifest parsed");
+                });
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error("HLS error:", data);
+                });
+            }
+            else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = videoSrc;
+                video.addEventListener('loadedmetadata', function() {
+                    console.log("Native HLS support: video metadata loaded");
+                });
+                video.addEventListener('error', function(e) {
+                    console.error("Video error:", video.error);
+                });
+            }
+            else {
+                console.error("HLS is not supported on this browser");
+            }
+        });
+    </script>
 </body>
 </html>

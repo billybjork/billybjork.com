@@ -10,7 +10,6 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import os
-import re
 from unidecode import unidecode
 
 # Load environment variables
@@ -21,10 +20,10 @@ app = FastAPI()
 # CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Static files and templates setup
@@ -74,7 +73,7 @@ def get_db():
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
-        # Filter projects where show_project is True
+        # Filter projects where show_project is TRUE
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
         reel_url = os.getenv("REEL_URL")
         return templates.TemplateResponse("index.html", {
@@ -84,7 +83,7 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             "current_year": datetime.now().year
         })
     except Exception as e:
-        print(f"Error in read_root: {str(e)}")  # Add this line for deb
+        print(f"Error in read_root: {str(e)}")  # For debugging
         raise HTTPException(status_code=500, detail="Internal Server Error")
     
 @app.get("/{project_slug}", response_class=HTMLResponse)
@@ -94,8 +93,7 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
         raise HTTPException(status_code=404, detail="Project not found")
     return templates.TemplateResponse("project_detail.html", {
         "request": request, 
-        "project": project,
-        "current_year": datetime.now().year
+        "project": project
     })
 
 @app.get("/api/projects")
