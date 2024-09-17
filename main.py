@@ -1,3 +1,4 @@
+# uvicorn main:app --reload
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -50,7 +51,7 @@ class Project(Base):
     creation_date = Column(Date, nullable=False)
     name = Column(Text)
     slug = Column(String, unique=True, index=True)
-    content = Column(Text)
+    html_content = Column(Text)
     thumbnail_link = Column(Text)
     video_link = Column(Text)
     show_thumbnail = Column(Boolean)
