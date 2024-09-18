@@ -25,6 +25,9 @@
         a, a:visited {
             color: blue;
         }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -33,8 +36,8 @@
     </header>
     <main>
         <article class="project">
-            <section class="video-container">
-                <video id="video-player" controls autoplay muted playsinline></video>
+            <section id="video-container" class="video-container">
+                <video id="video-player" controls playsinline></video>
             </section>
             <section class="project-details">
                 {{ project.html_content | safe }}
@@ -44,30 +47,39 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             var video = document.getElementById('video-player');
+            var videoContainer = document.getElementById('video-container');
             var videoSrc = "{{ project.video_link }}";
+
+            if (!videoSrc) {
+                videoContainer.classList.add('hidden');
+                return;
+            }
 
             if (Hls.isSupported()) {
                 var hls = new Hls();
                 hls.loadSource(videoSrc);
                 hls.attachMedia(video);
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    console.log("HLS manifest parsed");
+                    // Video successfully loaded
                 });
                 hls.on(Hls.Events.ERROR, function(event, data) {
-                    console.error("HLS error:", data);
+                    console.error("Error loading video:", data);
+                    videoContainer.classList.add('hidden');
                 });
             }
             else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = videoSrc;
                 video.addEventListener('loadedmetadata', function() {
-                    console.log("Native HLS support: video metadata loaded");
+                    // Video successfully loaded
                 });
                 video.addEventListener('error', function(e) {
-                    console.error("Video error:", video.error);
+                    console.error("Error loading video:", e);
+                    videoContainer.classList.add('hidden');
                 });
             }
             else {
                 console.error("HLS is not supported on this browser");
+                videoContainer.classList.add('hidden');
             }
         });
     </script>
