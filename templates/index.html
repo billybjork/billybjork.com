@@ -3,51 +3,7 @@
 {% block title %}Billy Bjork{% endblock %}
 
 {% block additional_styles %}
-<style>
-    /* Home page styles */
-    .video-reel {
-        width: 50%;
-        max-width: 1200px;
-        margin: 0 2rem 2rem 0;
-        text-align: left;
-    }
-    .video-reel video {
-        width: 100%;
-        height: auto;
-    }
-    #project-list {
-        margin-top: 2rem;
-    }
-    .project-item {
-        display: flex;
-        align-items: baseline;
-        margin-bottom: 1rem;
-        cursor: pointer;
-        position: relative;
-        padding-left: 1.5rem;
-    }
-    .project-date {
-        margin-right: 1rem;
-        font-size: 0.9em;
-        color: #666;
-        min-width: 100px;
-        text-align: right;
-    }
-    .project-name {
-        font-size: 1.2em;
-        font-weight: bold;
-    }
-    .highlight-project::before {
-    content: '*';
-    color: #ff6600;
-    position: absolute;
-    left: 1rem;
-    top: 75%;
-    transform: translateY(-50%);
-    font-size: 1.75em;
-    line-height: 1;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', path='css/home.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -60,12 +16,12 @@
 <section id="project-list">
     {% for project in projects %}
         <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}" 
-             hx-get="/project/{{ project.slug }}" 
+             hx-get="/{{ project.slug }}" 
              hx-target="#project-detail" 
              hx-trigger="click">
-            <span class="project-date">{{ project.creation_date }}</span>
-            <span class="project-name">{{ project.name }}</span>
-        </article> 
+            <time class="project-date">{{ project.formatted_date }}</time>
+            <h2 class="project-name">{{ project.name }}</h2>
+        </article>
     {% endfor %}
 </section>
 <section id="project-detail">

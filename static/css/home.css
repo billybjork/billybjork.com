@@ -1,0 +1,58 @@
+/* Home page styles */
+.video-reel {
+    width: 50%;
+    max-width: 1200px;
+    margin: 0 2rem 2rem 0;
+    text-align: left;
+}
+
+.video-reel video {
+    width: 100%;
+    height: auto;
+}
+
+#project-list {
+    margin-top: 2rem;
+}
+
+.project-item {
+    display: flex;
+    flex-wrap: wrap; /* Allows wrapping on smaller screens */
+    align-items: baseline;
+    margin-bottom: 1rem;
+    cursor: pointer;
+    position: relative;
+    padding-left: 1.5rem;
+}
+
+.project-date {
+    margin-right: 1rem;
+    font-size: 0.9em;
+    color: #666;
+    min-width: 100px;
+    text-align: right;
+}
+
+@media (max-width: 600px) {
+    .project-date {
+        width: 100%;
+        text-align: left;
+        margin-bottom: 0.5rem;
+    }
+}
+
+.project-name {
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.highlight-project::before {
+    content: '*';
+    color: #ff6600;
+    position: absolute;
+    left: 0rem;
+    top: 60%;
+    transform: translateY(-50%);
+    font-size: 1.75em;
+    line-height: 1;
+}

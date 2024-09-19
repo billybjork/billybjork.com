@@ -1,110 +1,28 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ project.name }}</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style>
-        /* Project styles */
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            margin: 0;
-            padding: 0;
-        }
-        .video-container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        #video-player {
-            width: 100%;
-            height: auto;
-        }
-        .hidden {
-            display: none;
-        }
-        footer {
-            text-align: center;
-            padding: 2rem;
-            background-color: #f8f8f8;
-            margin-top: 2rem;
-        }
-        .social-links ul {
-            list-style-type: none;
-            display: inline-flex;
-            gap: 1rem;
-            padding: 0;
-            margin: 0;
-        }
-        .social-links a {
-            font-size: 1.5rem;
-            color: #000;
-            transition: color 0.3s;
-        }
-        .social-links a:hover {
-            color: #FF0000;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>{{ project.name }}</h1>
-    </header>
-    <main>
-        <article class="project">
-            <section id="video-container" class="video-container">
-                <video id="video-player" controls playsinline></video>
-            </section>
-            <section class="project-details">
-                {{ project.html_content | safe }}
-            </section>
-        </article>
-    </main>
-    <footer>
-        <nav class="social-links" aria-label="Social media">
-            {% if project.youtube_link %}
-            <a href="{{ project.youtube_link }}" target="_blank" aria-label="YouTube">
-                <i class="fab fa-youtube"></i>
-            </a>
-            {% endif %}
-        </nav>
-    </footer>
-    <script>
-        const videoSrc = "{{ project.video_link }}";
-        const videoContainer = document.getElementById('video-container');
+{% extends "base.html" %}
 
-        if (!videoSrc) {
-            videoContainer.classList.add('hidden');
-        } else {
-            document.addEventListener('DOMContentLoaded', () => {
-                const video = document.getElementById('video-player');
+{% block title %}{{ project.name }}{% endblock %}
 
-                const handleError = (error) => {
-                    console.error("Error loading video:", error);
-                    videoContainer.classList.add('hidden');
-                };
+{% block content %}
+<article class="project">
+    <section id="video-container" class="video-container">
+        <video id="video-player" data-src="{{ project.video_link }}" controls playsinline></video>
+    </section>
+    <section class="project-details">
+        {{ project.html_content | safe }}
+    </section>
+</article>
+{% endblock %}
 
-                if (Hls.isSupported()) {
-                    const hls = new Hls();
-                    hls.loadSource(videoSrc);
-                    hls.attachMedia(video);
-                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    });
-                    hls.on(Hls.Events.ERROR, (_, data) => handleError(data));
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = videoSrc;
-                    video.addEventListener('loadedmetadata', () => {
-                    });
-                    video.addEventListener('error', handleError);
-                } else {
-                    handleError("HLS is not supported on this browser");
-                }
-            });
-        }
-    </script>
-</body>
-</html>
+{% block additional_footer %}
+    {% if project.youtube_link %}
+    <nav class="social-links" aria-label="Project social media">
+        <ul>
+            <li>
+                <a href="{{ project.youtube_link }}" target="_blank" aria-label="YouTube">
+                    <i class="fab fa-youtube"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+{% endblock %}

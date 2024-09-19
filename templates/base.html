@@ -6,57 +6,14 @@
     <title>{% block title %}Billy Bjork{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <style>
-        /* Global styles */
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 2rem;
-            background-color: #f8f8f8;
-        }
-        nav ul {
-            list-style-type: none;
-        }
-        header a {
-            color: black;
-        }
-        a, a:visited {
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-        footer {
-            padding: 2rem;
-            background-color: #f8f8f8;
-            text-align: center;
-        }
-        .social-links ul {
-            padding: 0;
-            list-style: none;
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-        }
-        .social-links a {
-            font-size: 1.5rem;
-            color: #000;
-            transition: color 0.3s;
-        }
-        .social-links a:hover {
-            color: #007BFF;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/global.css') }}">
     {% block additional_styles %}{% endblock %}
 </head>
 <body>
     <header>
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>
-            <ul>
-                <li><a href="/about">About</a></li>
-            </ul>
+           <a href="/about">About</a>
         </nav>
     </header>
     <main>
@@ -70,7 +27,10 @@
                 <li><a href="https://www.instagram.com/billybjork/" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a></li>
             </ul>
         </nav>
+        {% block additional_footer %}{% endblock %}
         <p>&copy; {{ current_year }} Billy Bjork</p>
     </footer>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="{{ url_for('static', path='js/video-player.js') }}"></script>
 </body>
 </html>
