@@ -1,50 +1,74 @@
-<!DOCTYPE html>
-<html land="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Billy Bjork</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <style>
-        .video-reel {
-            width: 50%;
-            max-width: 1200px;
-            margin: 0 2rem 2rem 0;
-            text-align: left;
-        }
-        .video-reel video {
-            width: 100%;
-            height: auto;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>Billy Bjork</h1>
-    </header>
-    <main>
-        <section class="video-reel">
-            <video controls loop>
-                <source src="{{ reel_url }}" type="video/mp4">
-                Your browser does not support the video tag.
-            </video>
-        </section>
-        <section id="project-list">
-            <ul>
-                {% for project in projects %}
-                    <li class="project-item" hx-get="/project/{{ project.id }}" hx-target="#project-detail" hx-trigger="click">
-                        <h2>{{ project.name }}</h2>
-                        <time>{{ project.creation_date }}</time>
-                    </li>
-                {% endfor %}
-            </ul>
-        </section>
-        <section id="project-detail">
-            <!-- Project details will be loaded here -->
-        </section>
-    </main>
-    <footer>
-        <p>&copy; {{ current_year }} Billy Bjork</p>
-    </footer>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Billy Bjork{% endblock %}
+
+{% block additional_styles %}
+<style>
+    /* Home page styles */
+    .video-reel {
+        width: 50%;
+        max-width: 1200px;
+        margin: 0 2rem 2rem 0;
+        text-align: left;
+    }
+    .video-reel video {
+        width: 100%;
+        height: auto;
+    }
+    #project-list {
+        margin-top: 2rem;
+    }
+    .project-item {
+        display: flex;
+        align-items: baseline;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        position: relative;
+        padding-left: 1.5rem;
+    }
+    .project-date {
+        margin-right: 1rem;
+        font-size: 0.9em;
+        color: #666;
+        min-width: 100px;
+        text-align: right;
+    }
+    .project-name {
+        font-size: 1.2em;
+        font-weight: bold;
+    }
+    .highlight-project::before {
+    content: '*';
+    color: #ff6600;
+    position: absolute;
+    left: 1rem;
+    top: 75%;
+    transform: translateY(-50%);
+    font-size: 1.75em;
+    line-height: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="video-reel">
+    <video controls loop>
+        <source src="https://d17y8p6t5eu2ht.cloudfront.net/Reel-2024_temp.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+</section>
+<section id="project-list">
+    {% for project in projects %}
+        <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}" 
+             hx-get="/project/{{ project.slug }}" 
+             hx-target="#project-detail" 
+             hx-trigger="click">
+            <span class="project-date">{{ project.creation_date }}</span>
+            <span class="project-name">{{ project.name }}</span>
+        </article> 
+    {% endfor %}
+</section>
+<section id="project-detail">
+    <!-- Project details will be loaded here -->
+</section>
+{% endblock %}

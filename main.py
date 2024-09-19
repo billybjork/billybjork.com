@@ -75,16 +75,21 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
         # Filter projects where show_project is TRUE
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
-        reel_url = os.getenv("REEL_URL")
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
-            "reel_url": reel_url,
             "current_year": datetime.now().year
         })
     except Exception as e:
         print(f"Error in read_root: {str(e)}")  # For debugging
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.get("/about", response_class=HTMLResponse)
+async def read_about(request: Request):
+    return templates.TemplateResponse("about.html", {
+        "request": request,
+        "current_year": datetime.now().year
+    })
     
 @app.get("/{project_slug}", response_class=HTMLResponse)
 async def read_project(request: Request, project_slug: str, db: Session = Depends(get_db)):
@@ -107,6 +112,7 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
             "creation_date": project.creation_date,
             "thumbnail_link": project.thumbnail_link,
             "show_thumbnail": project.show_thumbnail,
+            "youtube_link": project.youtube_link,
             "highlight_project": project.highlight_project
         }
         for project in projects
