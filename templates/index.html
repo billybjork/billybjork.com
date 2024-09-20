@@ -15,16 +15,21 @@
 </section>
 <section id="project-list">
     {% for project in projects %}
-        <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}" 
-             hx-get="/{{ project.slug }}" 
-             hx-target="#project-detail" 
-             hx-trigger="click">
-            <time class="project-date">{{ project.formatted_date }}</time>
-            <h2 class="project-name">{{ project.name }}</h2>
+        <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}">
+            <div class="project-header"
+                 hx-get="/{{ project.slug }}" 
+                 hx-target="next .project-detail" 
+                 hx-trigger="click"
+                 hx-swap="innerHTML">
+                <time class="project-date">{{ project.formatted_date }}</time>
+                <h2 class="project-name">{{ project.name }}</h2>
+            </div>
+            <div class="project-detail"></div>
         </article>
     {% endfor %}
 </section>
-<section id="project-detail">
-    <!-- Project details will be loaded here -->
-</section>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="{{ url_for('static', path='js/video-player.js') }}"></script>
 {% endblock %}

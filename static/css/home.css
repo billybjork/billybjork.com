@@ -16,13 +16,16 @@
 }
 
 .project-item {
-    display: flex;
-    flex-wrap: wrap; /* Allows wrapping on smaller screens */
-    align-items: baseline;
     margin-bottom: 1rem;
-    cursor: pointer;
     position: relative;
     padding-left: 1.5rem;
+}
+
+.project-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    cursor: pointer;
 }
 
 .project-date {
@@ -51,8 +54,17 @@
     color: #ff6600;
     position: absolute;
     left: 0rem;
-    top: 60%;
-    transform: translateY(-50%);
+    top: 0.5rem;
     font-size: 1.75em;
     line-height: 1;
+}
+
+.project-detail {
+    display: none;
+    margin-top: 1rem;
+    margin-left: 1.5rem;
+}
+
+.project-detail:not(:empty) {
+    display: block;
 }

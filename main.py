@@ -98,8 +98,7 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
             raise HTTPException(status_code=404, detail="Project not found")
         return templates.TemplateResponse("project.html", {
             "request": request, 
-            "project": project,
-            "current_year": datetime.now().year
+            "project": project
         })
     except Exception as e:
         print(f"Error in read_project: {str(e)}")

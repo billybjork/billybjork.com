@@ -1,8 +1,3 @@
-{% extends "base.html" %}
-
-{% block title %}{{ project.name }}{% endblock %}
-
-{% block content %}
 <article class="project">
     <section id="video-container" class="video-container">
         <video id="video-player" data-src="{{ project.video_link }}" controls playsinline></video>
@@ -11,18 +6,15 @@
         {{ project.html_content | safe }}
     </section>
 </article>
-{% endblock %}
 
-{% block additional_footer %}
-    {% if project.youtube_link %}
-    <nav class="social-links" aria-label="Project social media">
-        <ul>
-            <li>
-                <a href="{{ project.youtube_link }}" target="_blank" aria-label="YouTube">
-                    <i class="fab fa-youtube"></i>
-                </a>
-            </li>
-        </ul>
-    </nav>
-    {% endif %}
-{% endblock %}
+{% if project.youtube_link %}
+<nav class="social-links" aria-label="Project social media">
+    <ul>
+        <li>
+            <a href="{{ project.youtube_link }}" target="_blank" aria-label="YouTube">
+                <i class="fab fa-youtube"></i>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
