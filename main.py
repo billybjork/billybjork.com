@@ -12,12 +12,10 @@ from datetime import datetime
 import os
 from unidecode import unidecode
 
-# Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,11 +24,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files and templates setup
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Database setup
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
@@ -42,10 +38,6 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-def format_date(date):
-    return date.strftime("%B, %Y")
-
-# Model definition
 class Project(Base):
     __tablename__ = "projects"
 
@@ -71,7 +63,9 @@ def get_db():
     finally:
         db.close()
 
-# Routes
+def format_date(date):
+    return date.strftime("%B, %Y")
+
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
@@ -86,7 +80,7 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             "current_year": datetime.now().year
         })
     except Exception as e:
-        print(f"Error in read_root: {str(e)}")  # For debugging
+        print(f"Error in read_root: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/about", response_class=HTMLResponse)
@@ -102,13 +96,13 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
         project = db.query(Project).filter(Project.slug == project_slug).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        return templates.TemplateResponse("project_detail.html", {
+        return templates.TemplateResponse("project.html", {
             "request": request, 
             "project": project,
             "current_year": datetime.now().year
         })
     except Exception as e:
-        print(f"Error in read_project: {str(e)}")  # For debugging
+        print(f"Error in read_project: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/api/projects")
