@@ -1,11 +1,11 @@
-<article class="project">
-    <section id="video-container" class="video-container">
-        <video id="video-player" data-src="{{ project.video_link }}" controls playsinline></video>
-    </section>
-    <section class="project-details">
-        {{ project.html_content | safe }}
-    </section>
-</article>
+{% if project.video_link %}
+<section class="video-container">
+    <video src="{{ project.video_link }}" controls playsinline></video>
+</section>
+{% endif %}
+<section class="project-details">
+    {{ project.html_content | safe }}
+</section>
 
 {% if project.youtube_link %}
 <nav class="social-links" aria-label="Project social media">

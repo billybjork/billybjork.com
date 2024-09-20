@@ -1,14 +1,16 @@
 /* Home page styles */
 .video-reel {
-    width: 50%;
-    max-width: 1200px;
-    margin: 0 2rem 2rem 0;
-    text-align: left;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto 2rem auto;
+    text-align: center;
 }
 
 .video-reel video {
     width: 100%;
     height: auto;
+    max-height: 450px;
+    object-fit: contain;
 }
 
 #project-list {
@@ -36,17 +38,31 @@
     text-align: right;
 }
 
+.project-name {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-right: 1rem;
+}
+
+.close-project {
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 0;
+    color: #666;
+}
+
 @media (max-width: 600px) {
     .project-date {
         width: 100%;
         text-align: left;
         margin-bottom: 0.5rem;
     }
-}
-
-.project-name {
-    font-size: 1.2em;
-    font-weight: bold;
+    
+    .close-project {
+        margin-left: auto;
+    }
 }
 
 .highlight-project::before {
@@ -63,8 +79,14 @@
     display: none;
     margin-top: 1rem;
     margin-left: 1.5rem;
+    max-width: 800px;
 }
 
 .project-detail:not(:empty) {
     display: block;
+}
+
+.project-header.active {
+    /* Add styles for the active state, e.g.: */
+    font-weight: bold;
 }

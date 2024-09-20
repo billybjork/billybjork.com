@@ -1,6 +1,6 @@
 # uvicorn main:app --reload
 from fastapi import FastAPI, Request, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
@@ -119,6 +119,12 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
         }
         for project in projects
     ]
+
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    file_name = "favicon.ico"
+    file_path = os.path.join(app.root_path, "static", file_name)
+    return FileResponse(path=file_path, headers={"Content-Disposition": "attachment; filename=" + file_name})
 
 if __name__ == "__main__":
     import uvicorn

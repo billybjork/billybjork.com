@@ -7,6 +7,7 @@
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', path='css/global.css') }}">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
     {% block additional_styles %}{% endblock %}
 </head>
 <body>
@@ -31,7 +32,6 @@
         {% block additional_footer %}{% endblock %}
         <p>&copy; {{ current_year }} Billy Bjork</p>
     </footer>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="{{ url_for('static', path='js/video-player.js') }}"></script>
+    <script src="{{ url_for('static', path='js/project-interactions.js') }}"></script>
 </body>
 </html>

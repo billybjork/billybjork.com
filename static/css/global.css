@@ -68,9 +68,16 @@ footer {
 
 .video-container {
     width: 100%;
-    max-width: 1200px;
+    max-width: 800px;
     margin: 0 auto;
     overflow: hidden;
+}
+
+.video-container video {
+    width: 100%;
+    height: auto;
+    max-height: 450px;
+    object-fit: contain;
 }
 
 #video-player {
