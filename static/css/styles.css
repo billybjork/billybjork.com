@@ -1,0 +1,211 @@
+/* Base styles */
+:root {
+    --primary-color: #333;
+    --secondary-color: #666;
+    --highlight-color: #ff6600;
+    --background-color: #f8f8f8;
+    --max-width: 1200px;
+    --font-size-base: 16px;
+    --font-size-small: 0.9em;
+    --font-size-large: 1.2em;
+    --spacing-small: 0.5rem;
+    --spacing-medium: 1rem;
+    --spacing-large: 2rem;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: var(--primary-color);
+    margin: 0;
+    padding: 0;
+    font-size: var(--font-size-base);
+}
+
+main {
+    padding: var(--spacing-medium);
+    max-width: var(--max-width);
+    margin: 0 auto;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 0;
+    margin-bottom: var(--spacing-small);
+}
+
+a, a:visited {
+    text-decoration: none;
+    color: var(--primary-color);
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Header styles */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-medium) var(--spacing-large);
+    background-color: var(--background-color);
+}
+
+header nav ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Footer styles */
+footer {
+    padding: var(--spacing-large);
+    background-color: var(--background-color);
+    text-align: center;
+}
+
+.social-links ul {
+    padding: 0;
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-medium);
+}
+
+.social-links a {
+    font-size: var(--font-size-large);
+    color: var(--primary-color);
+    transition: color 0.3s;
+}
+
+.social-links a:hover {
+    color: #007BFF;
+}
+
+/* Video styles */
+.video-container,
+.video-reel {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+.video-reel {
+    margin-bottom: var(--spacing-large);
+}
+
+.video-container video,
+.video-reel video {
+    width: 100%;
+    height: auto;
+    max-height: 450px;
+    object-fit: contain;
+}
+
+/* Project list styles */
+#project-list {
+    margin-top: var(--spacing-large);
+}
+
+.project-item {
+    margin-bottom: var(--spacing-medium);
+    position: relative;
+    padding-left: 1.5rem;
+}
+
+.project-header {
+    display: grid;
+    grid-template-columns: 150px 1fr auto; /* Increased space for project date */
+    align-items: start; /* Align items to the top */
+    cursor: pointer;
+    padding-top: 0.25em; /* Add a small top padding for better spacing */
+}
+
+.project-date {
+    font-size: var(--font-size-small);
+    color: var(--secondary-color);
+    text-align: right;
+    padding-right: var(--spacing-medium);
+    white-space: nowrap; /* Prevent date from wrapping */
+}
+
+.project-name {
+    font-size: var(--font-size-large);
+    font-weight: bold;
+    margin: 0;
+    line-height: 1.2;
+    padding-top: 0.1em; /* Slight adjustment to align with date */
+}
+
+.close-project {
+    background: none;
+    border: none;
+    font-size: var(--font-size-large);
+    cursor: pointer;
+    padding: 0;
+    color: var(--secondary-color);
+    align-self: start; /* Align to the top */
+    margin-top: 0.2em; /* Slight adjustment to align with other elements */
+}
+
+.highlight-project::before {
+    content: '*';
+    color: var(--highlight-color);
+    position: absolute;
+    left: 0;
+    top: 0.25em; /* Align with the top of the text */
+    font-size: 1.75em;
+    line-height: 1;
+}
+
+.project-detail {
+    display: none;
+    margin-top: var(--spacing-medium);
+    margin-left: 150px; /* Align with the start of the project name */
+    max-width: 800px;
+}
+
+.project-detail:not(:empty) {
+    display: block;
+}
+
+.project-header.active {
+    font-weight: bold;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) { /* Increased breakpoint for better readability on tablets */
+    .project-header {
+        grid-template-columns: 1fr auto;
+    }
+
+    .project-date {
+        grid-column: 1 / -1;
+        text-align: left;
+        padding-right: 0;
+        margin-bottom: var(--spacing-small);
+    }
+
+    .project-name {
+        grid-column: 1;
+        padding-top: 0; /* Remove top padding in mobile view */
+    }
+
+    .close-project {
+        grid-column: 2;
+        margin-top: 0; /* Remove top margin in mobile view */
+    }
+
+    .project-detail {
+        margin-left: 0;
+    }
+
+    .highlight-project::before {
+        top: 0.1em; /* Adjust for mobile layout */
+    }
+}

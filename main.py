@@ -72,9 +72,7 @@ def format_date(date):
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
-        # Filter projects where show_project is TRUE
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
-        # Format the creation_date for each project
         for project in projects:
             project.formatted_date = format_date(project.creation_date)
         return templates.TemplateResponse("index.html", {
@@ -100,9 +98,25 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
         project = db.query(Project).filter(Project.slug == project_slug).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        return templates.TemplateResponse("project.html", {
+        
+        # If it's an HTMX request, return only the project content
+        if request.headers.get("HX-Request") == "true":
+            return templates.TemplateResponse("project.html", {
+                "request": request, 
+                "project": project
+            })
+        
+        # For direct navigation, return the full page with the project open
+        projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
+        for p in projects:
+            p.formatted_date = format_date(p.creation_date)
+        
+        return templates.TemplateResponse("index.html", {
             "request": request, 
-            "project": project
+            "projects": projects,
+            "current_year": datetime.now().year,
+            "reel_video_link": REEL_VIDEO_LINK,
+            "open_project": project
         })
     except Exception as e:
         print(f"Error in read_project: {str(e)}")
