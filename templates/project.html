@@ -1,7 +1,13 @@
-<!-- project.html -->
 {% if project.video_link_mp4 %}
 <section class="video-container">
-    <video src="{{ project.video_link_mp4 }}" controls playsinline></video>
+    <video 
+        src="{{ project.video_link_mp4 }}" 
+        controls 
+        playsinline 
+        preload="metadata" 
+        fetchpriority="high"
+        style="opacity: 0; transition: opacity 0.3s ease-in;">
+    </video>
 </section>
 {% endif %}
 <section class="project-details">

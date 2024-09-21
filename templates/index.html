@@ -1,33 +1,57 @@
-<!-- index.html -->
-{% extends "base.html" %}
-
-{% block title %}Billy Bjork{% endblock %}
-
-{% block additional_styles %}
-<link rel="stylesheet" href="{{ url_for('static', path='css/home.css') }}">
-{% endblock %}
-
-{% block content %}
-<section class="video-reel">
-    <video controls loop>
-        <source src="{{ reel_video_link }}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
-</section>
-<section id="project-list">
-    {% for project in projects %}
-        <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}">
-            <header class="project-header"
-                 hx-get="/{{ project.slug }}"
-                 hx-target="next .project-detail"
-                 hx-trigger="click"
-                 hx-swap="innerHTML">
-                <time class="project-date">{{ project.formatted_date }}</time>
-                <h2 class="project-name">{{ project.name }}</h2>
-                <button class="close-project" style="display: none;" aria-label="Close project">×</button>
-            </header>
-            <section class="project-detail"></section>
-        </article>
-    {% endfor %}
-</section>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billy Bjork</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/global.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/home.css') }}">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
+</head>
+<body>
+    <header>
+        <h1><a href="/" class="site-title">Billy Bjork</a></h1>
+        <nav>
+           <a href="/about">About</a>
+        </nav>
+    </header>
+    <main>
+        <section class="video-reel">
+            <video controls loop>
+                <source src="{{ reel_video_link }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </section>
+        <section id="project-list">
+            {% for project in projects %}
+                <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}">
+                    <header class="project-header"
+                         hx-get="/{{ project.slug }}"
+                         hx-target="next .project-detail"
+                         hx-trigger="click"
+                         hx-swap="innerHTML show:window:top">
+                        <time class="project-date">{{ project.formatted_date }}</time>
+                        <h2 class="project-name">{{ project.name }}</h2>
+                        <button class="close-project" style="display: none;" aria-label="Close project">×</button>
+                    </header>
+                    <section class="project-detail"></section>
+                </article>
+            {% endfor %}
+        </section>
+    </main>
+    <footer>
+        <nav class="social-links" aria-label="Social media">
+            <ul>
+                <li><a href="https://www.youtube.com/@BillyBjork" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a></li>
+                <li><a href="https://vimeo.com/billybjork" target="_blank" aria-label="Vimeo"><i class="fab fa-vimeo"></i></a></li>
+                <li><a href="https://www.instagram.com/billybjork/" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a></li>
+                <li><a href="https://www.linkedin.com/in/billybjork/" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin"></i></a></li>
+            </ul>
+        </nav>
+        <p>&copy; {{ current_year }} Billy Bjork</p>
+    </footer>
+    <script src="{{ url_for('static', path='js/project-interactions.js') }}"></script>
+</body>
+</html>

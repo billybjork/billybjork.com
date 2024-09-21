@@ -5,6 +5,10 @@ function closeProject(projectItem) {
     closeButton.style.display = 'none';
 }
 
+function fadeInVideo(video) {
+    video.style.opacity = '1';
+}
+
 document.body.addEventListener('htmx:afterSwap', function(event) {
     if (event.detail.target.classList.contains('project-detail')) {
         const projectItem = event.detail.target.closest('.project-item');
@@ -14,7 +18,22 @@ document.body.addEventListener('htmx:afterSwap', function(event) {
             if (closeButton) {
                 closeButton.style.display = 'inline-block';
             }
-            projectHeader.scrollIntoView({behavior: 'smooth'});
+            
+            // Handle video loading
+            const video = projectItem.querySelector('video');
+            if (video) {
+                video.addEventListener('loadedmetadata', function() {
+                    fadeInVideo(video);
+                });
+                video.addEventListener('error', function() {
+                    console.error('Error loading video');
+                });
+            }
+
+            // Smooth scroll after a short delay to allow content to render
+            setTimeout(() => {
+                projectHeader.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }, 100);
         }
     }
 });
@@ -37,3 +56,30 @@ document.addEventListener('click', function(event) {
         closeProject(projectItem);
     }
 });
+
+// Lazy load videos
+function lazyLoadVideos() {
+    const videos = document.querySelectorAll('video[data-src]');
+    const options = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1
+    };
+
+    const observer = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const video = entry.target;
+                video.src = video.dataset.src;
+                video.removeAttribute('data-src');
+                observer.unobserve(video);
+            }
+        });
+    }, options);
+
+    videos.forEach(video => observer.observe(video));
+}
+
+// Call lazyLoadVideos when the page loads and after each HTMX swap
+document.addEventListener('DOMContentLoaded', lazyLoadVideos);
+document.body.addEventListener('htmx:afterSwap', lazyLoadVideos);
