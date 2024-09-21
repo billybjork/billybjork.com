@@ -3,7 +3,6 @@
     width: 100%;
     max-width: 800px;
     margin: 0 auto 2rem auto;
-    text-align: center;
 }
 
 .video-reel video {
@@ -70,7 +69,7 @@
     color: #ff6600;
     position: absolute;
     left: 0rem;
-    top: 0.5rem;
+    top: 1.0rem;
     font-size: 1.75em;
     line-height: 1;
 }

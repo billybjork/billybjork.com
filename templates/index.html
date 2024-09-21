@@ -1,3 +1,4 @@
+<!-- index.html -->
 {% extends "base.html" %}
 
 {% block title %}Billy Bjork{% endblock %}
@@ -9,7 +10,7 @@
 {% block content %}
 <section class="video-reel">
     <video controls loop>
-        <source src="https://d17y8p6t5eu2ht.cloudfront.net/Reel-2024_temp.mp4" type="video/mp4">
+        <source src="{{ reel_video_link }}" type="video/mp4">
         Your browser does not support the video tag.
     </video>
 </section>

@@ -48,6 +48,7 @@ class Project(Base):
     html_content = Column(Text)
     thumbnail_link = Column(Text)
     video_link = Column(Text)
+    video_link_mp4 = Column(Text)
     show_project = Column(Boolean)
     youtube_link = Column(Text)
     highlight_project = Column(Boolean)
@@ -63,6 +64,8 @@ def get_db():
     finally:
         db.close()
 
+REEL_VIDEO_LINK = os.getenv("REEL_VIDEO_LINK")
+
 def format_date(date):
     return date.strftime("%B, %Y")
 
@@ -77,7 +80,8 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
-            "current_year": datetime.now().year
+            "current_year": datetime.now().year,
+            "reel_video_link": REEL_VIDEO_LINK
         })
     except Exception as e:
         print(f"Error in read_root: {str(e)}")

@@ -1,6 +1,7 @@
-{% if project.video_link %}
+<!-- project.html -->
+{% if project.video_link_mp4 %}
 <section class="video-container">
-    <video src="{{ project.video_link }}" controls playsinline></video>
+    <video src="{{ project.video_link_mp4 }}" controls playsinline></video>
 </section>
 {% endif %}
 <section class="project-details">
