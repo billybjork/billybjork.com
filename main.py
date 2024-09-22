@@ -162,6 +162,40 @@ async def update_about(request: Request, db: Session = Depends(get_db), username
     response.headers["HX-Redirect"] = "/about"
     return response
 
+@app.get("/create-project", response_class=HTMLResponse)
+async def create_project_form(request: Request, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
+    general_info = db.query(General).first()
+    return templates.TemplateResponse("project_create.html", {
+        "request": request,
+        "tinymce_api_key": os.getenv("TINYMCE_API_KEY"),
+        "general_info": general_info
+    })
+
+@app.post("/create-project", response_class=Response)
+async def create_project(request: Request, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
+    form_data = await request.form()
+    
+    # Create a new Project instance
+    new_project = Project(
+        creation_date=datetime.strptime(form_data.get("creation_date"), "%Y-%m-%d").date(),
+        name=form_data.get("name"),
+        slug=form_data.get("slug"),
+        html_content=form_data.get("html_content"),
+        thumbnail_link=form_data.get("thumbnail_link"),
+        video_link=form_data.get("video_link"),
+        video_link_mp4=form_data.get("video_link_mp4"),
+        show_project="show_project" in form_data,
+        youtube_link=form_data.get("youtube_link"),
+        highlight_project="highlight_project" in form_data
+    )
+    
+    db.add(new_project)
+    db.commit()
+    
+    response = Response(status_code=303)
+    response.headers["HX-Redirect"] = f"/{new_project.slug}"
+    return response
+
 @app.get("/{project_slug}", response_class=HTMLResponse)
 async def read_project(request: Request, project_slug: str, db: Session = Depends(get_db)):
     try:
@@ -218,6 +252,14 @@ async def update_project(request: Request, project_slug: str, db: Session = Depe
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    new_slug = form_data.get("slug")
+    if new_slug != project_slug:
+        # Check if the new slug is already in use
+        existing_project = db.query(Project).filter(Project.slug == new_slug).first()
+        if existing_project:
+            raise HTTPException(status_code=400, detail="Slug already in use")
+        project.slug = new_slug
+
     project.name = form_data.get("name")
     project.html_content = form_data.get("html_content")
     project.youtube_link = form_data.get("youtube_link")
@@ -228,7 +270,7 @@ async def update_project(request: Request, project_slug: str, db: Session = Depe
     db.commit()
     
     response = Response(status_code=303)
-    response.headers["HX-Redirect"] = f"/{project_slug}"
+    response.headers["HX-Redirect"] = f"/{project.slug}"
     return response
 
 @app.get("/api/projects")

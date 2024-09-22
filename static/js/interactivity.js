@@ -226,14 +226,26 @@ function initTinyMCE(selector, additionalOptions = {}) {
  * @param {string} formId - The ID of the form to set up listeners for
  */
 function setupFormListeners(formId) {
-    document.getElementById(formId).addEventListener('htmx:beforeRequest', function(event) {
-        tinymce.triggerSave();
-    });
+    const form = document.getElementById(formId);
+    if (form) {
+        form.addEventListener('htmx:beforeRequest', function(event) {
+            tinymce.triggerSave();
+        });
 
-    document.body.addEventListener('htmx:beforeSwap', function(event) {
-        if (event.detail.xhr.status === 303) {
-            window.location.href = event.detail.xhr.getResponseHeader('HX-Redirect');
-            event.preventDefault();
-        }
-    });
+        // This listener is now attached to the form instead of document.body
+        form.addEventListener('htmx:beforeSwap', function(event) {
+            if (event.detail.xhr.status === 303) {
+                window.location.href = event.detail.xhr.getResponseHeader('HX-Redirect');
+                event.preventDefault();
+            }
+        });
+    } else {
+        console.warn(`Form with id '${formId}' not found`);
+    }
 }
+
+// Call this function for both edit and create forms
+document.addEventListener('DOMContentLoaded', function() {
+    setupFormListeners('edit-form');
+    setupFormListeners('create-form');
+});
