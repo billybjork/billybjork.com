@@ -1,4 +1,3 @@
-# uvicorn main:app --reload
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -10,7 +9,6 @@ from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import os
-from unidecode import unidecode
 
 load_dotenv()
 
