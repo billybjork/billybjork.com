@@ -3,18 +3,14 @@
 {% block title %}Billy Bjork - About{% endblock %}
 
 {% block additional_head %}
-<style>
-    /* About page styles */
-    .about-content {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 2rem;
-    }
-</style>
+
 {% endblock %}
 
 {% block content %}
 <section class="about-content">
+    {% if about_photo_link %}
+    <img src="{{ about_photo_link }}" alt="Billy Bjork" class="about-photo">
+    {% endif %}
     {% if about_content %}
         {{ about_content | safe }}
     {% else %}

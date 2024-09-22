@@ -5,7 +5,7 @@
     <h1>Edit Project: {{ project.name }}</h1>
     <form id="edit-form" hx-post="/{{ project.slug }}/edit" hx-target="body">
         <fieldset>
-            <legend>Project Details</legend>
+            <legend>Edit Project</legend>
             
             <label for="name">Name:</label>
             <input type="text" id="name" name="name" value="{{ project.name }}" required>
@@ -26,7 +26,7 @@
         <label for="html_content">HTML Content:</label>
         <textarea id="html_content" name="html_content">{{ project.html_content | safe }}</textarea>
         
-        <button type="submit">Save Changes</button>
+        <button type="submit">Save</button>
     </form>
 </main>
 {% endblock %}

@@ -2,11 +2,19 @@
 
 {% block content %}
 <main>
-    <h1>Edit About Page</h1>
     <form id="edit-form" hx-post="/about/edit" hx-target="body">
-        <label for="about_content">About Content:</label>
-        <textarea id="about_content" name="about_content">{{ about_content | safe }}</textarea>
-        <button type="submit">Save Changes</button>
+        <fieldset>
+            <legend>Edit About Page</legend>
+            
+            <label for="about_photo_link">Photo Link:</label>
+            <input type="url" id="about_photo_link" name="about_photo_link" value="{{ about_photo_link }}">
+            
+            <label for="about_content"></label>
+            <br>
+            <textarea id="about_content" name="about_content">{{ about_content | safe }}</textarea>
+        </fieldset>
+        
+        <button type="submit">Save</button>
     </form>
 </main>
 {% endblock %}

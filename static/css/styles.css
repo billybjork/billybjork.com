@@ -107,6 +107,18 @@ footer {
     object-fit: contain;
 }
 
+/* About page styles */
+.about-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+.about-photo {
+    max-width: 100%;
+    height: auto;
+    margin-bottom: 2rem;
+}
+
 /* Project list styles */
 #project-list {
     margin-top: var(--spacing-large);

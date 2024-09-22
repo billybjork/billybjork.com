@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean, DateTime, desc
+from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
@@ -61,7 +61,12 @@ class General(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     about_content = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reel_link = Column(String)
+    youtube_link = Column(String)
+    vimeo_link = Column(String)
+    instagram_link = Column(String)
+    linkedin_link = Column(String)
+    about_photo_link = Column(String)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -98,11 +103,15 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
         for project in projects:
             project.formatted_date = format_date(project.creation_date)
+        
+        general_info = db.query(General).first()
+        
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
             "current_year": datetime.now().year,
-            "reel_video_link": REEL_VIDEO_LINK
+            "reel_video_link": general_info.reel_link if general_info else None,
+            "general_info": general_info
         })
     except Exception as e:
         print(f"Error in read_root: {str(e)}")
@@ -110,36 +119,41 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/about", response_class=HTMLResponse)
 async def read_about(request: Request, db: Session = Depends(get_db)):
-    about_content = db.query(General.about_content).first()
-    about_content = about_content[0] if about_content else ""
-    print(f"Fetched about_content: {about_content}")  # Add this line for debugging
+    general_info = db.query(General).first()
+    about_content = general_info.about_content if general_info else ""
     return templates.TemplateResponse("about.html", {
         "request": request,
         "current_year": datetime.now().year,
-        "about_content": about_content
+        "about_content": about_content,
+        "about_photo_link": general_info.about_photo_link if general_info else None,
+        "general_info": general_info
     })
 
 @app.get("/about/edit", response_class=HTMLResponse)
 async def edit_about(request: Request, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
-    about_content = db.query(General.about_content).first()
-    about_content = about_content[0] if about_content else ""
+    general_info = db.query(General).first()
+    about_content = general_info.about_content if general_info else ""
+    about_photo_link = general_info.about_photo_link if general_info else ""
     return templates.TemplateResponse("about_edit.html", {
         "request": request,
         "about_content": about_content,
-        "tinymce_api_key": os.getenv("TINYMCE_API_KEY")
+        "about_photo_link": about_photo_link,
+        "tinymce_api_key": os.getenv("TINYMCE_API_KEY"),
+        "general_info": general_info
     })
 
 @app.post("/about/edit", response_class=Response)
 async def update_about(request: Request, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
     form_data = await request.form()
     new_content = form_data["about_content"]
+    new_photo_link = form_data["about_photo_link"]
 
-    # Update the existing row or create a new one if it doesn't exist
     general = db.query(General).first()
     if general:
         general.about_content = new_content
+        general.about_photo_link = new_photo_link
     else:
-        new_general = General(about_content=new_content)
+        new_general = General(about_content=new_content, about_photo_link=new_photo_link)
         db.add(new_general)
     
     db.commit()
@@ -155,11 +169,14 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
+        general_info = db.query(General).first()
+        
         # If it's an HTMX request, return only the project content
         if request.headers.get("HX-Request") == "true":
             return templates.TemplateResponse("project.html", {
                 "request": request, 
-                "project": project
+                "project": project,
+                "general_info": general_info
             })
         
         # For direct navigation, return the full page with the project open
@@ -171,8 +188,9 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
             "request": request, 
             "projects": projects,
             "current_year": datetime.now().year,
-            "reel_video_link": REEL_VIDEO_LINK,
-            "open_project": project
+            "reel_video_link": general_info.reel_link if general_info else None,
+            "open_project": project,
+            "general_info": general_info
         })
     except Exception as e:
         print(f"Error in read_project: {str(e)}")
@@ -183,12 +201,15 @@ async def edit_project(request: Request, project_slug: str, db: Session = Depend
     project = db.query(Project).filter(Project.slug == project_slug).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    
+    general_info = db.query(General).first()
+    
     return templates.TemplateResponse("project_edit.html", {
         "request": request,
         "project": project,
-        "tinymce_api_key": os.getenv("TINYMCE_API_KEY")
+        "tinymce_api_key": os.getenv("TINYMCE_API_KEY"),
+        "general_info": general_info
     })
-
 
 @app.post("/{project_slug}/edit", response_class=Response)
 async def update_project(request: Request, project_slug: str, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
