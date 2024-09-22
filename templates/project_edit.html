@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main>
+    <h1>Edit Project: {{ project.name }}</h1>
+    <form id="edit-form" hx-post="/{{ project.slug }}/edit" hx-target="body">
+        <fieldset>
+            <legend>Project Details</legend>
+            
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" value="{{ project.name }}" required>
+            
+            <label for="creation_date">Creation Date:</label>
+            <input type="date" id="creation_date" name="creation_date" value="{{ project.creation_date.isoformat() }}" required>
+            
+            <label for="youtube_link">YouTube Link:</label>
+            <input type="url" id="youtube_link" name="youtube_link" value="{{ project.youtube_link or '' }}">
+            
+            <label for="show_project">Show Project:</label>
+            <input type="checkbox" id="show_project" name="show_project" {% if project.show_project %}checked{% endif %}>
+            
+            <label for="highlight_project">Highlight Project:</label>
+            <input type="checkbox" id="highlight_project" name="highlight_project" {% if project.highlight_project %}checked{% endif %}>
+        </fieldset>
+        
+        <label for="html_content">HTML Content:</label>
+        <textarea id="html_content" name="html_content">{{ project.html_content | safe }}</textarea>
+        
+        <button type="submit">Save Changes</button>
+    </form>
+</main>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="https://cdn.tiny.cloud/1/{{ tinymce_api_key }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+    initTinyMCE('#html_content');
+    setupFormListeners('edit-form');
+</script>
+{% endblock %}

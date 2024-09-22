@@ -15,38 +15,10 @@
 
 {% block content %}
 <section class="about-content">
-    <h3>
-       <em>"We Like Lists Because We Don't Want to Die" -Umberto Eco</em>
-    </h3>
-    <strong>* * *</strong>
-    <h4>Some facts about me:</h4>
-    <ul>
-        <li>I'm a Minnesotan currently living in Los Angeles.</li>
-        <li>Got a film degree from USC.</li>
-        <li>Buzz and Pebbles.</li>
-    </ul>
-    <h4>Some things I [enjoy] / forms of art:</h4>
-    <ul>
-        <li>Snowboarding - my first and longest love</li>
-        <li>Making videos - pointing a camera at people [riding boards or playing instruments]</li>
-        <li>[operations] - leading teams, helping people work together efficiently and …</li>
-        <li>Code/web - currently exploring a new medium - python, html, css, JavaScript, etc</li>
-    </ul>
-    <h4>Some projects I'm most proud of:</h4>
-    <ul>
-        <li>VU JA DE - my pandemic project. started as my college thesis, launched a couple years later just as covid began. Recently remade the website</li>
-        <li>This website - coded from scratch</li>
-    </ul>
-    <h4>Some people and works that have inspired me:</h4>
-    <ul>
-        <li>Many friends and collaborators, like TJ Casey, Rob Prochnow, … and many more</li>
-        <li>Sports - Tanner Pendleton and Jake Durham</li>
-        <li>Film - John Wilson, Kirby Ferguson, Adam Curtis</li>
-        <li>Books - Unflattening</li>
-        <li>Music - Negativland</li>
-        <li>Writers - Venkatesh Rao</li>
-        <li>Music - Negativland</li>
-        <li>OG's - Marshall McLuhan, Neil Postman</li>
-    </ul>
+    {% if about_content %}
+        {{ about_content | safe }}
+    {% else %}
+        <p>About content is currently empty. Please add some content using the edit page.</p>
+    {% endif %}
 </section>
 {% endblock %}

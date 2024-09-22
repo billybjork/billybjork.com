@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main>
+    <h1>Edit About Page</h1>
+    <form id="edit-form" hx-post="/about/edit" hx-target="body">
+        <label for="about_content">About Content:</label>
+        <textarea id="about_content" name="about_content">{{ about_content | safe }}</textarea>
+        <button type="submit">Save Changes</button>
+    </form>
+</main>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="https://cdn.tiny.cloud/1/{{ tinymce_api_key }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script>
+    initTinyMCE('#about_content', { height: 500 });
+    setupFormListeners('edit-form');
+</script>
+{% endblock %}
