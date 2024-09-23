@@ -1,27 +1,30 @@
-{% if project.video_link_mp4 %}
-<section class="video-container">
+{% if project.video_link %}
+<section class="video-container" style="opacity: 0; transition: opacity 0.5s ease-in;">
     <video 
-        src="{{ project.video_link_mp4 }}" 
-        controls 
-        playsinline 
-        preload="metadata" 
-        fetchpriority="high"
-        style="opacity: 0; transition: opacity 0.3s ease-in;">
+    id="video-player-{{ project.id }}"
+    class="project-video"
+    controls 
+    playsinline 
+    preload="metadata" 
+    fetchpriority="high"
+    data-hls-url="{{ project.video_link }}">
+    <source src="{{ project.video_link_mp4 }}" type="video/mp4">
+    Your browser does not support the video tag.
     </video>
 </section>
 {% endif %}
-<section class="project-details">
+<section class="project-details" style="opacity: 0; transition: opacity 0.5s ease-in;">
     {{ project.html_content | safe }}
-</section>
 
-{% if project.youtube_link %}
-<nav class="social-links" aria-label="Project social media">
+    {% if project.youtube_link %}
+    <nav class="social-links" aria-label="Project social media">
     <ul>
         <li>
-            <a href="{{ project.youtube_link }}" target="_blank" aria-label="YouTube">
-                <i class="fab fa-youtube"></i>
-            </a>
+        <a href="{{ project.youtube_link }}" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+            <i class="fab fa-youtube"></i>
+        </a>
         </li>
     </ul>
-</nav>
-{% endif %}
+    </nav>
+    {% endif %}
+</section>

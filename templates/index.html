@@ -3,9 +3,15 @@
 {% block content %}
 <section class="video-reel">
     {% if reel_video_link %}
-    <video controls loop>
-        <source src="{{ reel_video_link }}" type="video/mp4">
-        Your browser does not support the video tag.
+    <video 
+        id="reel-video-player"
+        class="hls-video"
+        controls 
+        loop
+        playsinline 
+        preload="metadata" 
+        fetchpriority="high"
+        data-hls-url="{{ reel_video_link }}">
     </video>
     {% endif %}
 </section>

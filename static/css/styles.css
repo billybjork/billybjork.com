@@ -89,22 +89,40 @@ footer {
 /* Video styles */
 .video-container,
 .video-reel {
+    position: relative;
     width: 100%;
-    max-width: 800px;
-    margin: 0 auto;
     overflow: hidden;
 }
 
 .video-reel {
+    /* Set a fixed aspect ratio for the reel video */
+    padding-top: 56.25%; /* 16:9 aspect ratio */
     margin-bottom: var(--spacing-large);
 }
 
-.video-container video,
-.video-reel video {
+.video-container {
+    position: relative;
     width: 100%;
-    height: auto;
-    max-height: 450px;
+    overflow: hidden;
+    padding-top: 56.25%; /* Default 16:9 aspect ratio */
+    background-color: #000; /* Add a background color to make it visible while loading */
+    opacity: 0;
+    transition: opacity 0.5s ease-in;
+}
+
+.video-reel video,
+.video-container video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
+}
+
+.video-container video {
+    opacity: 1; /* Changed from 0 to 1 */
+    transition: opacity 0.3s ease-in;
 }
 
 /* About page styles */
@@ -128,6 +146,12 @@ footer {
     margin-bottom: var(--spacing-medium);
     position: relative;
     padding-left: 1.5rem;
+}
+
+.video-container,
+.project-detail {
+    opacity: 0;
+    transition: opacity 0.5s ease-in;
 }
 
 .project-header {
@@ -180,6 +204,8 @@ footer {
     margin-top: var(--spacing-medium);
     margin-left: 150px; /* Align with the start of the project name */
     max-width: 800px;
+    opacity: 0;
+    transition: opacity 0.5s ease-in;
 }
 
 .project-detail:not(:empty) {

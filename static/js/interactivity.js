@@ -40,30 +40,130 @@ function closeProject(projectItem) {
     closeButton.style.display = 'none';
 }
 
+// HLS Video Player Setup
+function setupHLSPlayer(videoElement, autoplay = false, onReady = null) {
+    const streamUrl = videoElement.dataset.hlsUrl;
+    if (!streamUrl) {
+        console.error('No HLS URL provided for video element');
+        return;
+    }
+
+    if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(streamUrl);
+        hls.attachMedia(videoElement);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            adjustVideoContainerAspectRatio(videoElement);
+            if (autoplay) {
+                videoElement.play().catch(e => console.error("Autoplay failed:", e));
+            }
+            if (onReady) {
+                onReady();
+            }
+        });
+    } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+        videoElement.src = streamUrl;
+        videoElement.addEventListener('loadedmetadata', function() {
+            adjustVideoContainerAspectRatio(videoElement);
+            if (autoplay) {
+                videoElement.play().catch(e => console.error("Autoplay failed:", e));
+            }
+            if (onReady) {
+                onReady();
+            }
+        });
+    } else {
+        console.error('HLS is not supported in this browser');
+        // Fallback to MP4 if available
+        const mp4Source = videoElement.querySelector('source[type="video/mp4"]');
+        if (mp4Source) {
+            videoElement.src = mp4Source.src;
+            videoElement.addEventListener('loadedmetadata', function() {
+                adjustVideoContainerAspectRatio(videoElement);
+                if (autoplay) {
+                    videoElement.play().catch(e => console.error("Autoplay failed:", e));
+                }
+                if (onReady) {
+                    onReady();
+                }
+            });
+        }
+    }
+}
+
 /**
  * Fades in a video element by setting its opacity to 1.
  * @param {HTMLVideoElement} video - The video element to fade in.
  */
-function fadeInVideo(video) {
-    // Add a small delay to ensure the browser has time to apply the initial style
-    setTimeout(() => {
-        video.style.opacity = '1';
-    }, 50);
+function fadeInElement(element) {
+    if (element) {
+        element.style.opacity = '1';
+    }
+}
+
+function handleProjectContent(projectItem) {
+    const videoContainer = projectItem.querySelector('.video-container');
+    const projectDetails = projectItem.querySelector('.project-details');
+    const video = projectItem.querySelector('video');
+    
+    // First, ensure all elements are visible but transparent
+    if (videoContainer) videoContainer.style.opacity = '0';
+    if (projectDetails) projectDetails.style.opacity = '0';
+    
+    function fadeInContent() {
+        setTimeout(() => {
+            if (videoContainer) fadeInElement(videoContainer);
+            if (projectDetails) fadeInElement(projectDetails);
+        }, 50); // Short delay to ensure DOM has updated
+    }
+    
+    if (video && videoContainer) {
+        handleVideoFadeIn(video, true, fadeInContent);
+    } else {
+        fadeInContent();
+    }
 }
 
 /**
  * Handles the fade-in effect for a video, whether it's already loaded or not.
  * @param {HTMLVideoElement} video - The video element to handle.
+ * @param {boolean} autoplay - Whether to autoplay the video.
+ * @param {Function} onReady - Callback function to execute when the video is ready.
  */
-function handleVideoFadeIn(video) {
-    if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
-        fadeInVideo(video);
-    } else {
-        video.addEventListener('loadeddata', () => fadeInVideo(video));
+function handleVideoFadeIn(video, autoplay = false, onReady = null) {
+    if (video.dataset.hlsUrl) {
+        setupHLSPlayer(video, autoplay, onReady);
+    } else if (video.src) {
+        video.addEventListener('loadedmetadata', function() {
+            adjustVideoContainerAspectRatio(video);
+            if (autoplay) {
+                video.play().catch(e => console.error("Autoplay failed:", e));
+            }
+            if (onReady) {
+                onReady();
+            }
+        });
     }
-    video.addEventListener('error', () => {
-        console.error('Error loading video');
-    });
+}
+
+function adjustVideoContainerAspectRatio(videoElement) {
+    const container = videoElement.closest('.video-container');
+    if (!container) return;
+
+    function updateAspectRatio() {
+        if (videoElement.videoWidth && videoElement.videoHeight) {
+            const aspectRatio = (videoElement.videoHeight / videoElement.videoWidth) * 100;
+            container.style.paddingTop = `${aspectRatio}%`;
+        }
+    }
+
+    if (videoElement.readyState >= 1) {
+        updateAspectRatio();
+    } else {
+        videoElement.addEventListener('loadedmetadata', updateAspectRatio);
+    }
+
+    videoElement.addEventListener('loadeddata', updateAspectRatio);
 }
 
 /**
@@ -115,6 +215,11 @@ document.addEventListener('DOMContentLoaded', function() {
     lazyLoadVideos();
     updateCloseButtonVisibility();
 
+    const reelVideo = document.getElementById('reel-video-player');
+    if (reelVideo) {
+        handleVideoFadeIn(reelVideo, false);
+    }
+
     const path = window.location.pathname;
     if (path !== '/') {
         const projectSlug = path.slice(1);
@@ -123,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const projectHeader = projectItem.querySelector('.project-header');
             const video = projectItem.querySelector('video');
             if (video) {
-                handleVideoFadeIn(video);
+                handleVideoFadeIn(video, true);
             }
             projectHeader.scrollIntoView({ behavior: 'smooth' });
         }
@@ -148,23 +253,13 @@ document.body.addEventListener('htmx:afterSwap', function(event) {
             updateURL(projectSlug);
             updateCloseButtonVisibility();
 
-            // Handle video loading
-            const video = projectItem.querySelector('video');
-            if (video) {
-                handleVideoFadeIn(video);
-            }
+            // Handle project content
+            handleProjectContent(projectItem);
 
             // Smooth scroll after a short delay to allow content to render
-            requestAnimationFrame(() => {
-                const headerRect = projectHeader.getBoundingClientRect();
-                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                const targetScrollPosition = headerRect.top + scrollTop - 20; // 20px offset for some breathing room
-
-                window.scrollTo({
-                    top: targetScrollPosition,
-                    behavior: 'smooth'
-                });
-            });
+            setTimeout(() => {
+                projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
         }
     }
     lazyLoadVideos();
