@@ -96,7 +96,7 @@ async function handleProjectContent(projectItem) {
     
     Object.values(elements).forEach(el => el?.classList.remove('fade-in'));
     
-    const fadeInDelay = 0; // Delay before fade-in (in milliseconds)
+    const fadeInDelay = 50; // Delay before fade-in (in milliseconds)
 
     if (elements.video && elements.videoContainer) {
         await setupHLSPlayer(elements.video, true);
