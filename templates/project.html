@@ -1,5 +1,5 @@
 {% if project.video_link %}
-<section class="video-container" style="opacity: 0; transition: opacity 0.5s ease-in;">
+<section class="video-container">
     <video 
     id="video-player-{{ project.id }}"
     class="project-video"
@@ -13,7 +13,7 @@
     </video>
 </section>
 {% endif %}
-<section class="project-details" style="opacity: 0; transition: opacity 0.5s ease-in;">
+<section class="project-details">
     {{ project.html_content | safe }}
 
     {% if project.youtube_link %}
