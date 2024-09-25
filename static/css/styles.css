@@ -123,10 +123,6 @@ footer {
 }
 
 /* Project styles */
-#project-list {
-    margin-top: var(--spacing-large);
-}
-
 .project-item {
     margin-bottom: var(--spacing-medium);
     position: relative;
@@ -168,6 +164,7 @@ footer {
 .project-content {
     padding-top: 1.5rem;
     padding-bottom: 1.5rem;
+    overflow: hidden; /* Create a new block formatting context */
 }
 
 .close-project {
@@ -205,6 +202,49 @@ footer {
 
 .project-header.active {
     font-weight: bold;
+}
+
+/*Project Links styles */
+.project-links {
+    float: right;
+    margin: 0 0 var(--spacing-medium) var(--spacing-medium);
+}
+
+.project-links ul {
+    list-style-type: none;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0;
+    margin: 0;
+}
+
+.project-links li {
+    margin-left: var(--spacing-medium);
+}
+
+.project-links li:first-child {
+    margin-left: 0;
+}
+
+.project-links a,
+.project-links button {
+    color: var(--highlight-color);
+    font-size: var(--font-size-large);
+    transition: color 0.3s, transform 0.3s;
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: none;
+}
+
+.project-links a:hover,
+.project-links button:hover {
+    color: var(--primary-color);
+    transform: translateY(-2px);
 }
 
 /* Fade-in effect styles */
@@ -273,6 +313,14 @@ footer {
     .highlight-project::before {
         top: 0.25em;
         left: 0.1em;
+    }
+
+    .project-links ul {
+        justify-content: flex-start;
+    }
+
+    .project-links li:first-child {
+        margin-left: 0;
     }
 
     .video-container {

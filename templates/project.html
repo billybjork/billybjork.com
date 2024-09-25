@@ -16,15 +16,36 @@
 <section class="project-content">
     {{ project.html_content | safe }}
 
-    {% if project.youtube_link %}
-    <nav class="project-links">
-    <ul>
-        <li>
-        <a href="{{ project.youtube_link }}" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
-            <i class="fab fa-youtube"></i>
-        </a>
-        </li>
-    </ul>
-    </nav>
-    {% endif %}
+    <footer class="project-links">
+        <ul>
+            {% if project.youtube_link %}
+            <li>
+                <a href="{{ project.youtube_link }}" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+                    <i class="fab fa-youtube"></i>
+                </a>
+            </li>
+            {% endif %}
+            <li>
+                <button
+                    hx-get="/get-share-url/{{ project.slug }}"
+                    hx-trigger="click"
+                    hx-swap="none"
+                    hx-on::after-request="copyToClipboard(event.detail.xhr.response)"
+                    aria-label="Share"
+                >
+                    <i class="fas fa-share-from-square"></i>
+                </button>
+            </li>
+        </ul>
+    </footer>
 </section>
+<script>
+function copyToClipboard(response) {
+    const data = JSON.parse(response);
+    navigator.clipboard.writeText(data.share_url).then(() => {
+        alert('URL copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+</script>
