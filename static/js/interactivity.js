@@ -56,7 +56,12 @@ function setupHLSPlayer(videoElement, autoplay = false) {
         const setupVideo = () => {
             adjustVideoContainerAspectRatio(videoElement);
             if (autoplay) {
-                videoElement.play().catch(e => console.error("Autoplay failed:", e));
+                videoElement.play().then(() => {
+                    console.log("Autoplay started successfully");
+                }).catch(e => {
+                    console.error("Autoplay failed:", e);
+                    // Fallback: show play button or inform user to interact
+                });
             }
             resolve();
         };
@@ -96,7 +101,7 @@ async function handleProjectContent(projectItem) {
     
     Object.values(elements).forEach(el => el?.classList.remove('fade-in'));
     
-    const fadeInDelay = 50; // Delay before fade-in (in milliseconds)
+    const fadeInDelay = 25; // Delay before fade-in (in milliseconds)
 
     if (elements.video && elements.videoContainer) {
         await setupHLSPlayer(elements.video, true);
@@ -134,8 +139,20 @@ function adjustVideoContainerAspectRatio(videoElement) {
 
     const updateAspectRatio = () => {
         if (videoElement.videoWidth && videoElement.videoHeight) {
-            const aspectRatio = (videoElement.videoHeight / videoElement.videoWidth) * 100;
-            container.style.paddingTop = `${aspectRatio}%`;
+            const aspectRatio = videoElement.videoHeight / videoElement.videoWidth;
+            const containerWidth = container.offsetWidth;
+            let containerHeight = containerWidth * aspectRatio;
+
+            // Check if the calculated height exceeds the max-height
+            const maxHeight = parseInt(getComputedStyle(container).maxHeight);
+            if (containerHeight > maxHeight) {
+                containerHeight = maxHeight;
+                container.style.width = `${containerHeight / aspectRatio}px`;
+            } else {
+                container.style.width = '100%';
+            }
+
+            container.style.height = `${containerHeight}px`;
         }
     };
 
@@ -145,6 +162,9 @@ function adjustVideoContainerAspectRatio(videoElement) {
         videoElement.addEventListener('loadedmetadata', updateAspectRatio);
     }
     videoElement.addEventListener('loadeddata', updateAspectRatio);
+    
+    // Add resize event listener to handle viewport changes
+    window.addEventListener('resize', updateAspectRatio);
 }
 
 /**

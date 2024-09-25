@@ -11,7 +11,8 @@
     --spacing-small: 0.5rem;
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
-    --max-video-height: 70vh
+    --max-video-height: 80vh;
+    --max-video-width: 100%;
 }
 
 body {
@@ -21,12 +22,15 @@ body {
     margin: 0;
     padding: 0;
     font-size: var(--font-size-base);
+    overflow-x: hidden; /* Disable horizontal scrolling */
 }
 
 main {
     padding: var(--spacing-medium);
     max-width: var(--max-width);
     margin: 0 auto;
+    box-sizing: border-box; /* Include padding in width calculation */
+    width: 100%; /* Ensure main takes full width */
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -89,22 +93,27 @@ footer {
 }
 
 /* Video styles */
-.video-reel,
+.video-reel, .hls-video {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: var(--max-video-width);
+    margin-bottom: var(--spacing-large);
+    box-sizing: border-box;
+}
+
 .video-container {
     position: relative;
     width: 100%;
+    max-width: var(--max-video-width, 100%);
+    max-height: var(--max-video-height, 80vh);
+    margin: 0 auto;
     overflow: hidden;
-}
-
-.video-reel {
-    margin-bottom: var(--spacing-large);
-}
-
-.video-container {
     background-color: #000;
 }
 
-.video-container video {
+.project-video {
     position: absolute;
     top: 0;
     left: 0;
@@ -113,7 +122,6 @@ footer {
     object-fit: contain;
 }
 
-/* Project styles */
 /* Project styles */
 #project-list {
     margin-top: var(--spacing-large);
@@ -165,7 +173,7 @@ footer {
 .close-project {
     background: none;
     border: none;
-    font-size: var(--font-size-large);
+    font-size: 1.5em;
     cursor: pointer;
     padding: 0;
     color: var(--secondary-color);
@@ -177,7 +185,7 @@ footer {
     content: '*';
     color: var(--highlight-color);
     position: absolute;
-    left: 0.5em;
+    padding-left: var(--spacing-medium);
     top: 0.3em;
     font-size: 1.75em;
     line-height: 1;
@@ -226,6 +234,11 @@ footer {
 
 /* Responsive styles */
 @media (max-width: 768px) {
+    :root {
+        --max-video-height: 50vh;
+        --max-video-width: 100%;
+    }
+
     .project-header {
         grid-template-columns: 1fr auto;
         grid-template-rows: auto auto;
@@ -235,6 +248,7 @@ footer {
         grid-column: 1;
         grid-row: 1;
         padding-top: 0;
+        font-size: 1em; /* Reduce font size for mobile */
     }
 
     .close-project {
@@ -258,5 +272,16 @@ footer {
 
     .highlight-project::before {
         top: 0.25em;
+        left: 0.1em;
+    }
+
+    .video-container {
+        max-height: var(--max-video-height);
+    }
+
+    /* Ensure all content fits within viewport width */
+    body, main, .video-reel, .video-container {
+        max-width: 100vw;
     }
 }
+
