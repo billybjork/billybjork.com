@@ -32,9 +32,10 @@ function handlePopState() {
  */
 function closeProject(projectItem) {
     const projectDetail = projectItem.querySelector('.project-detail');
-    const closeButton = projectItem.querySelector('.close-project');
     if (projectDetail) projectDetail.innerHTML = '';
-    if (closeButton) closeButton.style.display = 'none';
+
+    // Remove the 'active' class
+    projectItem.classList.remove('active');
 }
 
 /**
@@ -88,24 +89,28 @@ function setupHLSPlayer(videoElement, autoplay = false) {
 async function handleProjectContent(projectItem) {
     const elements = {
         videoContainer: projectItem.querySelector('.video-container'),
-        projectDetails: projectItem.querySelector('.project-details'),
+        projectContent: projectItem.querySelector('.project-content'),
         video: projectItem.querySelector('video'),
-        projectDetail: projectItem.querySelector('.project-detail')
     };
     
+    // Remove 'fade-in' class from elements (if any)
     Object.values(elements).forEach(el => el?.classList.remove('fade-in'));
     
-    const fadeInDelay = 25; // Delay before fade-in (in milliseconds)
+    // Add the 'active' class to the project item
+    projectItem.classList.add('active');
 
     if (elements.video && elements.videoContainer) {
         await setupHLSPlayer(elements.video, true);
-        await new Promise(resolve => setTimeout(resolve, fadeInDelay));
-        elements.videoContainer.classList.add('fade-in');
+        requestAnimationFrame(() => {
+            elements.videoContainer.classList.add('fade-in');
+        });
     }
-
-    await new Promise(resolve => setTimeout(resolve, fadeInDelay));
-    elements.projectDetails?.classList.add('fade-in');
-    elements.projectDetail?.classList.add('fade-in');
+    
+    if (elements.projectContent) {
+        requestAnimationFrame(() => {
+            elements.projectContent.classList.add('fade-in');
+        });
+    }    
 }
 
 /**
@@ -159,19 +164,6 @@ function adjustVideoContainerAspectRatio(videoElement) {
         videoElement.addEventListener('loadedmetadata', updateAspectRatio);
     }
     window.addEventListener('resize', updateAspectRatio);
-}
-
-/**
- * Updates the visibility of close buttons for all projects.
- */
-function updateCloseButtonVisibility() {
-    document.querySelectorAll('.project-item').forEach(item => {
-        const closeButton = item.querySelector('.close-project');
-        const projectDetail = item.querySelector('.project-detail');
-        if (closeButton && projectDetail) {
-            closeButton.style.display = projectDetail.innerHTML.trim() ? 'inline-block' : 'none';
-        }
-    });
 }
 
 /**
@@ -238,7 +230,6 @@ function setupFormListeners(formId) {
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
     lazyLoadVideos();
-    updateCloseButtonVisibility();
     handleInitialLoad();
 
     const reelVideo = document.getElementById('reel-video-player');
@@ -258,7 +249,6 @@ document.body.addEventListener('htmx:afterSwap', async function(event) {
         if (projectItem) {
             const projectSlug = projectItem.getAttribute('data-slug');
             updateURL(projectSlug);
-            updateCloseButtonVisibility();
             await handleProjectContent(projectItem);
             projectItem.querySelector('.project-header')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }

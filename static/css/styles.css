@@ -182,11 +182,12 @@ footer {
     color: var(--secondary-color);
     align-self: start;
     margin-top: 0.2em;
-    visibility: hidden; /* Hide by default but occupy space */
+    opacity: 0; /* Hide by default but occupy space */
+    transition: opacity 0.3s ease;
 }
 
 .project-item.active .close-project {
-    visibility: visible; /* Show when project is active */
+    opacity: 1; /* Fade in when project is active */
 }
 
 .highlight-project::before {
@@ -200,12 +201,16 @@ footer {
 }
 
 .project-detail {
-    display: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
     margin-top: var(--spacing-medium);
     max-width: 800px;
     grid-column: 2 / -1; /* Align with project-name */
     padding-left: calc(165px + var(--spacing-medium)); /* Align with project-name */
-    transition: opacity 0.3s ease-in;
+}
+
+.project-item.active .project-detail {
+    opacity: 1;
 }
 
 .project-detail:not(:empty) {
@@ -220,8 +225,15 @@ footer {
     opacity: 0;
 }
 
-.project-header.active {
-    font-weight: bold;
+/* Fade-in effect for inner elements */
+.video-container,
+.project-content {
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
+}
+
+.fade-in {
+    opacity: 1;
 }
 
 /* Project Links styles */
@@ -302,36 +314,44 @@ footer {
         max-height: 50vh;
     }
 
-    /* Project header adjustments */
     .project-header {
-        grid-template-columns: 1fr 2em; /* Set second column to fixed width */
-        grid-template-rows: auto auto;
-    }
-
-    .project-name {
-        grid-column: 1;
-        grid-row: 1;
-        padding-top: 0;
-        font-size: 1em; /* Reduce font size for mobile */
+        display: grid;
+        grid-template-columns: 1fr auto; /* One column for the content, one for the close button */
+        grid-template-rows: auto; /* Single row */
+        align-items: start;
     }
 
     .close-project {
-        grid-column: 2;
-        grid-row: 1;
-        margin-top: 0;
+        grid-column: 2; /* Positioning the close button in the second column */
+        grid-row: 1; /* Positioning in the first row */
+        align-self: start; /* Align to the top */
+        justify-self: end; /* Align to the right */
+        opacity: 0; /* Start hidden */
+        transition: opacity 0.3s ease; /* Smooth transition for showing the button */
+        margin-top: 0; /* Adjust the margin to fit your design */
+    }
+
+    .project-item.active .close-project {
+        opacity: 1; /* Make visible when project is active */
+    }
+
+    .project-name, .project-date {
+        grid-column: 1; /* All textual content in the first column */
+        justify-self: start; /* Align text to the start */
     }
 
     .project-date {
-        grid-column: 1 / -1;
-        grid-row: 2;
-        text-align: left;
-        padding-right: 0;
-        margin-top: var(--spacing-small);
+        padding-right: 0; /* Remove padding if not required */
+        order: 2; /* Optionally change order if needed */
+    }
+
+    .project-name {
+        order: 1; /* Ensuring the project name is above the date */
     }
 
     .project-detail {
         padding-left: 0;
-        grid-column: 1 / -1;
+        grid-column: 1 / -1; /* Span across all columns */
     }
 
     .highlight-project::before {
