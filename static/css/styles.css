@@ -1,4 +1,4 @@
-/* Base styles and variables */
+/* Global Styles and Variables */
 :root {
     --primary-color: #333;
     --secondary-color: #666;
@@ -12,7 +12,11 @@
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
     --max-video-height: 80vh;
-    --max-video-width: 100%;
+}
+
+/* Apply box-sizing globally */
+*, *::before, *::after {
+    box-sizing: border-box;
 }
 
 body {
@@ -29,7 +33,6 @@ main {
     padding: var(--spacing-medium);
     max-width: var(--max-width);
     margin: 0 auto;
-    box-sizing: border-box; /* Include padding in width calculation */
     width: 100%; /* Ensure main takes full width */
 }
 
@@ -38,7 +41,7 @@ h1, h2, h3, h4, h5, h6 {
     margin-bottom: var(--spacing-small);
 }
 
-a, a:visited {
+a {
     text-decoration: none;
     color: var(--primary-color);
 }
@@ -86,6 +89,8 @@ footer {
     font-size: var(--font-size-large);
     color: var(--primary-color);
     transition: color 0.3s;
+    display: inline-flex;
+    align-items: center;
 }
 
 .social-links a:hover {
@@ -93,25 +98,29 @@ footer {
 }
 
 /* Video styles */
-.video-reel, .hls-video {
+.video-reel {
     display: flex;
     justify-content: center;
     align-items: center;
     width: 100%;
-    max-width: var(--max-video-width);
     margin-bottom: var(--spacing-large);
-    box-sizing: border-box;
+}
+
+.hls-video {
+    width: 100%;
+    height: auto;
 }
 
 .video-container {
     position: relative;
     width: 100%;
-    max-width: var(--max-video-width, 100%);
+    max-width: 100%;
     margin: 0 auto;
     overflow: hidden;
     background-color: #000;
-    max-height: 80vh; /* Limit the maximum height to 80% of viewport height */
+    max-height: var(--max-video-height);
     aspect-ratio: auto; /* Placeholder, will be set dynamically */
+    transition: opacity 0.3s ease-in;
 }
 
 .project-video {
@@ -127,11 +136,11 @@ footer {
     padding-left: 2rem; /* Increased padding for the asterisk */
 }
 
-.project-item * a {
-    color: var(--highlight-color, #ff6600);
+.project-item a {
+    color: var(--highlight-color);
 }
 
-.project-item * dt {
+.project-item dt {
     font-weight: bold;
 }
 
@@ -160,8 +169,7 @@ footer {
 }
 
 .project-content {
-    padding-top: 1.5rem;
-    padding-bottom: 1.5rem;
+    padding: 1.5rem 0; /* Using shorthand property */
     overflow: hidden; /* Create a new block formatting context */
 }
 
@@ -192,17 +200,26 @@ footer {
     max-width: 800px;
     grid-column: 2 / -1; /* Align with project-name */
     padding-left: calc(165px + var(--spacing-medium)); /* Align with project-name */
+    transition: opacity 0.3s ease-in;
 }
 
 .project-detail:not(:empty) {
     display: block;
 }
 
+.project-detail.fade-in {
+    opacity: 1;
+}
+
+.project-detail.hidden {
+    opacity: 0;
+}
+
 .project-header.active {
     font-weight: bold;
 }
 
-/*Project Links styles */
+/* Project Links styles */
 .project-links {
     float: right;
     margin: 0 0 var(--spacing-medium) var(--spacing-medium);
@@ -245,18 +262,6 @@ footer {
     transform: translateY(-2px);
 }
 
-/* Fade-in effect styles */
-.project-detail,
-.video-container {
-    opacity: 0;
-    transition: opacity 0.3s ease-in;
-}
-
-.project-detail.fade-in,
-.video-container.fade-in {
-    opacity: 1;
-}
-
 /* About page styles */
 .about-content {
     max-width: 800px;
@@ -272,11 +277,12 @@ footer {
 
 /* Responsive styles */
 @media (max-width: 768px) {
-    :root {
-        --max-video-height: 50vh;
-        --max-video-width: 100%;
+    /* Adjust video container height directly */
+    .video-container {
+        max-height: 50vh;
     }
 
+    /* Project header adjustments */
     .project-header {
         grid-template-columns: 1fr auto;
         grid-template-rows: auto auto;
@@ -317,17 +323,8 @@ footer {
         justify-content: flex-start;
     }
 
-    .project-links li:first-child {
-        margin-left: 0;
-    }
-
-    .video-container {
-        max-height: var(--max-video-height);
-    }
-
     /* Ensure all content fits within viewport width */
     body, main, .video-reel, .video-container {
         max-width: 100vw;
     }
 }
-
