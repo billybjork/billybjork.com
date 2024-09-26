@@ -51,7 +51,6 @@ class Project(Base):
     html_content = Column(Text)
     thumbnail_link = Column(Text)
     video_link = Column(Text)
-    video_link_mp4 = Column(Text)
     show_project = Column(Boolean)
     youtube_link = Column(Text)
     highlight_project = Column(Boolean)
@@ -183,7 +182,6 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
         html_content=form_data.get("html_content"),
         thumbnail_link=form_data.get("thumbnail_link"),
         video_link=form_data.get("video_link"),
-        video_link_mp4=form_data.get("video_link_mp4"),
         show_project="show_project" in form_data,
         youtube_link=form_data.get("youtube_link"),
         highlight_project="highlight_project" in form_data

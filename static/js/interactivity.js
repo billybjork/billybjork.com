@@ -76,13 +76,7 @@ function setupHLSPlayer(videoElement, autoplay = false) {
             videoElement.addEventListener('loadedmetadata', setupVideo);
         } else {
             console.error('HLS is not supported in this browser');
-            const mp4Source = videoElement.querySelector('source[type="video/mp4"]');
-            if (mp4Source) {
-                videoElement.src = mp4Source.src;
-                videoElement.addEventListener('loadedmetadata', setupVideo);
-            } else {
-                reject(new Error('No supported video format available'));
-            }
+            reject(new Error('HLS is not supported in this browser'));
         }
     });
 }
