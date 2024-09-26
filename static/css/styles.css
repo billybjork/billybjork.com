@@ -2,7 +2,7 @@
 :root {
     --primary-color: #333;
     --secondary-color: #666;
-    --highlight-color: #ff6600;
+    --highlight-color: #1500ff;
     --background-color: #f8f8f8;
     --max-width: 1200px;
     --font-size-base: 16px;
@@ -91,10 +91,11 @@ footer {
     transition: color 0.3s;
     display: inline-flex;
     align-items: center;
+    text-decoration: none;
 }
 
 .social-links a:hover {
-    color: #007BFF;
+    color: var(--highlight-color);
 }
 
 /* Video styles */
@@ -293,6 +294,11 @@ footer {
 }
 
 /* Misc */
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+}
+
 .copy-notification {
     position: fixed;
     bottom: 1rem;
@@ -304,7 +310,8 @@ footer {
     border-radius: 5px;
     font-size: var(--font-size-small);
     z-index: 1000;
-    opacity: 0.9;
+    opacity: 0;
+    animation: fadeInOut 4s ease-in-out;
 }
 
 /* Responsive styles */

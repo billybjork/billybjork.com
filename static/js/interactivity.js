@@ -227,6 +227,23 @@ function setupFormListeners(formId) {
     }
 }
 
+// Present a message when user copies project URL to clipboard
+function copyToClipboard(response) {
+    const data = JSON.parse(response);
+    navigator.clipboard.writeText(data.share_url).then(() => {
+        // Display a temporary message
+        const message = document.createElement('div');
+        message.className = 'copy-notification';
+        message.textContent = 'URL copied to clipboard!';
+        document.body.appendChild(message);
+        setTimeout(() => {
+            document.body.removeChild(message);
+        }, 4000); // Remove after 4 seconds to match the animation
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
     lazyLoadVideos();

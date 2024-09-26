@@ -36,20 +36,3 @@
         </ul>
     </footer>
 </section>
-<script>
-function copyToClipboard(response) {
-    const data = JSON.parse(response);
-    navigator.clipboard.writeText(data.share_url).then(() => {
-        // Display a temporary message
-        const message = document.createElement('div');
-        message.className = 'copy-notification';
-        message.textContent = 'URL copied to clipboard!';
-        document.body.appendChild(message);
-        setTimeout(() => {
-            document.body.removeChild(message);
-        }, 2000); // Remove after 2 seconds
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-    });
-}
-</script>
