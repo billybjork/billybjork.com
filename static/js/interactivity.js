@@ -139,20 +139,23 @@ function adjustVideoContainerAspectRatio(videoElement) {
 
     const updateAspectRatio = () => {
         if (videoElement.videoWidth && videoElement.videoHeight) {
-            const aspectRatio = videoElement.videoHeight / videoElement.videoWidth;
+            const videoAspectRatio = videoElement.videoWidth / videoElement.videoHeight;
+
+            // Set the aspect-ratio property
+            container.style.aspectRatio = `${videoElement.videoWidth} / ${videoElement.videoHeight}`;
+
+            // Limit container height to max-height (80vh)
+            const maxContainerHeight = window.innerHeight * 0.8; // 80vh
             const containerWidth = container.offsetWidth;
-            let containerHeight = containerWidth * aspectRatio;
+            const containerHeight = containerWidth / videoAspectRatio;
 
-            // Check if the calculated height exceeds the max-height
-            const maxHeight = parseInt(getComputedStyle(container).maxHeight);
-            if (containerHeight > maxHeight) {
-                containerHeight = maxHeight;
-                container.style.width = `${containerHeight / aspectRatio}px`;
+            if (containerHeight > maxContainerHeight) {
+                // Adjust container width to maintain aspect ratio within max-height
+                const adjustedWidth = maxContainerHeight * videoAspectRatio;
+                container.style.width = `${adjustedWidth}px`;
             } else {
-                container.style.width = '100%';
+                container.style.width = ''; // Reset to default if height is within limit
             }
-
-            container.style.height = `${containerHeight}px`;
         }
     };
 
@@ -161,9 +164,6 @@ function adjustVideoContainerAspectRatio(videoElement) {
     } else {
         videoElement.addEventListener('loadedmetadata', updateAspectRatio);
     }
-    videoElement.addEventListener('loadeddata', updateAspectRatio);
-    
-    // Add resize event listener to handle viewport changes
     window.addEventListener('resize', updateAspectRatio);
 }
 
