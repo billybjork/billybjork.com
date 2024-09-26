@@ -280,6 +280,21 @@ footer {
     margin-bottom: 2rem;
 }
 
+/* Misc */
+.copy-notification {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--highlight-color);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-size: var(--font-size-small);
+    z-index: 1000;
+    opacity: 0.9;
+}
+
 /* Responsive styles */
 @media (max-width: 768px) {
     /* Adjust video container height directly */
