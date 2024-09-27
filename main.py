@@ -295,7 +295,7 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
 
 @app.get('/favicon.ico', include_in_schema=False)
 async def favicon():
-    file_name = "favicon.ico"
+    file_name = "assets/favicon.ico"
     file_path = os.path.join(app.root_path, "static", file_name)
     return FileResponse(path=file_path, headers={"Content-Disposition": "attachment; filename=" + file_name})
 

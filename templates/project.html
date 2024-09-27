@@ -27,11 +27,11 @@
                     hx-get="/get-share-url/{{ project.slug }}"
                     hx-trigger="click"
                     hx-swap="none"
-                    hx-on::after-request="copyToClipboard(event.detail.xhr.response)"
+                    hx-on::after-request="copyShareURL(event.detail.xhr.response)"
                     aria-label="Share"
                 >
                     <i class="fas fa-share-from-square"></i>
-                </button>
+                </button>            
             </li>
         </ul>
     </footer>

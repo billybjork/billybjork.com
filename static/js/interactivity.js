@@ -227,14 +227,13 @@ function setupFormListeners(formId) {
     }
 }
 
-// Present a message when user copies project URL to clipboard
-function copyToClipboard(response) {
-    const data = JSON.parse(response);
-    navigator.clipboard.writeText(data.share_url).then(() => {
+// Function to copy text to clipboard and show notification
+function copyToClipboard(text, notificationMessage) {
+    navigator.clipboard.writeText(text).then(() => {
         // Display a temporary message
         const message = document.createElement('div');
         message.className = 'copy-notification';
-        message.textContent = 'URL copied to clipboard!';
+        message.textContent = notificationMessage;
         document.body.appendChild(message);
         setTimeout(() => {
             document.body.removeChild(message);
@@ -244,18 +243,39 @@ function copyToClipboard(response) {
     });
 }
 
-// Event Listeners
+// Existing function for copying share URL
+function copyShareURL(response) {
+    const data = JSON.parse(response);
+    copyToClipboard(data.share_url, 'URL copied to clipboard!');
+}
+
+// Combined Event Listener
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize lazy loading of videos
     lazyLoadVideos();
+
+    // Handle initial page load animations or events
     handleInitialLoad();
 
+    // Set up HLS player if the reel video is present
     const reelVideo = document.getElementById('reel-video-player');
     if (reelVideo) {
         setupHLSPlayer(reelVideo, false);
     }
 
+    // Set up form listeners for 'edit' and 'create' forms
     setupFormListeners('edit-form');
     setupFormListeners('create-form');
+
+    // Event listener for elements with class 'copy-text-link'
+    document.querySelectorAll('.copy-text-link').forEach((element) => {
+        element.addEventListener('click', function(event) {
+            event.preventDefault(); // Prevent default link behavior
+            const textToCopy = this.getAttribute('data-copy-text');
+            const notificationMessage = this.getAttribute('data-notification-message') || 'Text copied to clipboard!';
+            copyToClipboard(textToCopy, notificationMessage);
+        });
+    });
 });
 
 window.addEventListener('popstate', handlePopState);
