@@ -43,7 +43,7 @@ h1, h2, h3, h4, h5, h6 {
 
 a {
     text-decoration: none;
-    color: var(--primary-color);
+    color: var(--highlight-color);
 }
 
 a:hover {
@@ -63,10 +63,53 @@ header {
     background-color: var(--background-color);
 }
 
-header nav ul {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
+.site-title,
+header nav a,
+.vu-ja-de-btn {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.3s ease;
+    font-weight: 700;
+}
+
+.site-title:hover,
+header nav a:hover,
+.vu-ja-de-btn:hover {
+    color: var(--highlight-color);
+    text-decoration: none;
+}
+
+.site-title {
+    font-size: var(--font-size-large);
+}
+
+header nav {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-medium);
+}
+
+header nav a,
+.vu-ja-de-btn {
+    font-size: var(--font-size-base);
+    padding: var(--spacing-small) var(--spacing-medium);
+}
+
+.vu-ja-de-btn {
+    display: inline-flex;
+    align-items: center;
+}
+
+.vu-ja-de-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: var(--spacing-small);
+    flex-shrink: 0;
+}
+
+/* Override general anchor styles for header links */
+header a:hover {
+    text-decoration: none;
 }
 
 /* Footer styles */
@@ -293,7 +336,7 @@ footer {
     margin-bottom: 2rem;
 }
 
-/* Misc */
+/* Interactivity involving user clipboard */
 @keyframes fadeInOut {
     0%, 100% { opacity: 0; }
     10%, 90% { opacity: 1; }
@@ -312,6 +355,41 @@ footer {
     z-index: 1000;
     opacity: 0;
     animation: fadeInOut 4s ease-in-out;
+}
+
+.copy-text-link {
+    color: var(--highlight-color); /* Use the highlight color */
+    font-weight: bold; /* Make it stand out */
+    text-decoration: none; /* Remove underline */
+    position: relative; /* For the underline hover effect */
+    cursor: pointer; /* Indicate it is clickable */
+    padding: 0.1rem 0.2rem; /* Add subtle padding for clickable area */
+    border-radius: 4px; /* Small rounding for better touch experience */
+    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth hover transition */
+}
+
+.copy-text-link:hover {
+    background-color: var(--highlight-color); /* Highlight background on hover */
+    color: white; /* Invert the color for contrast */
+    text-decoration: none; /* Ensure no underline on hover */
+}
+
+.copy-text-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -2px; /* Under the text */
+    width: 100%;
+    height: 2px;
+    background-color: var(--highlight-color); /* Same highlight color */
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.3s ease;
+}
+
+.copy-text-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
 }
 
 /* Responsive styles */
