@@ -3,8 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -20,10 +19,16 @@ security = HTTPBasic()
 
 app = FastAPI()
 
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["*"]  # Replace with your trusted hosts, e.g., ["yourdomain.com", "*.yourdomain.com"]
-)
+# Custom middleware to handle 'X-Forwarded-Proto' header
+class ForwardedProtoMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        x_forwarded_proto = request.headers.get('x-forwarded-proto')
+        if x_forwarded_proto:
+            request.scope['scheme'] = x_forwarded_proto
+        response = await call_next(request)
+        return response
+
+app.add_middleware(ForwardedProtoMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")

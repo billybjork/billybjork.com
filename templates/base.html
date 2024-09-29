@@ -7,8 +7,8 @@
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}">
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='assets/favicon.ico') }}">
+    <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+    <link rel="icon" type="image/x-icon" href="{{ request.url_for('static', path='assets/favicon.ico') }}">
     {% block additional_head %}{% endblock %}
 </head>
 <body>
@@ -17,7 +17,7 @@
         <nav>
             <a href="/about">About</a>
             <a href="https://www.vujade.world/" class="vu-ja-de-btn" target="_blank" rel="noopener">
-                <img src="{{ url_for('static', path='assets/cube.gif') }}" alt="Cube icon" class="vu-ja-de-icon">
+                <img src="{{ request.url_for('static', path='assets/cube.gif') }}" alt="Cube icon" class="vu-ja-de-icon">
                 VU JA DE
             </a>
         </nav>
@@ -44,7 +44,7 @@
         </nav>
         <p>&copy; {{ current_year }} Billy Bjork</p>
     </footer>
-    <script src="{{ url_for('static', path='js/interactivity.js') }}"></script>
+    <script src="{{ request.url_for('static', path='js/interactivity.js') }}"></script>
     {% block additional_scripts %}{% endblock %}
 </body>
 </html>
