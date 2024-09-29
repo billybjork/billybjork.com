@@ -1,16 +1,16 @@
 /* Global Styles and Variables */
 :root {
     --primary-color: #333;
-    --secondary-color: #666;
-    --highlight-color: #1500ff;
+    --secondary-color: #6d6d6d;
+    --highlight-color: #011ce9;
     --background-color: #f8f8f8;
     --max-width: 1200px;
     --font-size-base: 16px;
     --font-size-small: 0.9em;
     --font-size-large: 1.2em;
-    --spacing-small: 0.5rem;
+    --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
-    --spacing-large: 2rem;
+    --spacing-large: 2.3rem;
     --max-video-height: 80vh;
 }
 
@@ -26,14 +26,14 @@ body {
     margin: 0;
     padding: 0;
     font-size: var(--font-size-base);
-    overflow-x: hidden; /* Disable horizontal scrolling */
+    overflow-x: hidden;
 }
 
 main {
     padding: var(--spacing-medium);
     max-width: var(--max-width);
     margin: 0 auto;
-    width: 100%; /* Ensure main takes full width */
+    width: 100%;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -61,6 +61,7 @@ header {
     align-items: center;
     padding: var(--spacing-medium) var(--spacing-large);
     background-color: var(--background-color);
+    flex-wrap: wrap;
 }
 
 .site-title,
@@ -177,7 +178,6 @@ footer {
 .project-item {
     margin-bottom: var(--spacing-medium);
     position: relative;
-    padding-left: 2rem; /* Increased padding for the asterisk */
 }
 
 .project-item a {
@@ -190,17 +190,18 @@ footer {
 
 .project-header {
     display: grid;
-    grid-template-columns: 150px 1fr auto;
-    align-items: start;
+    grid-template-columns: 165px 1fr auto;
+    align-items: center;
     cursor: pointer;
     padding-top: 0.25em;
+    column-gap: 0;
+    position: relative;
 }
 
 .project-date {
     font-size: var(--font-size-small);
     color: var(--secondary-color);
-    text-align: right;
-    padding-right: var(--spacing-medium);
+    padding-right: var(--spacing-small);
     white-space: nowrap;
 }
 
@@ -210,6 +211,19 @@ footer {
     margin: 0;
     line-height: 1.2;
     padding-top: 0.1em;
+    padding-left: var(--spacing-small);
+}
+
+.highlight-project .project-name::after {
+    content: '*';
+    color: var(--highlight-color);
+    margin-left: var(--spacing-medium);
+    font-size: 1.75em;
+    line-height: 0;
+    vertical-align: middle;
+    display: inline-block;
+    position: relative;
+    top: 0.1em;
 }
 
 .project-content {
@@ -220,12 +234,13 @@ footer {
 .close-project {
     background: none;
     border: none;
-    font-size: 1.5em;
+    font-size: 2em;
     cursor: pointer;
     padding: 0;
     color: var(--secondary-color);
     align-self: start;
-    margin-top: 0.2em;
+    margin-top: var(--spacing-small);
+    padding-right: var(--spacing-small);
     opacity: 0; /* Hide by default but occupy space */
     transition: opacity 0.3s ease;
 }
@@ -234,23 +249,11 @@ footer {
     opacity: 1; /* Fade in when project is active */
 }
 
-.highlight-project::before {
-    content: '*';
-    color: var(--highlight-color);
-    position: absolute;
-    padding-left: var(--spacing-medium);
-    top: 0.3em;
-    font-size: 1.75em;
-    line-height: 1;
-}
-
 .project-detail {
     opacity: 0;
     transition: opacity 0.5s ease;
     margin-top: var(--spacing-medium);
     max-width: 800px;
-    grid-column: 2 / -1; /* Align with project-name */
-    padding-left: calc(165px + var(--spacing-medium)); /* Align with project-name */
 }
 
 .project-item.active .project-detail {
@@ -305,9 +308,9 @@ footer {
 
 .project-links a,
 .project-links button {
-    color: var(--highlight-color);
+    color: var(--primary-color, #333);
     font-size: var(--font-size-large);
-    transition: color 0.3s, transform 0.3s;
+    transition: color 0.3s ease, transform 0.3s;
     display: inline-flex;
     align-items: center;
     background: none;
@@ -319,8 +322,17 @@ footer {
 
 .project-links a:hover,
 .project-links button:hover {
-    color: var(--primary-color);
-    transform: translateY(-2px);
+    color: var(--highlight-color, #d77321);
+}
+
+.project-links a i,
+.project-links button i {
+    transition: color 0.3s ease;
+}
+
+.project-links a:hover i,
+.project-links button:hover i {
+    color: var(--highlight-color, #d77321);
 }
 
 /* About page styles */
@@ -394,6 +406,33 @@ footer {
 
 /* Responsive styles */
 @media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: var(--spacing-medium);
+    }
+
+    .site-title {
+        font-size: 1.2em;
+        margin-bottom: var(--spacing-small);
+    }
+
+    header nav {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    header nav a,
+    .vu-ja-de-btn {
+        font-size: 0.9em;
+        padding: var(--spacing-small);
+    }
+
+    .vu-ja-de-icon {
+        width: 16px;
+        height: 16px;
+    }
+
     /* Adjust video container height directly */
     .video-container {
         max-height: 50vh;
@@ -409,11 +448,9 @@ footer {
     .close-project {
         grid-column: 2; /* Positioning the close button in the second column */
         grid-row: 1; /* Positioning in the first row */
-        align-self: start; /* Align to the top */
-        justify-self: end; /* Align to the right */
         opacity: 0; /* Start hidden */
         transition: opacity 0.3s ease; /* Smooth transition for showing the button */
-        margin-top: 0; /* Adjust the margin to fit your design */
+        padding-right: var(--spacing-small);
     }
 
     .project-item.active .close-project {

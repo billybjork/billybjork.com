@@ -53,6 +53,7 @@ class Project(Base):
     slug = Column(String, unique=True, index=True)
     html_content = Column(Text)
     thumbnail_link = Column(Text)
+    # CDN base URL: https://d17y8p6t5eu2ht.cloudfront.net/videos/
     video_link = Column(Text)
     show_project = Column(Boolean)
     youtube_link = Column(Text)
