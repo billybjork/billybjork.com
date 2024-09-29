@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -20,11 +21,8 @@ security = HTTPBasic()
 app = FastAPI()
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    TrustedHostMiddleware, 
+    allowed_hosts=["*"]  # Replace with your trusted hosts, e.g., ["yourdomain.com", "*.yourdomain.com"]
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -77,9 +75,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-# Get reel link from env variable - to move into db later
-REEL_VIDEO_LINK = os.getenv("REEL_VIDEO_LINK")
 
 # Authentication for /edit functionalities
 def check_credentials(credentials: HTTPBasicCredentials = Depends(security)):
