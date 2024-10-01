@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Calculate current frame based on scroll position
             const scrollFraction = scrollTop / documentHeight;
-            const adjustedScrollFraction = scrollFraction * 12;  // Increase the multiplier to speed up
+            const adjustedScrollFraction = scrollFraction * 30;  // Increase the multiplier to speed up
             const frameIndex = Math.floor(adjustedScrollFraction * totalFrames) % totalFrames;
 
             // Calculate frame position within the sprite sheet
