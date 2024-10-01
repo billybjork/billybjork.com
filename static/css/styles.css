@@ -335,6 +335,15 @@ footer {
     color: var(--highlight-color, #d77321);
 }
 
+/* Thumbnail styles */
+.thumbnail {
+    width: 320px; /* Width of one frame */
+    height: 180px; /* Height of one frame */
+    background-size: cover; /* Will be updated dynamically */
+    background-position: 0 0;
+    overflow: hidden;
+}
+
 /* About page styles */
 .about-content {
     max-width: 800px;

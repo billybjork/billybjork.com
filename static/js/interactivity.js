@@ -276,6 +276,48 @@ document.addEventListener('DOMContentLoaded', function() {
             copyToClipboard(textToCopy, notificationMessage);
         });
     });
+
+    // Thumbnail scrolling logic
+    const thumbnails = document.querySelectorAll('.thumbnail');
+
+    function updateThumbnails() {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const documentHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+        thumbnails.forEach(function(thumbnail) {
+            // Get data attributes for each thumbnail
+            const totalFrames = parseInt(thumbnail.dataset.frames);
+            const frameWidth = parseInt(thumbnail.dataset.frameWidth);
+            const frameHeight = parseInt(thumbnail.dataset.frameHeight);
+            const columns = parseInt(thumbnail.dataset.columns);
+
+            // Calculate number of rows in the sprite sheet
+            const rows = Math.ceil(totalFrames / columns);
+
+            // Set background size based on sprite sheet dimensions
+            const spriteSheetWidth = frameWidth * columns;
+            const spriteSheetHeight = frameHeight * rows;
+            thumbnail.style.backgroundSize = `${spriteSheetWidth}px ${spriteSheetHeight}px`;
+
+            // Calculate current frame based on scroll position
+            const scrollFraction = scrollTop / documentHeight;
+            const adjustedScrollFraction = scrollFraction * 12;  // Increase the multiplier to speed up
+            const frameIndex = Math.floor(adjustedScrollFraction * totalFrames) % totalFrames;
+
+            // Calculate frame position within the sprite sheet
+            const frameX = (frameIndex % columns) * frameWidth;
+            const frameY = Math.floor(frameIndex / columns) * frameHeight;
+
+            // Update background position to display the correct frame
+            thumbnail.style.backgroundPosition = `-${frameX}px -${frameY}px`;
+        });
+    }
+
+    // Update thumbnails on scroll
+    window.addEventListener('scroll', updateThumbnails);
+
+    // Initial update of thumbnails on page load
+    updateThumbnails();
 });
 
 window.addEventListener('popstate', handlePopState);
