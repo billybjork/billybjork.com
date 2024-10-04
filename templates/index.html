@@ -25,7 +25,12 @@
              data-frame-height="180"
              data-columns="5">
         </figure>
-        <header class="project-header" hx-get="/{{ project.slug }}" hx-target="next .project-detail" hx-trigger="click" hx-swap="innerHTML">
+        <header class="project-header" 
+                hx-get="/{{ project.slug }}" 
+                hx-target="next .project-detail" 
+                hx-trigger="click" 
+                hx-swap="innerHTML"
+                hx-push-url="true">
             <time class="project-date">{{ project.formatted_date }}</time>
             <h2 class="project-name">{{ project.name }}</h2>
             <button class="close-project" aria-label="Close project">×</button>

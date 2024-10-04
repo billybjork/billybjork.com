@@ -1,14 +1,6 @@
 // URL Routing Functions
 
 /**
- * Updates the URL in the browser's address bar without reloading the page.
- * @param {string} projectSlug - The slug of the project to be reflected in the URL.
- */
-function updateURL(projectSlug) {
-    history.pushState(null, '', projectSlug ? `/${projectSlug}` : '/');
-}
-
-/**
  * Handles the browser's back/forward navigation.
  */
 function handlePopState() {
@@ -326,8 +318,6 @@ document.body.addEventListener('htmx:afterSwap', async function(event) {
     if (event.detail.target.classList.contains('project-detail')) {
         const projectItem = event.detail.target.closest('.project-item');
         if (projectItem) {
-            const projectSlug = projectItem.getAttribute('data-slug');
-            updateURL(projectSlug);
             await handleProjectContent(projectItem);
             projectItem.querySelector('.project-header')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
@@ -341,7 +331,7 @@ document.body.addEventListener('htmx:beforeRequest', function(event) {
         const projectDetail = projectItem.querySelector('.project-detail');
         if (projectDetail.innerHTML.trim() !== '') {
             closeProject(projectItem);
-            updateURL('');
+            history.pushState(null, '', '/');
             event.preventDefault();
         }
     }
@@ -352,6 +342,6 @@ document.addEventListener('click', function(event) {
         event.preventDefault();
         const projectItem = event.target.closest('.project-item');
         closeProject(projectItem);
-        updateURL('');
+        history.pushState(null, '', '/');
     }
 });
