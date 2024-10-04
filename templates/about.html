@@ -9,12 +9,12 @@
 {% block content %}
 <section class="about-content">
     {% if about_photo_link %}
-    <img src="{{ about_photo_link }}" alt="Billy Bjork" class="about-photo">
+    <figure class="about-photo-container">
+        <img src="{{ about_photo_link }}" alt="Billy Bjork" class="about-photo">
+    </figure>
     {% endif %}
     {% if about_content %}
         {{ about_content | safe }}
-    {% else %}
-        <p>About content is currently empty. Please add some content using the edit page.</p>
     {% endif %}
 </section>
 {% endblock %}

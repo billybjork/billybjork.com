@@ -28,17 +28,19 @@
     <footer>
         <nav class="social-links" aria-label="Social media">
             <ul>
-                {% if general_info.youtube_link %}
-                <li><a href="{{ general_info.youtube_link }}" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a></li>
-                {% endif %}
-                {% if general_info.vimeo_link %}
-                <li><a href="{{ general_info.vimeo_link }}" target="_blank" aria-label="Vimeo"><i class="fab fa-vimeo"></i></a></li>
-                {% endif %}
-                {% if general_info.instagram_link %}
-                <li><a href="{{ general_info.instagram_link }}" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a></li>
-                {% endif %}
-                {% if general_info.linkedin_link %}
-                <li><a href="{{ general_info.linkedin_link }}" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin"></i></a></li>
+                {% if general_info %}
+                    {% if general_info.youtube_link %}
+                    <li><a href="{{ general_info.youtube_link }}" target="_blank" aria-label="YouTube"><i class="fab fa-youtube"></i></a></li>
+                    {% endif %}
+                    {% if general_info.vimeo_link %}
+                    <li><a href="{{ general_info.vimeo_link }}" target="_blank" aria-label="Vimeo"><i class="fab fa-vimeo"></i></a></li>
+                    {% endif %}
+                    {% if general_info.instagram_link %}
+                    <li><a href="{{ general_info.instagram_link }}" target="_blank" aria-label="Instagram"><i class="fab fa-instagram"></i></a></li>
+                    {% endif %}
+                    {% if general_info.linkedin_link %}
+                    <li><a href="{{ general_info.linkedin_link }}" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin"></i></a></li>
+                    {% endif %}
                 {% endif %}
             </ul>
         </nav>

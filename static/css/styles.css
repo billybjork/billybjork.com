@@ -109,6 +109,33 @@ header {
     a:hover {
         text-decoration: none;
     }
+
+    @media (max-width: 768px) {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: var(--spacing-medium);
+
+        .site-title {
+            font-size: 1.2em;
+            margin-bottom: var(--spacing-small);
+        }
+
+        nav {
+            width: 100%;
+            justify-content: space-between;
+
+            a,
+            .vu-ja-de-btn {
+                font-size: 0.9em;
+                padding: var(--spacing-small);
+            }
+        }
+
+        .vu-ja-de-icon {
+            width: 16px;
+            height: 16px;
+        }
+    }
 }
 
 /* Footer styles */
@@ -164,8 +191,12 @@ footer {
     overflow: hidden;
     background-color: #000;
     max-height: var(--max-video-height);
-    aspect-ratio: auto; /* Placeholder, will be set dynamically */
+    aspect-ratio: auto; /* Placeholder; will be set dynamically */
     transition: opacity 0.3s ease-in;
+
+    @media (max-width: 768px) {
+        max-height: 50vh;
+    }
 }
 
 .project-video {
@@ -189,7 +220,7 @@ footer {
 
     &.active {
         .close-project {
-            opacity: 1; /* Fade in when project is active */
+            opacity: 1;
         }
 
         .project-detail {
@@ -206,6 +237,13 @@ footer {
     padding-top: 0.25em;
     column-gap: 0;
     position: relative;
+
+    @media (max-width: 768px) {
+        display: grid;
+        grid-template-columns: 1fr auto; /* One column for the content, one for the close button */
+        grid-template-rows: auto; /* Single row */
+        align-items: start;
+    }
 }
 
 .project-date {
@@ -213,6 +251,13 @@ footer {
     color: var(--secondary-color);
     padding-right: var(--spacing-small);
     white-space: nowrap;
+
+    @media (max-width: 768px) {
+        grid-column: 1; /* All textual content in the first column */
+        justify-self: start;
+        padding-right: 0;
+        order: 2;
+    }
 }
 
 .project-name {
@@ -222,6 +267,12 @@ footer {
     line-height: 1.2;
     padding-top: 0.1em;
     padding-left: var(--spacing-small);
+
+    @media (max-width: 768px) {
+        grid-column: 1;
+        justify-self: start;
+        order: 1;
+    }
 }
 
 .highlight-project .project-name::after {
@@ -237,7 +288,7 @@ footer {
 }
 
 .project-content {
-    padding: 1.5rem 0; /* Using shorthand property */
+    padding: 1.5rem 0;
     overflow: hidden; /* Create a new block formatting context */
 }
 
@@ -253,6 +304,11 @@ footer {
     padding-right: var(--spacing-small);
     opacity: 0; /* Hide by default but occupy space */
     transition: opacity 0.3s ease;
+
+    @media (max-width: 768px) {
+        grid-column: 2;
+        grid-row: 1;
+    }
 }
 
 .project-detail {
@@ -271,6 +327,11 @@ footer {
 
     &.hidden {
         opacity: 0;
+    }
+
+    @media (max-width: 768px) {
+        padding-left: 0;
+        grid-column: 1 / -1; /* Span across all columns */
     }
 }
 
@@ -297,6 +358,10 @@ footer {
         align-items: center;
         padding: 0;
         margin: 0;
+
+        @media (max-width: 768px) {
+            justify-content: flex-start;
+        }
     }
 
     li {
@@ -336,8 +401,8 @@ footer {
 
 /* Thumbnail styles */
 .thumbnail {
-    width: 320px; /* Width of one frame */
-    height: 180px; /* Height of one frame */
+    width: 320px;
+    height: 180px;
     background-size: cover; /* Will be updated dynamically */
     background-position: 0 0;
     overflow: hidden;
@@ -350,10 +415,20 @@ footer {
     padding: 2rem;
 }
 
-.about-photo {
-    max-width: 100%;
-    height: auto;
+.about-photo-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 70%; /* Prevent content shift after image loads */
     margin-bottom: 2rem;
+}
+
+.about-photo {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 /* Interactivity involving user clipboard */
@@ -378,29 +453,29 @@ footer {
 }
 
 .copy-text-link {
-    color: var(--highlight-color); /* Use the highlight color */
-    font-weight: bold; /* Make it stand out */
-    text-decoration: none; /* Remove underline */
-    position: relative; /* For the underline hover effect */
-    cursor: pointer; /* Indicate it is clickable */
-    padding: 0.1rem 0.2rem; /* Add subtle padding for clickable area */
-    border-radius: 4px; /* Small rounding for better touch experience */
-    transition: background-color 0.3s ease, color 0.3s ease; /* Smooth hover transition */
+    color: var(--highlight-color);
+    font-weight: bold;
+    text-decoration: none;
+    position: relative;
+    cursor: pointer;
+    padding: 0.1rem 0.2rem;
+    border-radius: 4px;
+    transition: background-color 0.3s ease, color 0.3s ease;
 
     &:hover {
-        background-color: var(--highlight-color); /* Highlight background on hover */
-        color: white; /* Invert the color for contrast */
-        text-decoration: none; /* Ensure no underline on hover */
+        background-color: var(--highlight-color);
+        color: white;
+        text-decoration: none;
     }
 
     &::after {
         content: '';
         position: absolute;
         left: 0;
-        bottom: -2px; /* Under the text */
+        bottom: -2px;
         width: 100%;
         height: 2px;
-        background-color: var(--highlight-color); /* Same highlight color */
+        background-color: var(--highlight-color);
         transform: scaleX(0);
         transform-origin: right;
         transition: transform 0.3s ease;
@@ -414,83 +489,9 @@ footer {
 
 /* Responsive styles */
 @media (max-width: 768px) {
-    header {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: var(--spacing-medium);
-
-        .site-title {
-            font-size: 1.2em;
-            margin-bottom: var(--spacing-small);
-        }
-
-        nav {
-            width: 100%;
-            justify-content: space-between;
-
-            a,
-            .vu-ja-de-btn {
-                font-size: 0.9em;
-                padding: var(--spacing-small);
-            }
-        }
-
-        .vu-ja-de-icon {
-            width: 16px;
-            height: 16px;
-        }
-    }
-
-    /* Adjust video container height directly */
-    .video-container {
-        max-height: 50vh;
-    }
-
-    .project-header {
-        display: grid;
-        grid-template-columns: 1fr auto; /* One column for the content, one for the close button */
-        grid-template-rows: auto; /* Single row */
-        align-items: start;
-    }
-
-    .close-project {
-        grid-column: 2; /* Positioning the close button in the second column */
-        grid-row: 1; /* Positioning in the first row */
-        opacity: 0; /* Start hidden */
-        transition: opacity 0.3s ease; /* Smooth transition for showing the button */
-        padding-right: var(--spacing-small);
-    }
-
-    .project-item.active .close-project {
-        opacity: 1; /* Make visible when project is active */
-    }
-
-    .project-name, .project-date {
-        grid-column: 1; /* All textual content in the first column */
-        justify-self: start; /* Align text to the start */
-    }
-
-    .project-date {
-        padding-right: 0; /* Remove padding if not required */
-        order: 2; /* Optionally change order if needed */
-    }
-
-    .project-name {
-        order: 1; /* Ensuring the project name is above the date */
-    }
-
-    .project-detail {
-        padding-left: 0;
-        grid-column: 1 / -1; /* Span across all columns */
-    }
-
     .highlight-project::before {
         top: 0.25em;
         left: 0.1em;
-    }
-
-    .project-links ul {
-        justify-content: flex-start;
     }
 
     /* Ensure all content fits within viewport width */
