@@ -192,7 +192,6 @@ footer {
     margin: 0 auto;
     overflow: hidden;
     background-color: #000;
-    max-height: var(--max-video-height);
     /* aspect-ratio will be set dynamically via JavaScript */
 }
 
@@ -200,12 +199,6 @@ footer {
     .video-container {
         max-height: 50vh;
     }
-}
-
-.project-video {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
 }
 
 /* Project styles */
@@ -278,60 +271,59 @@ footer {
 }
 
 /* Project content styles */
-.project-content {
-    padding: 1.5rem 0;
-    overflow: hidden;
-    opacity: 1;
-    transition: opacity 0.5s ease, max-height 0.5s ease;
-    margin-top: var(--spacing-medium);
-    max-width: 800px;
-    max-height: none;
-}
-
-.project-content:not(:empty) {
-    display: block;
-}
-
-.project-item:not(.active) .project-content {
+.project-content, .video-container {
     opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
     max-height: 0;
+    overflow: hidden;
 }
 
-.project-item:not(.active) .project-content {
-    padding-top: 0;
-    padding-bottom: 0;
+.project-item.active .project-content, 
+.project-item.active .video-container {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 1000px; /* Some large value to allow expansion */
 }
 
-/* Avoid affecting video-container */
-.project-item:not(.active) .video-container {
-    display: none;
+.project-content {
+    margin-top: var(--spacing-medium);
+    transition-delay: 0.2s; /* Delay to make it appear after video */
 }
 
-/* Close project button */
+.video-container {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    overflow: hidden;
+    background-color: #000;
+    /* Removed static aspect-ratio to allow dynamic adjustment */
+}
+
+/* Ensure video fits its container */
+.project-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
 .close-project {
-    background: none;
-    border: none;
-    font-size: 2em;
-    cursor: pointer;
-    padding: 0;
-    color: var(--secondary-color);
-    align-self: start;
-    margin-top: var(--spacing-small);
-    padding-right: var(--spacing-small);
-    opacity: 0; /* Hide by default */
+    opacity: 0;
     transition: opacity 0.3s ease;
 }
 
-@media (max-width: 768px) {
-    .close-project {
-        grid-column: 2;
-        grid-row: 1;
-    }
-}
-
-/* Close button visibility when active */
 .project-item.active .close-project {
     opacity: 1;
+}
+
+/* Adjust the project-header cursor */
+.project-header {
+    cursor: pointer;
+}
+
+.project-header .close-project {
+    cursor: default;
 }
 
 /* Project Links styles */
