@@ -275,18 +275,6 @@ footer {
     }
 }
 
-.highlight-project .project-name::after {
-    content: '*';
-    color: var(--highlight-color);
-    margin-left: var(--spacing-medium);
-    font-size: 1.75em;
-    line-height: 0;
-    vertical-align: middle;
-    display: inline-block;
-    position: relative;
-    top: 0.1em;
-}
-
 .project-content {
     padding: 1.5rem 0;
     overflow: hidden; /* Create a new block formatting context */
@@ -489,10 +477,6 @@ footer {
 
 /* Responsive styles */
 @media (max-width: 768px) {
-    .highlight-project::before {
-        top: 0.25em;
-        left: 0.1em;
-    }
 
     /* Ensure all content fits within viewport width */
     body, main, .video-reel, .video-container {

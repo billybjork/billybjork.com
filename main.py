@@ -57,7 +57,6 @@ class Project(Base):
     video_link = Column(Text)
     show_project = Column(Boolean)
     youtube_link = Column(Text)
-    highlight_project = Column(Boolean)
 
 class General(Base):
     __tablename__ = "general"
@@ -184,8 +183,7 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
         thumbnail_link=form_data.get("thumbnail_link"),
         video_link=form_data.get("video_link"),
         show_project="show_project" in form_data,
-        youtube_link=form_data.get("youtube_link"),
-        highlight_project="highlight_project" in form_data
+        youtube_link=form_data.get("youtube_link")
     )
     
     db.add(new_project)
@@ -270,7 +268,6 @@ async def update_project(request: Request, project_slug: str, db: Session = Depe
     project.youtube_link = form_data.get("youtube_link")
     project.creation_date = datetime.strptime(form_data.get("creation_date"), "%Y-%m-%d").date()
     project.show_project = "show_project" in form_data
-    project.highlight_project = "highlight_project" in form_data
     
     db.commit()
     
@@ -288,8 +285,7 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
             "slug": project.slug,
             "creation_date": format_date(project.creation_date),
             "thumbnail_link": project.thumbnail_link,
-            "youtube_link": project.youtube_link,
-            "highlight_project": project.highlight_project
+            "youtube_link": project.youtube_link
         }
         for project in projects
     ]

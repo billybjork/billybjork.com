@@ -17,7 +17,7 @@
 </section>
 <section id="project-list">
     {% for project in projects %}
-    <article class="project-item {% if project.highlight_project %}highlight-project{% endif %}" data-slug="{{ project.slug }}">
+    <article class="project-item" data-slug="{{ project.slug }}">
         <figure class="thumbnail"
              style="background-image: url('{{ project.thumbnail_link }}');"
              data-frames="60"
