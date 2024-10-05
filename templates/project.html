@@ -3,7 +3,7 @@
             hx-get="/{{ project.slug }}" 
             hx-target="closest .project-item" 
             hx-trigger="click" 
-            hx-swap="outerHTML"
+            hx-swap="outerHTML transition: opacity 0.5s ease-in-out"
             hx-push-url="true">
         <time class="project-date">{{ project.formatted_date }}</time>
         <h2 class="project-name">{{ project.name }}</h2>

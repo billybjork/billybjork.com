@@ -73,21 +73,17 @@ async function handleProjectContent(projectItem) {
         const videoContainer = projectItem.querySelector('.video-container');
         const projectContent = projectItem.querySelector('.project-content');
 
-        // Remove 'fade-in' class from elements
-        [videoContainer, projectContent].forEach(el => {
-            if (el) el.classList.remove('fade-in');
-        });
-
         // Add the 'active' class to the project item
         projectItem.classList.add('active');
 
         if (video && videoContainer) {
             await setupHLSPlayer(video, true);
-            videoContainer.classList.add('fade-in');
         }
 
-        if (projectContent) {
-            projectContent.classList.add('fade-in');
+        // Smooth scroll to the project header
+        const projectHeader = projectItem.querySelector('.project-header');
+        if (projectHeader) {
+            projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     } catch (error) {
         console.error('Error in handleProjectContent:', error);
