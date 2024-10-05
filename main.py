@@ -100,20 +100,39 @@ def format_date(date):
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
+        formatted_projects = []
         for project in projects:
-            project.formatted_date = format_date(project.creation_date)
+            try:
+                formatted_project = {
+                    "id": project.id,
+                    "name": project.name,
+                    "slug": project.slug,
+                    "thumbnail_link": project.thumbnail_link,
+                    "video_link": project.video_link,
+                    "youtube_link": project.youtube_link,
+                    "formatted_date": format_date(project.creation_date),
+                    "is_open": False  # Default to closed
+                }
+                formatted_projects.append(formatted_project)
+            except Exception as project_error:
+                print(f"Error formatting project: {str(project_error)}")
+                print(f"Project data: {project.__dict__}")
         
         general_info = db.query(General).first()
         
         return templates.TemplateResponse("index.html", {
             "request": request, 
-            "projects": projects,
+            "projects": formatted_projects,
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info
         })
     except Exception as e:
         print(f"Error in read_root: {str(e)}")
+        print(f"Error type: {type(e)}")
+        print(f"Error args: {e.args}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/about", response_class=HTMLResponse)
@@ -194,20 +213,21 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
     return response
 
 @app.get("/{project_slug}", response_class=HTMLResponse)
-async def read_project(request: Request, project_slug: str, db: Session = Depends(get_db)):
+async def read_project(request: Request, project_slug: str, close: bool = False, db: Session = Depends(get_db)):
     try:
         project = db.query(Project).filter(Project.slug == project_slug).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
         general_info = db.query(General).first()
-        
-        # If it's an HTMX request, return only the project content
+        project.formatted_date = format_date(project.creation_date)
+        is_open = not close
+
         if request.headers.get("HX-Request") == "true":
             return templates.TemplateResponse("project.html", {
                 "request": request, 
                 "project": project,
-                "general_info": general_info
+                "is_open": is_open
             })
         
         # For direct navigation, return the full page with the project open
@@ -218,9 +238,9 @@ async def read_project(request: Request, project_slug: str, db: Session = Depend
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
+            "open_project": project if not close else None,
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
-            "open_project": project,
             "general_info": general_info
         })
     except Exception as e:

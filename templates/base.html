@@ -47,7 +47,6 @@
         <p>&copy; {{ current_year }} Billy Bjork</p>
     </footer>
     <script src="{{ request.url_for('static', path='js/interactivity.js') }}"></script>
-    <script src="{{ request.url_for('static', path='js/event-listeners.js') }}"></script>
     {% block additional_scripts %}{% endblock %}
 </body>
 </html>

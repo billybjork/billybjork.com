@@ -17,30 +17,8 @@
 </section>
 <section id="project-list">
     {% for project in projects %}
-    <article class="project-item" data-slug="{{ project.slug }}">
-        <figure class="thumbnail"
-             style="background-image: url('{{ project.thumbnail_link }}');"
-             data-frames="60"
-             data-frame-width="320"
-             data-frame-height="180"
-             data-columns="5">
-        </figure>
-        <header class="project-header" 
-                hx-get="/{{ project.slug }}" 
-                hx-target="next .project-detail" 
-                hx-trigger="click" 
-                hx-swap="innerHTML"
-                hx-push-url="true">
-            <time class="project-date">{{ project.formatted_date }}</time>
-            <h2 class="project-name">{{ project.name }}</h2>
-            <button class="close-project" aria-label="Close project">×</button>
-        </header>
-        <section class="project-detail" {% if open_project and open_project.slug == project.slug %}data-initial-open="true"{% endif %}>
-            {% if open_project and open_project.slug == project.slug %}
-                {% include "project.html" %}
-            {% endif %}
-        </section>
-    </article>
+        {% set is_open = (open_project and open_project.slug == project.slug) %}
+        {% include "project.html" %}
     {% endfor %}
 </section>
 {% endblock %}
