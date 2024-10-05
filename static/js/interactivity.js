@@ -13,6 +13,7 @@ function setupHLSPlayer(videoElement, autoplay = false) {
             if (autoplay) {
                 videoElement.play().catch(e => {
                     console.error("Autoplay failed:", e);
+                    // Optional: Show play button or user prompt here
                 });
             }
             resolve();
@@ -20,6 +21,7 @@ function setupHLSPlayer(videoElement, autoplay = false) {
 
         if (Hls.isSupported()) {
             const hls = new Hls();
+            videoElement.hlsInstance = hls;  // Store instance for cleanup
             hls.loadSource(streamUrl);
             hls.attachMedia(videoElement);
             hls.on(Hls.Events.MANIFEST_PARSED, setupVideo);
@@ -43,13 +45,11 @@ function adjustVideoContainerAspectRatio(videoElement) {
             const videoAspectRatio = videoElement.videoWidth / videoElement.videoHeight;
             container.style.aspectRatio = `${videoElement.videoWidth} / ${videoElement.videoHeight}`;
 
-            // Limit container height to max-height (80vh)
-            const maxContainerHeight = window.innerHeight * 0.8; // 80vh
+            const maxContainerHeight = window.innerHeight * 0.8;
             const containerWidth = container.offsetWidth;
             const containerHeight = containerWidth / videoAspectRatio;
 
             if (containerHeight > maxContainerHeight) {
-                // Adjust container width to maintain aspect ratio within max-height
                 const adjustedWidth = maxContainerHeight * videoAspectRatio;
                 container.style.width = `${adjustedWidth}px`;
             } else {
@@ -67,7 +67,7 @@ function adjustVideoContainerAspectRatio(videoElement) {
 }
 
 // Function to handle project content when opened
-async function handleProjectContentChange(projectItem) {
+async function handleProjectContent(projectItem) {
     try {
         const video = projectItem.querySelector('video.project-video');
         const videoContainer = projectItem.querySelector('.video-container');
@@ -99,7 +99,7 @@ async function handleProjectContentChange(projectItem) {
         // Update all thumbnails
         updateThumbnails();
     } catch (error) {
-        console.error('Error in handleProjectContentChange:', error);
+        console.error('Error in handleProjectContent:', error);
     }
 }
 
@@ -107,7 +107,7 @@ async function handleProjectContentChange(projectItem) {
 async function handleInitialLoad() {
     const openProjectItem = document.querySelector('.project-item.active');
     if (openProjectItem) {
-        await handleProjectContentChange(openProjectItem);
+        await handleProjectContent(openProjectItem);
         const projectHeader = openProjectItem.querySelector('.project-header');
         if (projectHeader) {
             projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -138,10 +138,78 @@ function copyShareURL(response) {
 }
 
 // Thumbnail scrolling logic
+
+// Initialize variables
+let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+let lastScrollEventTime = Date.now();
+let animationSpeed = 0; // frames per second
+let animationProgress = 0; // in frames
+let lastAnimationFrameTime = Date.now();
+
+// Scroll event listener to update scroll velocity and animation speed
+window.addEventListener('scroll', function() {
+    const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const now = Date.now();
+    const deltaTime = (now - lastScrollEventTime) / 1000; // Convert to seconds
+    
+    if (deltaTime > 0) {
+        const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime; // pixels per second
+
+        // Convert scrollVelocity to animationSpeed (frames per second)
+        const pixelsPerFrame = 5; // Adjust to control base animation speed (descrease to speed up)
+        animationSpeed = scrollVelocity / pixelsPerFrame; // frames per second
+
+        // Cap the animationSpeed to prevent it from becoming too fast
+        const maxAnimationSpeed = 20; // Maximum frames per second
+        const minAnimationSpeed = -20; // Minimum frames per second (for upward scroll)
+        animationSpeed = Math.max(minAnimationSpeed, Math.min(maxAnimationSpeed, animationSpeed));
+    }
+    
+    lastScrollTop = currentScrollTop;
+    lastScrollEventTime = now;
+});
+
+// Animation loop using requestAnimationFrame
+function animationLoop() {
+    const now = Date.now();
+    const deltaTime = (now - lastAnimationFrameTime) / 1000; // in seconds
+    lastAnimationFrameTime = now;
+
+    // Apply dynamic deceleration to the animation speed
+    const baseDeceleration = 10; // Base deceleration (frames per second squared)
+    const speedFactor = Math.abs(animationSpeed) * 0.1; // Additional deceleration based on current speed
+    const dynamicDeceleration = baseDeceleration + speedFactor; // Total deceleration
+
+    if (animationSpeed > 0) {
+        animationSpeed = Math.max(0, animationSpeed - dynamicDeceleration * deltaTime);
+    } else if (animationSpeed < 0) {
+        animationSpeed = Math.min(0, animationSpeed + dynamicDeceleration * deltaTime);
+    }
+
+    // Update animation progress based on animation speed
+    animationProgress += animationSpeed * deltaTime;
+
+    // Ensure animationProgress wraps around within totalFrames
+    // (Assuming all thumbnails have the same totalFrames; if not, handle individually)
+    animationProgress = animationProgress % 60; // 60 total frames
+    if (animationProgress < 0) {
+        animationProgress += 60;
+    }
+
+    // Update the thumbnails
+    updateThumbnails();
+
+    // Continue the animation loop
+    requestAnimationFrame(animationLoop);
+}
+
+// Start the animation loop
+lastAnimationFrameTime = Date.now();
+requestAnimationFrame(animationLoop);
+
+// Function to update thumbnails
 function updateThumbnails() {
     const thumbnails = document.querySelectorAll('.thumbnail');
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const documentHeight = document.documentElement.scrollHeight - window.innerHeight;
 
     thumbnails.forEach(function(thumbnail) {
         // Get data attributes for each thumbnail
@@ -158,10 +226,9 @@ function updateThumbnails() {
         const spriteSheetHeight = frameHeight * rows;
         thumbnail.style.backgroundSize = `${spriteSheetWidth}px ${spriteSheetHeight}px`;
 
-        // Calculate current frame based on scroll position
-        const scrollFraction = scrollTop / documentHeight;
-        const adjustedScrollFraction = scrollFraction * 30;  // Increase the multiplier to speed up
-        const frameIndex = Math.floor(adjustedScrollFraction * totalFrames) % totalFrames;
+        // Calculate current frame based on animationProgress
+        let frameIndex = Math.floor(animationProgress) % totalFrames;
+        if (frameIndex < 0) frameIndex += totalFrames; // Handle negative values
 
         // Calculate frame position within the sprite sheet
         const frameX = (frameIndex % columns) * frameWidth;
@@ -188,6 +255,7 @@ function handleProjectClosed(projectItem) {
 }
 
 // Event listeners
+
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize HLS player if the reel video is present
     const reelVideo = document.getElementById('reel-video-player');
@@ -208,9 +276,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Update thumbnails on scroll
-    window.addEventListener('scroll', updateThumbnails);
-
     // Initial update of thumbnails on page load
     updateThumbnails();
 });
@@ -219,7 +284,7 @@ document.addEventListener('DOMContentLoaded', function() {
 document.body.addEventListener('htmx:load', function(event) {
     if (event.detail.elt.classList.contains('project-item')) {
         const projectItem = event.detail.elt;
-        handleProjectContentChange(projectItem);
+        handleProjectContent(projectItem);
     }
 });
 
