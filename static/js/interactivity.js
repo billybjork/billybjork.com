@@ -67,26 +67,39 @@ function adjustVideoContainerAspectRatio(videoElement) {
 }
 
 // Function to handle project content when opened
-async function handleProjectContent(projectItem) {
+async function handleProjectContentChange(projectItem) {
     try {
         const video = projectItem.querySelector('video.project-video');
         const videoContainer = projectItem.querySelector('.video-container');
         const projectContent = projectItem.querySelector('.project-content');
+        const thumbnail = projectItem.querySelector('.thumbnail');
 
-        // Add the 'active' class to the project item
-        projectItem.classList.add('active');
+        if (projectItem.classList.contains('active')) {
+            // Project is being opened
+            if (video && videoContainer) {
+                await setupHLSPlayer(video, true);
+            }
 
-        if (video && videoContainer) {
-            await setupHLSPlayer(video, true);
+            // Smooth scroll to the project header
+            const projectHeader = projectItem.querySelector('.project-header');
+            if (projectHeader) {
+                projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        } else {
+            // Project is being closed
+            if (video) {
+                video.pause();
+                video.src = '';
+            }
+            if (thumbnail) {
+                resetThumbnailPosition(thumbnail);
+            }
         }
 
-        // Smooth scroll to the project header
-        const projectHeader = projectItem.querySelector('.project-header');
-        if (projectHeader) {
-            projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        // Update all thumbnails
+        updateThumbnails();
     } catch (error) {
-        console.error('Error in handleProjectContent:', error);
+        console.error('Error in handleProjectContentChange:', error);
     }
 }
 
@@ -94,7 +107,7 @@ async function handleProjectContent(projectItem) {
 async function handleInitialLoad() {
     const openProjectItem = document.querySelector('.project-item.active');
     if (openProjectItem) {
-        await handleProjectContent(openProjectItem);
+        await handleProjectContentChange(openProjectItem);
         const projectHeader = openProjectItem.querySelector('.project-header');
         if (projectHeader) {
             projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -159,6 +172,21 @@ function updateThumbnails() {
     });
 }
 
+// Function to reset thumbnail position
+function resetThumbnailPosition(thumbnail) {
+    if (thumbnail) {
+        thumbnail.style.backgroundPosition = '0 0';
+    }
+}
+
+// Function to handle project content when closed
+function handleProjectClosed(projectItem) {
+    const thumbnail = projectItem.querySelector('.thumbnail');
+    if (thumbnail) {
+        resetThumbnailPosition(thumbnail);
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize HLS player if the reel video is present
@@ -189,21 +217,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Handle HTMX content swapping
 document.body.addEventListener('htmx:load', function(event) {
-    if (event.target.classList.contains('project-item')) {
-        const projectItem = event.target;
-
-        // Check if the project is open
-        if (projectItem.classList.contains('active')) {
-            handleProjectContent(projectItem);
-        } else {
-            // Pause and remove the video if it exists
-            const video = projectItem.querySelector('video.project-video');
-            if (video) {
-                video.pause();
-                video.src = '';
-            }
-            projectItem.classList.remove('active');
-        }
+    if (event.detail.elt.classList.contains('project-item')) {
+        const projectItem = event.detail.elt;
+        handleProjectContentChange(projectItem);
     }
 });
 
