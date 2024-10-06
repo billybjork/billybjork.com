@@ -123,7 +123,6 @@ header nav a,
 header nav .vu-ja-de-btn {
     font-size: var(--font-size-medium);
     padding: var(--spacing-small);
-    text-transform: uppercase; /* Text in uppercase */
 }
 
 header .vu-ja-de-btn {
@@ -217,8 +216,8 @@ footer {
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: all 0.3s ease;
     margin-bottom: var(--spacing-large);
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Header within project items */
@@ -297,14 +296,12 @@ footer {
     transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
     transform: translateY(20px);
     opacity: 0;
-    max-height: 0;
     overflow: hidden;
     margin-top: var(--spacing-medium);
     width: 100%;
 }
 
 .project-item.active .project-content {
-    max-height: 100vh;
     transform: translateY(0);
     opacity: 1;
 }
@@ -404,10 +401,11 @@ footer {
     left: 50%;
     transform: translateX(-50%);
     background-color: var(--highlight-color);
-    color: white;
+    color: var(--background-color);
     padding: 0.5rem 1rem;
     border-radius: 5px;
     font-size: var(--font-size-small);
+    font-weight: 500;
     z-index: 1000;
     opacity: 0;
     animation: fadeInOut 4s ease-in-out;
@@ -426,7 +424,7 @@ footer {
 
 .copy-text-link:hover {
     background-color: var(--highlight-color);
-    color: white;
+    color: var(--background-color);
     text-decoration: none;
 }
 
