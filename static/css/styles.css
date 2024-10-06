@@ -2,7 +2,7 @@
 :root {
     --primary-color: #e0e0e0;
     --secondary-color: #a0a0a0;
-    --highlight-color: #4d8cff;
+    --highlight-color: #ff8940;
     --background-color: #1a1a1a;
     --max-width: 1200px;
     --font-size-base: 16px;
@@ -10,8 +10,9 @@
     --font-size-large: 1.2em;
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
-    --spacing-large: 2.3rem;
+    --spacing-large: 3rem;
     --max-video-height: 80vh;
+    --fade-gradient-height: 33.33%; /* Bottom third */
 }
 
 /* Apply box-sizing globally */
@@ -28,8 +29,23 @@ body {
     padding: 0;
     font-size: var(--font-size-base);
     overflow-x: hidden;
+    position: relative;
 }
 
+/* Fade Gradient Overlay */
+body::before {
+    content: '';
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: var(--fade-gradient-height);
+    background: linear-gradient(to top, rgba(26, 26, 26, 0.8), transparent);
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Main Container */
 main {
     padding: var(--spacing-medium);
     max-width: var(--max-width);
@@ -63,11 +79,10 @@ a:hover {
 /* Header styles */
 header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-medium) var(--spacing-large);
+    flex-direction: column;
+    align-items: flex-start;
+    padding: var(--spacing-medium);
     background-color: var(--background-color);
-    flex-wrap: wrap;
 }
 
 header .site-title,
@@ -88,18 +103,22 @@ header .vu-ja-de-btn:hover {
 
 header .site-title {
     font-size: var(--font-size-large);
+    margin-bottom: var(--spacing-small);
 }
 
 header nav {
     display: flex;
     align-items: center;
     gap: var(--spacing-medium);
+    width: 100%;
+    justify-content: flex-end; /* Aligned to the right */
 }
 
 header nav a,
 header nav .vu-ja-de-btn {
-    font-size: var(--font-size-base);
-    padding: var(--spacing-small) var(--spacing-medium);
+    font-size: var(--font-size-small);
+    padding: var(--spacing-small);
+    text-transform: uppercase; /* Text in uppercase */
 }
 
 header .vu-ja-de-btn {
@@ -108,44 +127,10 @@ header .vu-ja-de-btn {
 }
 
 header .vu-ja-de-icon {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     margin-right: var(--spacing-small);
     flex-shrink: 0;
-}
-
-/* Override general anchor styles for header links */
-header a:hover {
-    text-decoration: none;
-}
-
-@media (max-width: 768px) {
-    header {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: var(--spacing-medium);
-    }
-
-    header .site-title {
-        font-size: 1.2em;
-        margin-bottom: var(--spacing-small);
-    }
-
-    header nav {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    header nav a,
-    header nav .vu-ja-de-btn {
-        font-size: 0.9em;
-        padding: var(--spacing-small);
-    }
-
-    header .vu-ja-de-icon {
-        width: 16px;
-        height: 16px;
-    }
 }
 
 /* Footer styles */
@@ -184,16 +169,15 @@ footer {
     align-items: center;
     width: 100%;
     margin-bottom: var(--spacing-large);
+    position: relative;
 }
 
-/* General styles for video */
 .hls-video, .project-video {
     width: 100%;
-    height: auto; /* maintain aspect ratio */
-    object-fit: contain; /* ensure the video content is scaled properly */
+    height: auto;
+    object-fit: contain;
 }
 
-/* Video container specific styles */
 .video-container {
     position: relative;
     width: 100%;
@@ -203,6 +187,7 @@ footer {
     transition: opacity 0.5s ease, transform 0.5s ease;
     transform: translateY(20px);
     opacity: 0;
+    max-height: 80vh;
 }
 
 .project-item.active .video-container {
@@ -210,74 +195,121 @@ footer {
     opacity: 1;
 }
 
-/* Responsive adjustments for smaller screens */
-@media (max-width: 768px) {
-    .video-container {
-        max-height: 50vh;
-    }
+/* Styles for project list */
+#project-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-medium) 0;
+    width: 100%;
+    margin: 0 auto;
 }
 
 /* Styles for project items */
 .project-item {
     position: relative;
-    margin-bottom: var(--spacing-medium);
-    transition: opacity 0.5s ease-in-out;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center align items for symmetry */
+    transition: all 0.3s ease;
+}
+
+/* Header within project items */
+.project-header {
+    width: 100%;
+    display: flex;
+    align-items: center; /* Center items vertically */
+    justify-content: center; /* Center horizontally */
+    padding-top: var(--spacing-large);
+    padding-bottom: var(--spacing-medium);
+    cursor: pointer;
+    position: relative; /* Maintain a positioning context */
+    overflow: hidden; /* Hide overflow */
+    @media screen and (min-width: 768px) {
+        max-width: 100%; /* Changed from 35% to 100% for better width utilization */
+    }
+}
+
+/* Project date styles */
+.project-date {
+    font-size: var(--font-size-small);
+    color: var(--secondary-color);
+    padding-bottom: var(--spacing-small);
+    margin-right: var(--spacing-small); /* Provides spacing between date and any following content */
+    line-height: 1.2;
+    white-space: nowrap; /* Keeps date in one line preventing line break */
+}
+
+/* Project name styles */
+.project-name {
+    font-size: var(--font-size-large);
+    color: var(--primary-color);
+    margin: 0 auto; /* Auto margins for horizontal centering */
+    line-height: 1.2;
+    font-weight: bold;
+    text-align: center; /* Ensure text is centered */
+    white-space: normal; /* Allow line wraps */
+    overflow: visible; /* Show overflow */
+    max-width: 90%; /* Limit max width to give space for close button */
+}
+
+/* Styling for close button within projects */
+.close-project {
+    position: absolute; /* Changed from flex to absolute */
+    right: 0; /* Align to the far right */
+    top: 50%; /* Start at the vertical center */
+    transform: translateY(-50%); /* Center vertically relative to its position */
+    font-size: 2em;
+    background: none;
+    border: none;
+    color: var(--secondary-color);
+    cursor: pointer;
+    transition: opacity 0.3s ease;
+    opacity: 0; /* Start invisible */
 }
 
 .project-item.active .close-project {
     opacity: 1;
 }
 
-/* Header within project items */
-.project-header {
-    display: grid;
-    grid-template-columns: 165px 1fr auto;
-    align-items: center;
-    padding-top: 0.25em;
-    cursor: pointer;
-}
-
-@media (max-width: 768px) {
-    .project-header {
-        grid-template-columns: 1fr auto;
-    }
-}
-
-/* Project name and date styles */
-.project-date,
-.project-name {
-    font-size: var(--font-size-small);
-    color: var(--secondary-color);
-    margin: 0;
-    line-height: 1.2;
-}
-
-.project-name {
-    font-weight: bold;
-    padding-left: var(--spacing-small);
+.close-project:hover {
+    color: var(--highlight-color);
 }
 
 /* Project content specific styles */
 .project-content {
-    transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s; /* include delay */
+    transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
     transform: translateY(20px);
     opacity: 0;
-    max-height: 0; /* for initial state */
+    max-height: 0;
     overflow: hidden;
     margin-top: var(--spacing-medium);
+    width: 100%;
 }
 
 .project-item.active .project-content {
-    max-height: 100vh; /* Allow expansion */
+    max-height: 100vh;
     transform: translateY(0);
     opacity: 1;
 }
 
-/* Styling for close button within projects */
-.close-project {
-    transition: opacity 0.3s ease;
-    opacity: 0; /* Initially hidden */
+/* Thumbnail styles */
+.thumbnail {
+    width: 320px;
+    height: 180px;
+    background-size: cover;
+    background-position: 0 0;
+    opacity: 1;
     cursor: pointer;
+    border-radius: 4px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+}
+
+.thumbnail:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* Styles for project links and share icons */
@@ -290,18 +322,12 @@ footer {
     padding: 0;
 }
 
-@media (max-width: 768px) {
-    .project-links ul {
-        justify-content: flex-start;
-    }
-}
-
 .project-links li {
-    margin-left: var(--spacing-medium);
+    margin-right: var(--spacing-medium);
 }
 
-.project-links li:first-child {
-    margin-left: 0;
+.project-links li:last-child {
+    margin-right: 0;
 }
 
 .project-links a,
@@ -323,20 +349,6 @@ footer {
 .project-links a i:hover,
 .project-links button i:hover {
     color: var(--highlight-color);
-}
-
-/* Thumbnail styles */
-.thumbnail {
-    width: 320px;
-    height: 180px;
-    background-size: cover;
-    background-position: 0 0;
-    opacity: 1;
-    cursor: pointer;
-}
-
-.project-item.active .thumbnail {
-    opacity: 0;
 }
 
 /* About page styles */
@@ -370,7 +382,7 @@ footer {
 
 .copy-notification {
     position: fixed;
-    bottom: 1rem;
+    bottom: 5rem;
     left: 50%;
     transform: translateX(-50%);
     background-color: var(--highlight-color);
@@ -418,10 +430,30 @@ footer {
     transform-origin: left;
 }
 
-/* Responsive styles */
-@media (max-width: 768px) {
-    /* Ensure all content fits within viewport width */
-    body, main, .video-reel, .video-container {
-        max-width: 100vw;
+hr {
+    border: none;
+    border-top: 1px solid var(--secondary-color);
+    width: 75%;
+    margin: 20px auto;
+}
+
+/* Additional Best Practices */
+
+/* Smooth scrolling for anchor links */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Ensure videos are responsive */
+video {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
     }
 }

@@ -1,3 +1,26 @@
+/**
+ * Initializes TinyMCE for a given selector
+ * @param {string} selector - The selector for the textarea to initialize TinyMCE on
+ * @param {Object} additionalOptions - Additional options to merge with the default TinyMCE config
+ */
+function initTinyMCE(selector, additionalOptions = {}) {
+    const defaultOptions = {
+        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount checklist mediaembed casechange export formatpainter pageembed linkchecker a11ychecker tinymcespellchecker permanentpen powerpaste advtable advcode editimage advtemplate mentions tableofcontents footnotes mergetags autocorrect typography inlinecss',
+        toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table mergetags | addcomment showcomments | spellcheckdialog a11ycheck typography | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat',
+        mergetags_list: [
+            { value: 'First.Name', title: 'First Name' },
+            { value: 'Email', title: 'Email' },
+        ],
+        setup: function(editor) {
+            editor.on('change', function() {
+                tinymce.triggerSave();
+            });
+        }
+    };
+
+    tinymce.init({ ...defaultOptions, ...additionalOptions, selector });
+}
+
 // Function to initialize HLS video players
 function setupHLSPlayer(videoElement, autoplay = false) {
     return new Promise((resolve, reject) => {
@@ -77,7 +100,9 @@ function handleIntersection(entries, observer) {
     });
 }
 
-const observer = new IntersectionObserver(handleIntersection);
+if (typeof observer === 'undefined') {
+    var observer = new IntersectionObserver(handleIntersection);
+}
 
 // Function to update thumbnails - only animates visible thumbnails
 function updateThumbnails() {
@@ -169,12 +194,22 @@ function copyShareURL(response) {
 
 // Thumbnail scrolling logic
 
-// Initialize variables
-let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
-let lastScrollEventTime = Date.now();
-let animationSpeed = 0; // frames per second
-let animationProgress = 0; // in frames
-let lastAnimationFrameTime = Date.now();
+// Initialize variables (check if already defined)
+if (typeof lastScrollTop === 'undefined') {
+    var lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+}
+if (typeof lastScrollEventTime === 'undefined') {
+    var lastScrollEventTime = Date.now();
+}
+if (typeof animationSpeed === 'undefined') {
+    var animationSpeed = 0; // frames per second
+}
+if (typeof animationProgress === 'undefined') {
+    var animationProgress = 0; // in frames
+}
+if (typeof lastAnimationFrameTime === 'undefined') {
+    var lastAnimationFrameTime = Date.now();
+}
 
 // Scroll event listener to update scroll velocity and animation speed
 window.addEventListener('scroll', function() {
