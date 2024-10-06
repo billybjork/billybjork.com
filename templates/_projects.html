@@ -1,0 +1,18 @@
+{% for project in projects %}
+    {% set is_open = False %}
+    {% include "project.html" %}
+{% endfor %}
+
+{% if has_more %}
+    <div 
+        id="infinite-scroll-sentinel-{{ page }}"
+        data-page="{{ page + 1 }}"
+        hx-get="/?page={{ page + 1 }}" 
+        hx-trigger="revealed" 
+        hx-target="#infinite-scroll-sentinel-{{ page }}" 
+        hx-swap="outerHTML"
+        style="height: 100px; text-align: center; padding: 20px;">
+        <div class="spinner"></div>
+        <p>Loading more projects...</p>
+    </div>
+{% endif %}

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, status
+from fastapi import FastAPI, Request, Depends, HTTPException, status, Query
 from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
 from dotenv import load_dotenv
 from datetime import datetime
+import logging
 import secrets
 import os
 
@@ -18,6 +19,10 @@ load_dotenv()
 security = HTTPBasic()
 
 app = FastAPI()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Custom middleware to handle 'X-Forwarded-Proto' header
 class ForwardedProtoMiddleware(BaseHTTPMiddleware):
@@ -97,9 +102,24 @@ def format_date(date):
     return date.strftime("%B, %Y")
 
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request, db: Session = Depends(get_db)):
+async def read_root(
+    request: Request, 
+    db: Session = Depends(get_db), 
+    page: int = Query(1, ge=1), 
+    limit: int = Query(10, ge=1, le=100)
+):
     try:
-        projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
+        skip = (page - 1) * limit
+
+        # Fetch the current page of projects
+        projects = db.query(Project)\
+                     .filter(Project.show_project == True)\
+                     .order_by(Project.creation_date.desc())\
+                     .offset(skip)\
+                     .limit(limit)\
+                     .all()
+
+        # Format projects
         formatted_projects = []
         for project in projects:
             try:
@@ -117,15 +137,32 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             except Exception as project_error:
                 print(f"Error formatting project: {str(project_error)}")
                 print(f"Project data: {project.__dict__}")
-        
+
+        # Determine if there are more projects to load
+        total_projects = db.query(Project).filter(Project.show_project == True).count()
+        has_more = skip + limit < total_projects
+
         general_info = db.query(General).first()
-        
+
+        # Detect if the request is an HTMX request
+        if request.headers.get("HX-Request") == "true":
+            return templates.TemplateResponse("_projects.html", {
+                "request": request,
+                "projects": formatted_projects,
+                "page": page,
+                "has_more": has_more
+            })
+
+        # For non-HTMX requests, render the full page
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": formatted_projects,
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
-            "general_info": general_info
+            "general_info": general_info,
+            "page": page,
+            "has_more": has_more,
+            "limit": limit
         })
     except Exception as e:
         print(f"Error in read_root: {str(e)}")

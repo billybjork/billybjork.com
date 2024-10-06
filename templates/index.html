@@ -15,10 +15,25 @@
     </video>
     {% endif %}
 </section>
+
 <section id="project-list">
     {% for project in projects %}
         {% set is_open = (open_project and open_project.slug == project.slug) %}
         {% include "project.html" %}
     {% endfor %}
+
+    {% if has_more %}
+        <div 
+            id="infinite-scroll-sentinel-1"
+            data-page="{{ page + 1 }}"
+            hx-get="/?page={{ page + 1 }}" 
+            hx-trigger="revealed" 
+            hx-target="#infinite-scroll-sentinel-1" 
+            hx-swap="outerHTML"
+            style="height: 100px; text-align: center; padding: 20px;">
+            <div class="spinner"></div>
+            <p>Loading more projects...</p>
+        </div>
+    {% endif %}
 </section>
 {% endblock %}
