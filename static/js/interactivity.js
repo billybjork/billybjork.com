@@ -186,7 +186,7 @@ window.addEventListener('scroll', function() {
         const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime; // pixels per second
 
         // Convert scrollVelocity to animationSpeed (frames per second)
-        const pixelsPerFrame = 5; // Adjust to control base animation speed (descrease to speed up)
+        const pixelsPerFrame = 2; // Adjust to control base animation speed (decrease to speed up)
         animationSpeed = scrollVelocity / pixelsPerFrame; // frames per second
 
         // Cap the animationSpeed to prevent it from becoming too fast
@@ -206,7 +206,7 @@ function animationLoop() {
     lastAnimationFrameTime = now;
 
     // Apply dynamic deceleration to the animation speed
-    const baseDeceleration = 10; // Base deceleration (frames per second squared)
+    const baseDeceleration = 15; // Base deceleration (frames per second squared)
     const speedFactor = Math.abs(animationSpeed) * 0.1; // Additional deceleration based on current speed
     const dynamicDeceleration = baseDeceleration + speedFactor; // Total deceleration
 

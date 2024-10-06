@@ -267,7 +267,7 @@ footer {
 }
 
 .project-item.active .project-content {
-    max-height: 1000px; /* Allow expansion */
+    max-height: 100vh; /* Allow expansion */
     transform: translateY(0);
     opacity: 1;
 }
