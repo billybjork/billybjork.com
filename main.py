@@ -3,7 +3,10 @@ from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.status import HTTP_404_NOT_FOUND, HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -280,8 +283,10 @@ async def read_project(request: Request, project_slug: str, close: bool = False,
             "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info
         })
+    except HTTPException as http_exc:
+        raise http_exc  # Let 404 and other HTTP exceptions be handled by custom handlers
     except Exception as e:
-        print(f"Error in read_project: {str(e)}")
+        print(f"Unexpected error in read_project: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
     
 @app.get("/get-share-url/{project_slug}")
@@ -352,6 +357,16 @@ async def favicon():
     file_name = "assets/favicon.ico"
     file_path = os.path.join(app.root_path, "static", file_name)
     return FileResponse(path=file_path, headers={"Content-Disposition": "attachment; filename=" + file_name})
+
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == HTTP_404_NOT_FOUND:
+        return templates.TemplateResponse("404.html", {"request": request}, status_code=HTTP_404_NOT_FOUND)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+@app.exception_handler(500)
+async def server_error_handler(request: Request, exc: Exception):
+    return templates.TemplateResponse("404.html", {"request": request}, status_code=HTTP_500_INTERNAL_SERVER_ERROR)
 
 if __name__ == "__main__":
     import uvicorn
