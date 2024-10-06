@@ -221,12 +221,12 @@ window.addEventListener('scroll', function() {
         const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime; // pixels per second
 
         // Convert scrollVelocity to animationSpeed (frames per second)
-        const pixelsPerFrame = 2; // Adjust to control base animation speed (decrease to speed up)
+        const pixelsPerFrame = 1; // Adjust to control base animation speed (decrease to speed up)
         animationSpeed = scrollVelocity / pixelsPerFrame; // frames per second
 
         // Cap the animationSpeed to prevent it from becoming too fast
-        const maxAnimationSpeed = 20; // Maximum frames per second
-        const minAnimationSpeed = -20; // Minimum frames per second (for upward scroll)
+        const maxAnimationSpeed = 30; // Maximum frames per second
+        const minAnimationSpeed = -30; // Minimum frames per second (for upward scroll)
         animationSpeed = Math.max(minAnimationSpeed, Math.min(maxAnimationSpeed, animationSpeed));
     }
     

@@ -6,7 +6,7 @@
     --background-color: #1a1a1a;
     --max-width: 1200px;
     --font-size-base: 16px;
-    --font-size-small: 0.9em;
+    --font-size-small: 0.7em;
     --font-size-large: 1.2em;
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
@@ -21,7 +21,9 @@
 }
 
 body {
-    font-family: Arial, sans-serif;
+    font-family: "Roboto Slab", serif;
+    font-optical-sizing: auto;
+    font-weight: 100;
     line-height: 1.6;
     color: var(--primary-color);
     background-color: var(--background-color);
@@ -82,13 +84,16 @@ header {
     flex-direction: column;
     align-items: flex-start;
     padding: var(--spacing-medium);
-    background-color: var(--background-color);
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-right: calc(-50vw + 50%);
+    background-color: var(--primary-color);
 }
 
 header .site-title,
 header nav a,
 header .vu-ja-de-btn {
-    color: var(--primary-color);
+    color: var(--background-color);
     text-decoration: none;
     transition: color 0.3s ease;
     font-weight: 700;
@@ -116,7 +121,7 @@ header nav {
 
 header nav a,
 header nav .vu-ja-de-btn {
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-medium);
     padding: var(--spacing-small);
     text-transform: uppercase; /* Text in uppercase */
 }
@@ -211,62 +216,72 @@ footer {
     width: 100%;
     display: flex;
     flex-direction: column;
-    align-items: center; /* Center align items for symmetry */
+    align-items: center;
     transition: all 0.3s ease;
+    margin-bottom: var(--spacing-large);
 }
 
 /* Header within project items */
 .project-header {
-    width: 100%;
-    display: flex;
-    align-items: center; /* Center items vertically */
-    justify-content: center; /* Center horizontally */
-    padding-top: var(--spacing-large);
-    padding-bottom: var(--spacing-medium);
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+    margin-right: calc(-50vw + 50%);
+    background-color: transparent;
+    color: var(--primary-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    padding: var(--spacing-small) 0;
     cursor: pointer;
-    position: relative; /* Maintain a positioning context */
-    overflow: hidden; /* Hide overflow */
-    @media screen and (min-width: 768px) {
-        max-width: 100%; /* Changed from 35% to 100% for better width utilization */
-    }
+    position: relative;
+}
+
+.project-item.active .project-header {
+    background-color: var(--primary-color);
+    color: var(--background-color);
 }
 
 /* Project date styles */
 .project-date {
     font-size: var(--font-size-small);
-    color: var(--secondary-color);
-    padding-bottom: var(--spacing-small);
-    margin-right: var(--spacing-small); /* Provides spacing between date and any following content */
+    color: inherit;
+    margin-right: var(--spacing-medium);
     line-height: 1.2;
-    white-space: nowrap; /* Keeps date in one line preventing line break */
+    white-space: nowrap;
 }
 
 /* Project name styles */
 .project-name {
-    font-size: var(--font-size-large);
-    color: var(--primary-color);
-    margin: 0 auto; /* Auto margins for horizontal centering */
+    font-size: var(--font-size-base);
+    color: inherit;
+    margin: 0;
     line-height: 1.2;
     font-weight: bold;
-    text-align: center; /* Ensure text is centered */
-    white-space: normal; /* Allow line wraps */
-    overflow: visible; /* Show overflow */
-    max-width: 90%; /* Limit max width to give space for close button */
+    text-align: left;
+    white-space: normal;
+    overflow: visible;
+    flex-grow: 1;
+}
+
+/* Handle placement of project name/date - should instead pin to thumbnail */
+.project-name, .project-date {
+    padding-left: 35vw;
+    @media(max-width: 768px) {
+        padding-left: 10vw;
+    }
 }
 
 /* Styling for close button within projects */
 .close-project {
-    position: absolute; /* Changed from flex to absolute */
-    right: 0; /* Align to the far right */
-    top: 50%; /* Start at the vertical center */
-    transform: translateY(-50%); /* Center vertically relative to its position */
-    font-size: 2em;
+    position: absolute;
+    right: var(--spacing-medium);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5em;
     background: none;
     border: none;
-    color: var(--secondary-color);
+    color: inherit;
     cursor: pointer;
     transition: opacity 0.3s ease;
-    opacity: 0; /* Start invisible */
+    opacity: 0;
 }
 
 .project-item.active .close-project {
@@ -305,6 +320,7 @@ footer {
     border-radius: 4px;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     position: relative;
+    margin: var(--spacing-small) auto 0;
 }
 
 .thumbnail:hover {
@@ -354,23 +370,25 @@ footer {
 /* About page styles */
 .about-content {
     max-width: 800px;
-    margin: 0 auto;
     padding: 2rem;
+    @media (max-width: 768px) {
+        padding: 0px; /* Smaller padding for mobile */
+    }
 }
 
+/* About photo container */
+/* About photo container */
 .about-photo-container {
     position: relative;
-    width: 100%;
-    padding-bottom: 70%;
+    width: 85%; /* Reduce width to 50% */
+    margin: 0 auto; /* Center the container horizontally */
     margin-bottom: 2rem;
 }
 
 .about-photo {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    position: relative;
+    width: 100%; /* Ensure the image fits the container */
+    height: auto; /* Maintain the aspect ratio */
     object-fit: cover;
 }
 
@@ -430,14 +448,19 @@ footer {
     transform-origin: left;
 }
 
+/* Misc */
+
+dt {
+    font-style: italic;
+    font-weight: bold;
+}
+
 hr {
     border: none;
     border-top: 1px solid var(--secondary-color);
     width: 75%;
     margin: 20px auto;
 }
-
-/* Additional Best Practices */
 
 /* Smooth scrolling for anchor links */
 html {
