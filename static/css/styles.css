@@ -1,9 +1,9 @@
 /* Global Styles and Variables */
 :root {
-    --primary-color: #333;
-    --secondary-color: #6d6d6d;
-    --highlight-color: #011ce9;
-    --background-color: #f8f8f8;
+    --primary-color: #e0e0e0;
+    --secondary-color: #a0a0a0;
+    --highlight-color: #4d8cff;
+    --background-color: #1a1a1a;
     --max-width: 1200px;
     --font-size-base: 16px;
     --font-size-small: 0.9em;
@@ -23,6 +23,7 @@ body {
     font-family: Arial, sans-serif;
     line-height: 1.6;
     color: var(--primary-color);
+    background-color: var(--background-color);
     margin: 0;
     padding: 0;
     font-size: var(--font-size-base);
@@ -276,7 +277,7 @@ footer {
 .close-project {
     transition: opacity 0.3s ease;
     opacity: 0; /* Initially hidden */
-    cursor: default;
+    cursor: pointer;
 }
 
 /* Styles for project links and share icons */
