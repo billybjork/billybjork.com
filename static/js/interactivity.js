@@ -66,6 +66,36 @@ function adjustVideoContainerAspectRatio(videoElement) {
     window.addEventListener('resize', updateAspectRatio);
 }
 
+// Intersection Observer setup for handling visibility of thumbnails
+function handleIntersection(entries, observer) {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.dataset.animate = 'true'; // Mark to animate
+        } else {
+            entry.target.dataset.animate = 'false'; // Mark to stop animation
+        }
+    });
+}
+
+const observer = new IntersectionObserver(handleIntersection);
+
+// Function to update thumbnails - only animates visible thumbnails
+function updateThumbnails() {
+    const thumbnails = document.querySelectorAll('.thumbnail');
+    thumbnails.forEach(thumbnail => {
+        if (thumbnail.dataset.animate === 'true') {
+            const totalFrames = parseInt(thumbnail.dataset.frames);
+            const frameWidth = parseInt(thumbnail.dataset.frameWidth);
+            const frameHeight = parseInt(thumbnail.dataset.frameHeight);
+            const columns = parseInt(thumbnail.dataset.columns);
+            let frameIndex = Math.floor(animationProgress) % totalFrames;
+            const frameX = (frameIndex % columns) * frameWidth;
+            const frameY = Math.floor(frameIndex / columns) * frameHeight;
+            thumbnail.style.backgroundPosition = `-${frameX}px -${frameY}px`;
+        }
+    });
+}
+
 // Function to handle project content when opened
 async function handleProjectContent(projectItem) {
     try {
@@ -257,6 +287,10 @@ function handleProjectClosed(projectItem) {
 // Event listeners
 
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.thumbnail').forEach(thumbnail => {
+        observer.observe(thumbnail); // Start observing each thumbnail
+    });
+
     // Initialize HLS player if the reel video is present
     const reelVideo = document.getElementById('reel-video-player');
     if (reelVideo) {
