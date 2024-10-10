@@ -1,7 +1,7 @@
 /* Global Styles and Variables */
 :root {
     --primary-color: #e0e0e0;
-    --secondary-color: #a0a0a0;
+    --secondary-color: #434343;
     --highlight-color: #ff8940;
     --background-color: #1a1a1a;
     --max-width: 1200px;
@@ -139,9 +139,7 @@ header .vu-ja-de-icon {
 
 /* Footer styles */
 footer {
-    padding: var(--spacing-large);
-    background-color: var(--background-color);
-    text-align: center;
+    padding: var(--spacing-small);
 }
 
 /* Social links styles */
@@ -188,7 +186,7 @@ footer {
     margin: 0 auto;
     overflow: hidden;
     background-color: #000;
-    transition: opacity 0.5s ease, transform 0.5s ease;
+    transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
     transform: translateY(20px);
     opacity: 0;
     max-height: 80vh;
@@ -197,6 +195,26 @@ footer {
 .project-item.active .video-container {
     transform: translateY(0);
     opacity: 1;
+}
+
+/* Thumbnail styles */
+.thumbnail {
+    width: 100%; /* Make thumbnails responsive within the project-item */
+    max-width: 320px;
+    height: 180px;
+    background-size: cover;
+    background-position: center;
+    opacity: 1;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+    margin: var(--spacing-small) auto 0;
+}
+
+.thumbnail:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* Styles for project list */
@@ -213,29 +231,37 @@ footer {
 .project-item {
     position: relative;
     width: 100%;
+    max-width: 80vh;;
     display: flex;
     flex-direction: column;
     align-items: center;
     margin-bottom: var(--spacing-large);
-    transition: background-color 0.3s ease, color 0.3s ease;
+    border-radius: 8px; /* Rounded corners */
+    padding: 1rem; /* Inner spacing */
+    transition: background-color 0.5s ease-in-out, 
+                border-radius 0.3s ease-in-out, 
+                box-shadow 0.3s ease-in-out;
+}
+
+.project-item.active {
+    background-color: var(--secondary-color);
+    border-radius: 12px; /* Slightly more rounded when active */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); /* Add shadow for depth */
 }
 
 /* Header within project items */
 .project-header {
-    width: 100vw;
-    margin-left: calc(-50vw + 50%);
-    margin-right: calc(-50vw + 50%);
-    background-color: transparent;
+    width: 100%;
+    background-color: transparent; /* Make header background transparent */
     color: var(--primary-color);
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: color 0.3s ease;
     padding: var(--spacing-small) 0;
     cursor: pointer;
     position: relative;
 }
 
 .project-item.active .project-header {
-    background-color: var(--primary-color);
-    color: var(--background-color);
+    color: var(--primary-color); /* Ensure text color contrasts with --secondary-color */
 }
 
 /* Project date styles */
@@ -293,8 +319,10 @@ footer {
 
 /* Project content specific styles */
 .project-content {
-    transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
+    transition: opacity 0.5s ease-in-out 0.2s, 
+                transform 0.5s ease-in-out 0.2s;
     transform: translateY(20px);
+    color: var(--primary-color);
     opacity: 0;
     overflow: hidden;
     margin-top: var(--spacing-medium);
@@ -307,23 +335,20 @@ footer {
     opacity: 1;
 }
 
-/* Thumbnail styles */
-.thumbnail {
-    width: 320px;
-    height: 180px;
-    background-size: cover;
-    background-position: 0 0;
-    opacity: 1;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    position: relative;
-    margin: var(--spacing-small) auto 0;
-}
+/* Responsive adjustments */
+@media(max-width: 768px) {
+    .project-item {
+        padding: 0.8rem; /* Adjust padding for smaller screens */
+        border-radius: 6px;
+    }
 
-.thumbnail:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    .project-header, .project-content, .video-container {
+        max-width: 100%; /* Ensure full width usage */
+    }
+
+    .project-name, .project-date {
+        padding-left: 0; /* Remove excessive padding on smaller screens */
+    }
 }
 
 /* Styles for project links and share icons */
@@ -355,7 +380,7 @@ footer {
     cursor: pointer;
     padding: 0;
     text-decoration: none;
-    transition: color 0.3s ease, transform 0.3s ease;
+    transition: color 0.3s ease-in-out, transform 0.3s ease-in-out;
 }
 
 .project-links a:hover,
@@ -473,13 +498,6 @@ footer {
 dt {
     font-style: italic;
     font-weight: bold;
-}
-
-hr {
-    border: none;
-    border-top: 1px solid var(--secondary-color);
-    width: 75%;
-    margin: 20px auto;
 }
 
 /* Smooth scrolling for anchor links */
