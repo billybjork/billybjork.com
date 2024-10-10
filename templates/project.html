@@ -41,14 +41,13 @@
                     {% endif %}
                     <li>
                         <button
-                            hx-get="/get-share-url/{{ project.slug }}"
-                            hx-trigger="click"
-                            hx-swap="none"
-                            hx-on::after-request="copyShareURL(event.detail.xhr.response)"
+                            class="copy-text-link"
+                            data-copy-text="/get-share-url/{{ project.slug }}"
+                            data-notification-message="URL copied to clipboard!"
                             aria-label="Share"
                         >
                             <i class="fas fa-share-from-square"></i>
-                        </button>            
+                        </button>                            
                     </li>
                 </ul>
             </footer>

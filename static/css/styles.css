@@ -35,7 +35,7 @@ body {
 }
 
 /* Fade Gradient Overlay */
-body::before {
+#home-page::before {
     content: '';
     position: fixed;
     bottom: 0;
@@ -299,6 +299,7 @@ footer {
     overflow: hidden;
     margin-top: var(--spacing-medium);
     width: 100%;
+    max-width: 700px;
 }
 
 .project-item.active .project-content {
@@ -368,12 +369,21 @@ footer {
 .about-content {
     max-width: 800px;
     padding: 2rem;
+    margin: 0 auto; /* Center horizontally */
+    display: flex;
+    flex-direction: column; /* Stack elements vertically */
+    align-items: center; /* Center content within */
     @media (max-width: 768px) {
         padding: 0px; /* Smaller padding for mobile */
     }
 }
 
-/* About photo container */
+.about-content h4, ul {
+    text-align: left;
+    width: 100%; /* Ensure h4 takes the full width of the container */
+    margin: 0; /* Adjust margin if needed */
+}
+
 /* About photo container */
 .about-photo-container {
     position: relative;
@@ -382,12 +392,24 @@ footer {
     margin-bottom: 2rem;
 }
 
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 .about-photo {
     position: relative;
     width: 100%; /* Ensure the image fits the container */
     height: auto; /* Maintain the aspect ratio */
     object-fit: cover;
+    opacity: 0; /* Start with the image invisible */
+    animation: fadeIn 0.5s ease-in-out forwards;
 }
+
 
 /* Interactivity involving user clipboard */
 @keyframes fadeInOut {
@@ -397,7 +419,7 @@ footer {
 
 .copy-notification {
     position: fixed;
-    bottom: 5rem;
+    bottom: 3rem;
     left: 50%;
     transform: translateX(-50%);
     background-color: var(--highlight-color);

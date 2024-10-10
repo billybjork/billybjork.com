@@ -5,7 +5,7 @@
  */
 function initTinyMCE(selector, additionalOptions = {}) {
     const defaultOptions = {
-        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount checklist mediaembed casechange export formatpainter pageembed linkchecker a11ychecker tinymcespellchecker permanentpen powerpaste advtable advcode editimage advtemplate mentions tableofcontents footnotes mergetags autocorrect typography inlinecss',
+        plugins: 'anchor autolink charmap codesample code emoticons image link lists media searchreplace table visualblocks wordcount linkchecker',
         toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table mergetags | addcomment showcomments | spellcheckdialog a11ycheck typography | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat',
         mergetags_list: [
             { value: 'First.Name', title: 'First Name' },
@@ -170,22 +170,6 @@ async function handleInitialLoad() {
     }
 }
 
-// Function to copy text to clipboard and show notification
-function copyToClipboard(text, notificationMessage) {
-    navigator.clipboard.writeText(text).then(() => {
-        // Display a temporary message
-        const message = document.createElement('div');
-        message.className = 'copy-notification';
-        message.textContent = notificationMessage;
-        document.body.appendChild(message);
-        setTimeout(() => {
-            document.body.removeChild(message);
-        }, 4000); // Remove after 4 seconds to match the animation
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-    });
-}
-
 // Function to copy share URL
 function copyShareURL(response) {
     const data = JSON.parse(response);
@@ -322,6 +306,7 @@ function handleProjectClosed(projectItem) {
 // Event listeners
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Observe thumbnails
     document.querySelectorAll('.thumbnail').forEach(thumbnail => {
         observer.observe(thumbnail); // Start observing each thumbnail
     });
@@ -335,15 +320,78 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle initial load (e.g., when navigating directly to an open project)
     handleInitialLoad();
 
-    // Event listener for elements with class 'copy-text-link'
-    document.querySelectorAll('.copy-text-link').forEach((element) => {
-        element.addEventListener('click', function(event) {
-            event.preventDefault(); // Prevent default link behavior
-            const textToCopy = this.getAttribute('data-copy-text');
-            const notificationMessage = this.getAttribute('data-notification-message') || 'Text copied to clipboard!';
-            copyToClipboard(textToCopy, notificationMessage);
-        });
+    // Event delegation for elements with class 'copy-text-link'
+    document.body.addEventListener('click', function(event) {
+        // Use closest to handle clicks on child elements like the <i> tag
+        const button = event.target.closest('.copy-text-link');
+        if (button) {
+            event.preventDefault(); // Prevent default button behavior if any
+
+            const fetchUrl = button.getAttribute('data-fetch-url');
+            const textToCopy = button.getAttribute('data-copy-text');
+            const notificationMessage = button.getAttribute('data-notification-message') || 'Text copied to clipboard!';
+
+            if (fetchUrl) {
+                // Fetch the share URL from the server
+                fetch(fetchUrl)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`Network response was not ok: ${response.statusText}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.share_url) {
+                            copyToClipboard(data.share_url, notificationMessage);
+                        } else {
+                            console.error('share_url not found in the response');
+                            showErrorNotification('Failed to retrieve the share URL.');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Failed to fetch share URL:', err);
+                        showErrorNotification('An error occurred while copying the URL.');
+                    });
+            } else if (textToCopy) {
+                // Directly copy the provided text
+                copyToClipboard(textToCopy, notificationMessage);
+            } else {
+                console.warn('No text or fetch URL provided for copying.');
+            }
+        }
     });
+
+    // Function to copy text to clipboard and show notification
+    function copyToClipboard(text, notificationMessage) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Display a temporary message
+            const message = document.createElement('div');
+            message.className = 'copy-notification';
+            message.textContent = notificationMessage;
+            document.body.appendChild(message);
+            setTimeout(() => {
+                if (message.parentNode) { // Check if the element still exists
+                    document.body.removeChild(message);
+                }
+            }, 4000); // Remove after 4 seconds to match the animation
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            showErrorNotification('Failed to copy the URL.');
+        });
+    }
+
+    // Function to display error notifications
+    function showErrorNotification(errorMessage) {
+        const message = document.createElement('div');
+        message.className = 'copy-notification error';
+        message.textContent = errorMessage;
+        document.body.appendChild(message);
+        setTimeout(() => {
+            if (message.parentNode) { // Check if the element still exists
+                document.body.removeChild(message);
+            }
+        }, 4000);
+    }
 
     // Initial update of thumbnails on page load
     updateThumbnails();
