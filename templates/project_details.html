@@ -1,0 +1,53 @@
+{% if is_open %}
+    {% if project.video_link %}
+    <section class="video-container">
+        <video 
+            id="video-player-{{ project.id }}"
+            class="project-video"
+            controls 
+            playsinline 
+            preload="metadata" 
+            fetchpriority="high"
+            data-hls-url="{{ project.video_link }}">
+        </video>
+    </section>
+    {% endif %}
+    <section class="project-content">
+        {{ project.html_content | safe }}
+        <footer class="project-links">
+            <ul>
+                {% if project.youtube_link %}
+                <li>
+                    <a href="{{ project.youtube_link }}" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+                        <i class="fab fa-youtube"></i>
+                    </a>
+                </li>
+                {% endif %}
+                <li>
+                    <button
+                        class="copy-text-link"
+                        data-copy-text="/get-share-url/{{ project.slug }}"
+                        data-notification-message="URL copied to clipboard!"
+                        aria-label="Share"
+                    >
+                        <i class="fas fa-share-from-square"></i>
+                    </button>                            
+                </li>
+            </ul>
+        </footer>
+    </section>
+    <button class="close-project" 
+            hx-get="/{{ project.slug }}?close=true" 
+            hx-target="#details-{{ project.slug }}" 
+            hx-swap="innerHTML"
+            hx-push-url="/" 
+            aria-label="Close project">×</button>
+{% else %}
+    <figure class="thumbnail"
+        style="background-image: url('{{ project.thumbnail_link }}');"
+        data-frames="60"
+        data-frame-width="320"
+        data-frame-height="180"
+        data-columns="5">
+    </figure>
+{% endif %}

@@ -413,3 +413,81 @@ document.body.addEventListener('htmx:beforeRequest', function(event) {
         event.preventDefault();
     }
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to toggle the 'active' class based on content
+    function toggleActiveClass(projectItem, isActive) {
+        if (isActive) {
+            projectItem.classList.add('active');
+            // Show the close button
+            const closeButton = projectItem.querySelector('.close-project.hidden');
+            if (closeButton) {
+                closeButton.classList.remove('hidden');
+            }
+        } else {
+            projectItem.classList.remove('active');
+            // Hide the close button
+            const closeButton = projectItem.querySelector('.close-project:not(.hidden)');
+            if (closeButton) {
+                closeButton.classList.add('hidden');
+            }
+        }
+    }
+
+    // Listen for htmx:afterSwap event to toggle 'active' class
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        const target = event.target;
+        if (target.classList.contains('project-details')) {
+            const projectItem = target.closest('.project-item');
+            const isActive = target.innerHTML.trim() !== '' && !target.querySelector('.thumbnail');
+            toggleActiveClass(projectItem, isActive);
+
+            if (isActive) {
+                // Initialize HLS player if video is present
+                const video = target.querySelector('video.project-video');
+                if (video) {
+                    setupHLSPlayer(video, true);
+                }
+
+                // Smooth scroll to the project header
+                const projectHeader = projectItem.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } else {
+                // If project is closed, pause and reset video
+                const video = target.querySelector('video.project-video');
+                if (video) {
+                    video.pause();
+                    video.src = '';
+                }
+                // Reset thumbnail position if needed
+                const thumbnail = target.querySelector('.thumbnail');
+                if (thumbnail) {
+                    resetThumbnailPosition(thumbnail);
+                }
+            }
+        }
+    });
+
+    // Handle initial load (e.g., when navigating directly to an open project)
+    async function handleInitialLoad() {
+        const openProjectItem = document.querySelector('.project-item.active');
+        if (openProjectItem) {
+            const projectDetails = openProjectItem.querySelector('.project-details');
+            if (projectDetails) {
+                const video = projectDetails.querySelector('video.project-video');
+                if (video) {
+                    await setupHLSPlayer(video, true);
+                }
+                // Smooth scroll to the project header
+                const projectHeader = openProjectItem.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+        }
+    }
+
+    handleInitialLoad();
+});

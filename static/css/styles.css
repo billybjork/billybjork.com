@@ -180,43 +180,6 @@ footer {
     object-fit: contain;
 }
 
-.video-container {
-    position: relative;
-    width: 100%;
-    margin: 0 auto;
-    overflow: hidden;
-    background-color: #000;
-    transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
-    transform: translateY(20px);
-    opacity: 0;
-    max-height: 80vh;
-}
-
-.project-item.active .video-container {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-/* Thumbnail styles */
-.thumbnail {
-    width: 100%; /* Make thumbnails responsive within the project-item */
-    max-width: 320px;
-    height: 180px;
-    background-size: cover;
-    background-position: center;
-    opacity: 1;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    position: relative;
-    margin: var(--spacing-small) auto 0;
-}
-
-.thumbnail:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
 /* Styles for project list */
 #project-list {
     display: flex;
@@ -231,7 +194,7 @@ footer {
 .project-item {
     position: relative;
     width: 100%;
-    max-width: 80vh;;
+    max-width: 80vh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -240,13 +203,18 @@ footer {
     padding: 1rem; /* Inner spacing */
     transition: background-color 0.5s ease-in-out, 
                 border-radius 0.3s ease-in-out, 
-                box-shadow 0.3s ease-in-out;
+                box-shadow 0.3s ease-in-out,
+                transform 0.3s ease-in-out;
+    transform: scale(1);
+    opacity: 0.95;
 }
 
 .project-item.active {
     background-color: var(--secondary-color);
     border-radius: 12px; /* Slightly more rounded when active */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); /* Add shadow for depth */
+    transform: scale(1.02); /* Slight scale-up for active state */
+    opacity: 1;
 }
 
 /* Header within project items */
@@ -290,7 +258,10 @@ footer {
 /* Handle placement of project name and date */
 .project-name, .project-date {
     padding-left: max(100px, 300px);
-    @media(max-width: 768px) {
+}
+
+@media(max-width: 768px) {
+    .project-name, .project-date {
         padding-left: max(10vw, 100px);
     }
 }
@@ -356,170 +327,45 @@ footer {
     opacity: 1;
 }
 
-/* Responsive adjustments */
-@media(max-width: 768px) {
-    .project-item {
-        padding: 0.8rem; /* Adjust padding for smaller screens */
-        border-radius: 6px;
-    }
-
-    .project-header, .project-content, .video-container {
-        max-width: 100%; /* Ensure full width usage */
-    }
-
-    .project-name, .project-date {
-        padding-left: 0; /* Remove excessive padding on smaller screens */
-    }
-}
-
-/* Styles for project links and share icons */
-.project-links ul {
-    list-style-type: none;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    margin: 0;
-    padding: 0;
-}
-
-.project-links li {
-    margin-right: var(--spacing-medium);
-}
-
-.project-links li:last-child {
-    margin-right: 0;
-}
-
-.project-links a,
-.project-links button {
-    display: inline-flex;
-    align-items: center;
-    background: none;
-    border: none;
-    color: var(--primary-color);
-    font-size: var(--font-size-large);
-    cursor: pointer;
-    padding: 0;
-    text-decoration: none;
-    transition: color 0.3s ease-in-out, transform 0.3s ease-in-out;
-}
-
-.project-links a:hover,
-.project-links button:hover,
-.project-links a i:hover,
-.project-links button i:hover {
-    color: var(--highlight-color);
-}
-
-/* About page styles */
-.about-content {
-    max-width: 800px;
-    padding: 2rem;
-    margin: 0 auto; /* Center horizontally */
-    display: flex;
-    flex-direction: column; /* Stack elements vertically */
-    align-items: center; /* Center content within */
-    @media (max-width: 768px) {
-        padding: 0px; /* Smaller padding for mobile */
-    }
-}
-
-.about-content h4, ul {
-    text-align: left;
-    width: 100%; /* Ensure h4 takes the full width of the container */
-    margin: 0; /* Adjust margin if needed */
-}
-
-/* About photo container */
-.about-photo-container {
+/* Video container styles */
+.video-container {
     position: relative;
-    width: 85%; /* Reduce width to 50% */
-    margin: 0 auto; /* Center the container horizontally */
-    margin-bottom: 2rem;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-.about-photo {
-    position: relative;
-    width: 100%; /* Ensure the image fits the container */
-    height: auto; /* Maintain the aspect ratio */
-    object-fit: cover;
-    opacity: 0; /* Start with the image invisible */
-    animation: fadeIn 0.5s ease-in-out forwards;
-}
-
-
-/* Interactivity involving user clipboard */
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0; }
-    10%, 90% { opacity: 1; }
-}
-
-.copy-notification {
-    position: fixed;
-    bottom: 3rem;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--highlight-color);
-    color: var(--background-color);
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    font-size: var(--font-size-small);
-    font-weight: 500;
-    z-index: 1000;
-    opacity: 0;
-    animation: fadeInOut 4s ease-in-out;
-}
-
-.copy-text-link {
-    color: var(--highlight-color);
-    font-weight: bold;
-    text-decoration: none;
-    position: relative;
-    cursor: pointer;
-    padding: 0.1rem 0.2rem;
-    border-radius: 4px;
-    transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.copy-text-link:hover {
-    background-color: var(--highlight-color);
-    color: var(--background-color);
-    text-decoration: none;
-}
-
-.copy-text-link::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    bottom: -2px;
     width: 100%;
-    height: 2px;
-    background-color: var(--highlight-color);
-    transform: scaleX(0);
-    transform-origin: right;
-    transition: transform 0.3s ease;
+    margin: 0 auto;
+    overflow: hidden;
+    background-color: #000;
+    transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+    transform: translateY(20px);
+    opacity: 0;
+    max-height: 80vh;
 }
 
-.copy-text-link:hover::after {
-    transform: scaleX(1);
-    transform-origin: left;
+.project-item.active .video-container {
+    transform: translateY(0);
+    opacity: 1;
 }
 
-/* Misc */
-
-dt {
-    font-style: italic;
-    font-weight: bold;
+/* Thumbnail styles */
+.thumbnail {
+    width: 100%; /* Make thumbnails responsive within the project-item */
+    max-width: 320px;
+    height: 180px;
+    background-size: cover;
+    background-position: center;
+    opacity: 1;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+    margin: var(--spacing-small) auto 0;
 }
+
+.thumbnail:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Other existing styles remain unchanged */
 
 /* Smooth scrolling for anchor links */
 html {

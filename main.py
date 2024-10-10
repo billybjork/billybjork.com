@@ -253,24 +253,39 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
     return response
 
 @app.get("/{project_slug}", response_class=HTMLResponse)
-async def read_project(request: Request, project_slug: str, close: bool = False, db: Session = Depends(get_db)):
+async def read_project(
+    request: Request, 
+    project_slug: str, 
+    close: bool = False, 
+    db: Session = Depends(get_db)
+):
     try:
+        # Fetch the project based on the slug
         project = db.query(Project).filter(Project.slug == project_slug).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
+        # Fetch general information (e.g., reel video link)
         general_info = db.query(General).first()
+        
+        # Format the project creation date
         project.formatted_date = format_date(project.creation_date)
+        
+        # Determine if the project should be open or closed
         is_open = not close
 
-        if request.headers.get("HX-Request") == "true":
-            return templates.TemplateResponse("project.html", {
+        # Check if the request is an HTMX request
+        is_htmx = request.headers.get("HX-Request") == "true"
+
+        if is_htmx:
+            # Return only the project details for HTMX swaps
+            return templates.TemplateResponse("project_details.html", {
                 "request": request, 
                 "project": project,
                 "is_open": is_open
             })
         
-        # For direct navigation, return the full page with the project open
+        # For direct navigation, render the full index page with the project open
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
         for p in projects:
             p.formatted_date = format_date(p.creation_date)
@@ -278,13 +293,13 @@ async def read_project(request: Request, project_slug: str, close: bool = False,
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
-            "open_project": project if not close else None,
+            "open_project": project if is_open else None,
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info
         })
     except HTTPException as http_exc:
-        raise http_exc  # Let 404 and other HTTP exceptions be handled by custom handlers
+        raise http_exc  # Let FastAPI handle HTTP exceptions
     except Exception as e:
         print(f"Unexpected error in read_project: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
