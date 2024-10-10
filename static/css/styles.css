@@ -255,9 +255,10 @@ footer {
     background-color: transparent; /* Make header background transparent */
     color: var(--primary-color);
     transition: color 0.3s ease;
-    padding: var(--spacing-small) 0;
+    padding: var(--spacing-medium) 0;
     cursor: pointer;
     position: relative;
+    scroll-margin-top: 30px;
 }
 
 .project-item.active .project-header {
@@ -286,12 +287,32 @@ footer {
     flex-grow: 1;
 }
 
-/* Handle placement of project name/date - should instead pin to thumbnail */
+/* Handle placement of project name and date */
 .project-name, .project-date {
-    padding-left: 35vw;
+    padding-left: max(100px, 300px);
     @media(max-width: 768px) {
-        padding-left: 10vw;
+        padding-left: max(10vw, 100px);
     }
+}
+
+/* Add transitions for font-size on project-header items */
+.project-name, 
+.project-date, 
+.close-project {
+    transition: font-size 0.3s ease;
+}
+
+/* Increase font-size when the project is active */
+.project-item.active .project-name {
+    font-size: 1.2em; /* Adjust to desired larger size */
+}
+
+.project-item.active .project-date {
+    font-size: 1em; /* Adjust to desired larger size */
+}
+
+.project-item.active .close-project {
+    font-size: 2em; /* Adjust to desired larger size */
 }
 
 /* Styling for close button within projects */
