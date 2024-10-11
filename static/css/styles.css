@@ -273,10 +273,8 @@ video {
     transform: translateY(20px);
     opacity: 0;
     max-height: 80vh;
-    aspect-ratio: 16 / 9; /* Placeholder - will be set dynamically */
 }
 
-/* Show video container when the project is active */
 .project-item.active .video-container {
     transform: translateY(0);
     opacity: 1;
@@ -286,7 +284,7 @@ video {
    Projects list items and headers
    ========================= */
 
-#project-list {
+   #project-list {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -359,31 +357,26 @@ video {
 }
 
 .project-name, .project-date {
-    padding-left: max(50px, 200px);
+    padding-left: 25%;
     @media(max-width: 768px) {
-        padding-left: 3vw;
+        padding-left: 1%;
     }
 }
 
-/* Transitions for project-header items when active */
+.project-item.active .project-name,
+.project-item.active .project-date {
+    font-size: var(--font-size-large);
+    padding-left: 2%;
+    @media(max-width: 768px) {
+        font-size: var(--font-size-medium);
+    }
+}
+
 .project-name, 
 .project-date, 
 .close-project {
     transition: font-size 0.3s ease-in-out, padding-left 0.3s ease-in-out;
-}
-
-.project-item.active .project-name {
-    padding-left: 3vw;
-    font-size: 1.2em;
-}
-
-.project-item.active .project-date {
-    padding-left: 3vw;
-    font-size: 1em;
-}
-
-.project-item.active .close-project {
-    font-size: 2em;
+    will-change: padding-left, font-size, opacity;
 }
 
 /* =========================
@@ -395,17 +388,19 @@ video {
     right: var(--spacing-medium);
     top: var(--spacing-large);
     transform: translateY(-50%);
-    font-size: 1.5em;
+    font-size: 2em;
     background: none;
     border: none;
     color: inherit;
     cursor: pointer;
-    transition: opacity 0.3s ease;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
     opacity: 0;
+    visibility: hidden;
 }
 
 .project-item.active .close-project {
     opacity: 1;
+    visibility: visible;
 }
 
 .close-project:hover {
@@ -428,14 +423,13 @@ video {
     max-width: 700px;
 }
 
-/* Show project content when the project is active */
 .project-item.active .project-content {
     transform: translateY(0);
     opacity: 1;
 }
 
 /* =========================
-   Project content
+   Thumbnail
    ========================= */
 
 .thumbnail {
@@ -485,6 +479,10 @@ video {
     overflow: hidden;
 }
 
+/* =========================
+   Project details
+   ========================= */
+
 .project-details {
     opacity: 0;
     max-height: 0;
@@ -494,7 +492,7 @@ video {
 
 .project-item.active .project-details {
     opacity: 1;
-    max-height: none;
+    max-height: 1000px; /* Adjust based on content */
     transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
 }
 
