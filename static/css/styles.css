@@ -412,8 +412,8 @@ video {
    ========================= */
 
 .project-content {
-    transition: opacity 0.5s var(--transition-ease) 0.2s, 
-                transform 0.5s var(--transition-ease) 0.2s;
+    transition: opacity 0.3s var(--transition-ease), 
+                transform 0.3s var(--transition-ease);
     transform: translateY(20px);
     color: var(--primary-color);
     opacity: 0;
@@ -432,9 +432,9 @@ video {
    Thumbnail
    ========================= */
 
-.thumbnail {
+   .thumbnail {
     width: 100%;
-    max-width: 320px;
+    max-width: 320px; /* Ensure this is set */
     height: 180px;
     background-size: cover;
     background-position: center;
@@ -445,9 +445,6 @@ video {
         opacity 0.3s var(--transition-ease),
         transform 0.3s var(--transition-ease),
         box-shadow 0.3s var(--transition-ease),
-        width 0.3s var(--transition-ease),
-        height 0.3s var(--transition-ease),
-        max-width 0.3s var(--transition-ease),
         max-height 0.3s var(--transition-ease),
         margin 0.3s var(--transition-ease),
         padding 0.3s var(--transition-ease);
@@ -477,6 +474,11 @@ video {
     margin: 0;
     padding: 0;
     overflow: hidden;
+    transition: 
+        opacity 0.3s var(--transition-ease),
+        max-height 0.3s var(--transition-ease),
+        margin 0.3s var(--transition-ease),
+        padding 0.3s var(--transition-ease);
 }
 
 /* =========================

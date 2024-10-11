@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_500_INTERNAL_SERVER_ERROR
@@ -286,11 +285,8 @@ async def read_project(
                     "is_open": is_open
                 })
             else:
-                # Return the thumbnail for closing
-                return templates.TemplateResponse("thumbnail.html", {
-                    "request": request, 
-                    "project": project
-                })
+                # Return empty content for closing to prevent thumbnail duplication
+                return Response(content='', status_code=200)
         
         # For direct navigation, render the full index page with the project open
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
