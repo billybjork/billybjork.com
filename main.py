@@ -149,7 +149,7 @@ async def read_root(
 
         # Detect if the request is an HTMX request
         if request.headers.get("HX-Request") == "true":
-            return templates.TemplateResponse("_projects.html", {
+            return templates.TemplateResponse("macros/_projects.html", {
                 "request": request,
                 "projects": formatted_projects,
                 "page": page,
@@ -192,7 +192,7 @@ async def edit_about(request: Request, db: Session = Depends(get_db), username: 
     general_info = db.query(General).first()
     about_content = general_info.about_content if general_info else ""
     about_photo_link = general_info.about_photo_link if general_info else ""
-    return templates.TemplateResponse("about_edit.html", {
+    return templates.TemplateResponse("/edit/about_edit.html", {
         "request": request,
         "about_content": about_content,
         "about_photo_link": about_photo_link,
@@ -223,7 +223,7 @@ async def update_about(request: Request, db: Session = Depends(get_db), username
 @app.get("/create-project", response_class=HTMLResponse)
 async def create_project_form(request: Request, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
     general_info = db.query(General).first()
-    return templates.TemplateResponse("project_create.html", {
+    return templates.TemplateResponse("edit/project_create.html", {
         "request": request,
         "tinymce_api_key": os.getenv("TINYMCE_API_KEY"),
         "general_info": general_info
@@ -325,7 +325,7 @@ async def edit_project(request: Request, project_slug: str, db: Session = Depend
     
     general_info = db.query(General).first()
     
-    return templates.TemplateResponse("project_edit.html", {
+    return templates.TemplateResponse("edit/project_edit.html", {
         "request": request,
         "project": project,
         "tinymce_api_key": os.getenv("TINYMCE_API_KEY"),
