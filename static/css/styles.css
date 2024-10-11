@@ -21,7 +21,6 @@
     --transition-ease: ease-in-out; /* Added for consistency */
 }
 
-/* Apply box-sizing globally */
 *, *::before, *::after {
     box-sizing: border-box;
 }
@@ -40,12 +39,11 @@ body {
     position: relative;
 }
 
-/* Smooth scrolling for anchor links */
 html {
     scroll-behavior: smooth;
 }
 
-/* Fade Gradient Overlay */
+/* Fade gradient overlay */
 #home-page::before {
     content: '';
     position: fixed;
@@ -58,7 +56,6 @@ html {
     z-index: 10;
 }
 
-/* Main Container */
 main {
     padding: var(--spacing-medium);
     max-width: var(--max-width);
@@ -95,7 +92,7 @@ a:hover {
 }
 
 /* =========================
-   Header Styles
+   Header and footer content
    ========================= */
 
 header {
@@ -135,7 +132,7 @@ header nav {
     align-items: center;
     gap: var(--spacing-medium);
     width: 100%;
-    justify-content: flex-end; /* Aligned to the right */
+    justify-content: flex-end;
 }
 
 header nav a,
@@ -156,11 +153,36 @@ header .vu-ja-de-icon {
     flex-shrink: 0;
 }
 
+footer {
+    padding: var(--spacing-small);
+    text-align: center;
+}
+
+.social-links ul {
+    padding: 0;
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-medium);
+}
+
+.social-links a {
+    font-size: var(--font-size-large);
+    color: var(--primary-color);
+    transition: color 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.social-links a:hover {
+    color: var(--highlight-color);
+}
+
 /* =========================
    Copy link interactions
    ========================= */
 
-/* Interactivity involving user clipboard */
 @keyframes fadeInOut {
     0%, 100% { opacity: 0; }
     10%, 90% { opacity: 1; }
@@ -218,42 +240,13 @@ header .vu-ja-de-icon {
 }
 
 /* =========================
-   Footer Styles
+   Video styles
    ========================= */
 
-   footer {
-    padding: var(--spacing-small);
-    text-align: center;
+video {
+    max-width: 100%;
+    height: auto;
 }
-
-/* =========================
-   Social Links Styles
-   ========================= */
-
-.social-links ul {
-    padding: 0;
-    list-style: none;
-    display: flex;
-    justify-content: center;
-    gap: var(--spacing-medium);
-}
-
-.social-links a {
-    font-size: var(--font-size-large);
-    color: var(--primary-color);
-    transition: color 0.3s ease;
-    display: inline-flex;
-    align-items: center;
-    text-decoration: none;
-}
-
-.social-links a:hover {
-    color: var(--highlight-color);
-}
-
-/* =========================
-   Video Styles
-   ========================= */
 
 .video-reel {
     display: flex;
@@ -270,11 +263,29 @@ header .vu-ja-de-icon {
     object-fit: contain;
 }
 
+.video-container {
+    position: relative;
+    width: 100%;
+    margin: 0 auto;
+    overflow: hidden;
+    background-color: #000;
+    transition: opacity 0.5s var(--transition-ease), transform 0.5s var(--transition-ease);
+    transform: translateY(20px);
+    opacity: 0;
+    max-height: 80vh;
+    aspect-ratio: 16 / 9; /* Placeholder - will be set dynamically */
+}
+
+/* Show video container when the project is active */
+.project-item.active .video-container {
+    transform: translateY(0);
+    opacity: 1;
+}
+
 /* =========================
-   Styles for Project List
+   Projects list items and headers
    ========================= */
 
-/* Styles for project list container */
 #project-list {
     display: flex;
     flex-direction: column;
@@ -284,11 +295,6 @@ header .vu-ja-de-icon {
     margin: 0 auto;
 }
 
-/* =========================
-   Styles for Project Items
-   ========================= */
-
-/* Styles for individual project items */
 .project-item {
     position: relative;
     width: 100%;
@@ -297,8 +303,8 @@ header .vu-ja-de-icon {
     flex-direction: column;
     align-items: center;
     margin-bottom: var(--spacing-large);
-    border-radius: 8px; /* Rounded corners */
-    padding: 1rem; /* Inner spacing */
+    border-radius: 8px;
+    padding: 1rem;
     transition: background-color 0.5s var(--transition-ease), 
                 border-radius 0.3s var(--transition-ease), 
                 box-shadow 0.3s var(--transition-ease),
@@ -306,36 +312,32 @@ header .vu-ja-de-icon {
                 opacity 0.3s var(--transition-ease);
     transform: scale(1);
     opacity: 0.95;
-    background-color: transparent; /* Ensure initial background is transparent */
+    background-color: transparent;
 }
 
-/* Active state for project items */
 .project-item.active {
     background-color: var(--secondary-color);
-    border-radius: 12px; /* Slightly more rounded when active */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); /* Add shadow for depth */
-    transform: scale(1.02); /* Slight scale-up for active state */
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: scale(1.02);
     opacity: 1;
 }
 
-/* Header within project items */
 .project-header {
     width: 100%;
-    background-color: transparent; /* Make header background transparent */
+    background-color: transparent;
     color: var(--primary-color);
     transition: color 0.3s ease;
     padding: var(--spacing-medium) 0;
     cursor: pointer;
     position: relative;
-    scroll-margin-top: 30px;
+    scroll-margin-top: 40px;
 }
 
-/* Header color when project is active */
 .project-item.active .project-header {
-    color: var(--primary-color); /* Ensure text color contrasts with --secondary-color */
+    color: var(--primary-color);
 }
 
-/* Project date styles */
 .project-date {
     font-size: var(--font-size-small);
     color: inherit;
@@ -344,7 +346,6 @@ header .vu-ja-de-icon {
     white-space: nowrap;
 }
 
-/* Project name styles */
 .project-name {
     font-size: var(--font-size-base);
     color: inherit;
@@ -357,47 +358,42 @@ header .vu-ja-de-icon {
     flex-grow: 1;
 }
 
-/* Handle placement of project name and date */
 .project-name, .project-date {
-    padding-left: max(100px, 300px);
-}
-
-/* Responsive adjustments for project name and date */
-@media(max-width: 768px) {
-    .project-name, .project-date {
-        padding-left: max(10vw, 100px);
+    padding-left: max(50px, 200px);
+    @media(max-width: 768px) {
+        padding-left: 3vw;
     }
 }
 
-/* Add transitions for font-size on project-header items */
+/* Transitions for project-header items when active */
 .project-name, 
 .project-date, 
 .close-project {
-    transition: font-size 0.3s ease;
+    transition: font-size 0.3s ease-in-out, padding-left 0.3s ease-in-out;
 }
 
-/* Increase font-size when the project is active */
 .project-item.active .project-name {
-    font-size: 1.2em; /* Adjust to desired larger size */
+    padding-left: 3vw;
+    font-size: 1.2em;
 }
 
 .project-item.active .project-date {
-    font-size: 1em; /* Adjust to desired larger size */
+    padding-left: 3vw;
+    font-size: 1em;
 }
 
 .project-item.active .close-project {
-    font-size: 2em; /* Adjust to desired larger size */
+    font-size: 2em;
 }
 
 /* =========================
-   Styling for Close Button
+   Close button
    ========================= */
 
-/* Styling for close button within projects */
 .close-project {
     position: absolute;
     right: var(--spacing-medium);
-    top: 5%;
+    top: var(--spacing-large);
     transform: translateY(-50%);
     font-size: 1.5em;
     background: none;
@@ -408,21 +404,18 @@ header .vu-ja-de-icon {
     opacity: 0;
 }
 
-/* Close button visible when project is active */
 .project-item.active .close-project {
     opacity: 1;
 }
 
-/* Close button hover effect */
 .close-project:hover {
     color: var(--highlight-color);
 }
 
 /* =========================
-   Styles for Project Content
+   Project content
    ========================= */
 
-/* Project content specific styles */
 .project-content {
     transition: opacity 0.5s var(--transition-ease) 0.2s, 
                 transform 0.5s var(--transition-ease) 0.2s;
@@ -442,33 +435,9 @@ header .vu-ja-de-icon {
 }
 
 /* =========================
-   Styles for Video Container
+   Project content
    ========================= */
 
-/* Video container styles */
-.video-container {
-    position: relative;
-    width: 100%;
-    margin: 0 auto;
-    overflow: hidden;
-    background-color: #000;
-    transition: opacity 0.5s var(--transition-ease), transform 0.5s var(--transition-ease);
-    transform: translateY(20px);
-    opacity: 0;
-    max-height: 80vh;
-}
-
-/* Show video container when the project is active */
-.project-item.active .video-container {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-/* =========================
-   Updated Styles for Thumbnails
-   ========================= */
-
-/* Thumbnail styles with transition for opacity and max-height */
 .thumbnail {
     width: 100%;
     max-width: 320px;
@@ -478,50 +447,44 @@ header .vu-ja-de-icon {
     opacity: 1;
     cursor: pointer;
     border-radius: 4px;
-    transition: opacity 0.3s var(--transition-ease), 
-                max-height 0.3s var(--transition-ease),
-                margin 0.3s var(--transition-ease),
-                padding 0.3s var(--transition-ease);
+    transition: 
+        opacity 0.3s var(--transition-ease),
+        transform 0.3s var(--transition-ease),
+        box-shadow 0.3s var(--transition-ease),
+        width 0.3s var(--transition-ease),
+        height 0.3s var(--transition-ease),
+        max-width 0.3s var(--transition-ease),
+        max-height 0.3s var(--transition-ease),
+        margin 0.3s var(--transition-ease),
+        padding 0.3s var(--transition-ease);
     position: relative;
     margin: var(--spacing-small) auto 0;
-    display: block; /* Ensure thumbnail is displayed as a block element */
-    overflow: hidden; /* Hide any overflow during transition */
-    max-height: 180px; /* Initial max-height matching the height */
+    display: block;
+    overflow: hidden;
+    transform: scale(1);
 }
 
-/* Thumbnail hover effects */
 .thumbnail:hover {
     transform: scale(1.05);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
-/* =========================
-   Visibility Control for Thumbnails and Details
-   ========================= */
-
-/* Ensure the thumbnail is visible by default */
 .project-item .thumbnail {
     display: block;
     opacity: 1;
-    max-height: 180px; /* Match the initial height */
+    max-height: 180px;
     margin: var(--spacing-small) auto 0;
     padding: var(--spacing-small);
-    transition: opacity 0.3s var(--transition-ease), 
-                max-height 0.3s var(--transition-ease),
-                margin 0.3s var(--transition-ease),
-                padding 0.3s var(--transition-ease);
 }
 
-/* Hide the thumbnail when the project is active */
 .project-item.active .thumbnail {
     opacity: 0;
     max-height: 0;
     margin: 0;
     padding: 0;
-    pointer-events: none; /* Prevent interaction when hidden */
+    overflow: hidden;
 }
 
-/* Initially hide project details */
 .project-details {
     opacity: 0;
     max-height: 0;
@@ -529,7 +492,6 @@ header .vu-ja-de-icon {
     transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
 }
 
-/* Show project details when the project is active */
 .project-item.active .project-details {
     opacity: 1;
     max-height: none;
@@ -540,7 +502,6 @@ header .vu-ja-de-icon {
    Project links
    ========================= */
 
-/* Styles for project links and share icons */
 .project-links ul {
     list-style-type: none;
     display: flex;
@@ -580,35 +541,8 @@ header .vu-ja-de-icon {
 }
 
 /* =========================
-   Styles for About page
+   About page
    ========================= */
-
-/* About page styles */
-.about-content {
-    max-width: 800px;
-    padding: 2rem;
-    margin: 0 auto; /* Center horizontally */
-    display: flex;
-    flex-direction: column; /* Stack elements vertically */
-    align-items: center; /* Center content within */
-    @media (max-width: 768px) {
-        padding: 0px; /* Smaller padding for mobile */
-    }
-}
-
-.about-content h4, ul {
-    text-align: left;
-    width: 100%; /* Ensure h4 takes the full width of the container */
-    margin: 0; /* Adjust margin if needed */
-}
-
-/* About photo container */
-.about-photo-container {
-    position: relative;
-    width: 85%; /* Reduce width to 50% */
-    margin: 0 auto; /* Center the container horizontally */
-    margin-bottom: 2rem;
-}
 
 @keyframes fadeIn {
     from {
@@ -619,17 +553,42 @@ header .vu-ja-de-icon {
     }
 }
 
+.about-content {
+    max-width: 800px;
+    padding: 2rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    @media (max-width: 768px) {
+        padding: 0px;
+    }
+}
+
+.about-content h4, ul {
+    text-align: left;
+    width: 100%;
+    margin: 0;
+}
+
+.about-photo-container {
+    position: relative;
+    width: 85%;
+    margin: 0 auto;
+    margin-bottom: 2rem;
+}
+
 .about-photo {
     position: relative;
-    width: 100%; /* Ensure the image fits the container */
-    height: auto; /* Maintain the aspect ratio */
+    width: 100%;
+    height: auto;
     object-fit: cover;
-    opacity: 0; /* Start with the image invisible */
+    opacity: 0;
     animation: fadeIn 0.5s ease-in-out forwards;
 }
 
 /* =========================
-   Additional Styles
+   Additional styles
    ========================= */
 
 dt {
@@ -637,50 +596,10 @@ dt {
     font-weight: bold;
 }
 
-/* Styles for the infinite scroll sentinel */
 #infinite-scroll-sentinel-1 {
     height: 100px;
     text-align: center;
     padding: 20px;
-}
-
-/* Responsive Design Adjustments */
-@media(max-width: 768px) {
-    /* Adjust thumbnail size on smaller screens */
-    .thumbnail {
-        max-width: 100%;
-        height: auto;
-    }
-    
-    /* Adjust project-item max-width */
-    .project-item {
-        max-width: 90vw;
-    }
-    
-    /* Adjust project-content max-width */
-    .project-content {
-        max-width: 90%;
-    }
-    
-    /* Adjust header padding and layout for smaller screens */
-    header {
-        padding: var(--spacing-small);
-    }
-    
-    header nav {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    header .site-title {
-        font-size: var(--font-size-base);
-    }
-}
-
-/* Ensure videos are responsive */
-video {
-    max-width: 100%;
-    height: auto;
 }
 
 /* Reduce motion for users who prefer it */

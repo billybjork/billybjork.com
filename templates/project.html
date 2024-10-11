@@ -1,3 +1,7 @@
+{# templates/project.html #}
+
+{% import "macros/_thumbnail_macros.html" as thumbnail_macros %}
+
 <article class="project-item {% if is_open %}active{% endif %}" data-slug="{{ project.slug }}">
     <header class="project-header" 
             hx-get="/{{ project.slug }}" 
@@ -9,19 +13,7 @@
         <h2 class="project-name">{{ project.name }}</h2>
     </header>
 
-    <figure class="thumbnail" 
-            style="background-image: url('{{ project.thumbnail_link }}');"
-            data-frames="60"
-            data-frame-width="320"
-            data-frame-height="180"
-            data-columns="5"
-            hx-get="/{{ project.slug }}" 
-            hx-target="#details-{{ project.slug }}" 
-            hx-trigger="click" 
-            hx-swap="innerHTML"
-            hx-push-url="true"
-            data-animate="true">
-    </figure>
+    {{ thumbnail_macros.render_thumbnail(project, data_animate=True) }}
     
     <article id="details-{{ project.slug }}" class="project-details">
         {% if is_open %}
