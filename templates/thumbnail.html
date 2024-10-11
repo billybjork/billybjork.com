@@ -1,0 +1,12 @@
+<figure class="thumbnail"
+    style="background-image: url('{{ project.thumbnail_link }}');"
+    data-frames="60"
+    data-frame-width="320"
+    data-frame-height="180"
+    data-columns="5"
+    hx-get="/{{ project.slug }}" 
+    hx-target="#details-{{ project.slug }}" 
+    hx-trigger="click" 
+    hx-swap="innerHTML"
+    hx-push-url="true">
+</figure>

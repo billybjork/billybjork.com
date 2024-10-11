@@ -273,17 +273,24 @@ async def read_project(
         
         # Determine if the project should be open or closed
         is_open = not close
-
+    
         # Check if the request is an HTMX request
         is_htmx = request.headers.get("HX-Request") == "true"
-
+    
         if is_htmx:
-            # Return only the project details for HTMX swaps
-            return templates.TemplateResponse("project_details.html", {
-                "request": request, 
-                "project": project,
-                "is_open": is_open
-            })
+            if is_open:
+                # Return the project details for opening
+                return templates.TemplateResponse("project_details.html", {
+                    "request": request, 
+                    "project": project,
+                    "is_open": is_open
+                })
+            else:
+                # Return the thumbnail for closing
+                return templates.TemplateResponse("thumbnail.html", {
+                    "request": request, 
+                    "project": project
+                })
         
         # For direct navigation, render the full index page with the project open
         projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()

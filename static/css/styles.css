@@ -1,5 +1,8 @@
-/* Global Styles and Variables */
-:root {
+/* =========================
+   Global Styles and Variables
+   ========================= */
+
+   :root {
     --primary-color: #e0e0e0;
     --secondary-color: #434343;
     --highlight-color: #ff8940;
@@ -8,11 +11,14 @@
     --font-size-base: 16px;
     --font-size-small: 0.7em;
     --font-size-large: 1.2em;
+    --font-size-medium: 1em; /* Added for consistency */
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
     --spacing-large: 3rem;
     --max-video-height: 80vh;
     --fade-gradient-height: 33.33%; /* Bottom third */
+    --transition-duration: 0.3s; /* Added for consistency */
+    --transition-ease: ease-in-out; /* Added for consistency */
 }
 
 /* Apply box-sizing globally */
@@ -32,6 +38,11 @@ body {
     font-size: var(--font-size-base);
     overflow-x: hidden;
     position: relative;
+}
+
+/* Smooth scrolling for anchor links */
+html {
+    scroll-behavior: smooth;
 }
 
 /* Fade Gradient Overlay */
@@ -63,6 +74,7 @@ h1, h2, h3, h4, h5, h6 {
 a {
     text-decoration: none;
     color: var(--highlight-color);
+    transition: color 0.3s ease;
 }
 
 a:hover {
@@ -78,7 +90,14 @@ a:hover {
     white-space: nowrap;
 }
 
-/* Header styles */
+.visible {
+    display: block;
+}
+
+/* =========================
+   Header Styles
+   ========================= */
+
 header {
     display: flex;
     flex-direction: column;
@@ -137,12 +156,80 @@ header .vu-ja-de-icon {
     flex-shrink: 0;
 }
 
-/* Footer styles */
-footer {
-    padding: var(--spacing-small);
+/* =========================
+   Copy link interactions
+   ========================= */
+
+/* Interactivity involving user clipboard */
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
 }
 
-/* Social links styles */
+.copy-notification {
+    position: fixed;
+    bottom: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--highlight-color);
+    color: var(--background-color);
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-size: var(--font-size-small);
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    animation: fadeInOut 4s ease-in-out;
+}
+
+.copy-text-link {
+    color: var(--highlight-color);
+    font-weight: bold;
+    text-decoration: none;
+    position: relative;
+    cursor: pointer;
+    padding: 0.1rem 0.2rem;
+    border-radius: 4px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.copy-text-link:hover {
+    background-color: var(--highlight-color);
+    color: var(--background-color);
+    text-decoration: none;
+}
+
+.copy-text-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    width: 100%;
+    height: 2px;
+    background-color: var(--highlight-color);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.3s ease;
+}
+
+.copy-text-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+}
+
+/* =========================
+   Footer Styles
+   ========================= */
+
+   footer {
+    padding: var(--spacing-small);
+    text-align: center;
+}
+
+/* =========================
+   Social Links Styles
+   ========================= */
+
 .social-links ul {
     padding: 0;
     list-style: none;
@@ -154,7 +241,7 @@ footer {
 .social-links a {
     font-size: var(--font-size-large);
     color: var(--primary-color);
-    transition: color 0.3s;
+    transition: color 0.3s ease;
     display: inline-flex;
     align-items: center;
     text-decoration: none;
@@ -164,7 +251,10 @@ footer {
     color: var(--highlight-color);
 }
 
-/* Video styles */
+/* =========================
+   Video Styles
+   ========================= */
+
 .video-reel {
     display: flex;
     justify-content: center;
@@ -180,7 +270,11 @@ footer {
     object-fit: contain;
 }
 
-/* Styles for project list */
+/* =========================
+   Styles for Project List
+   ========================= */
+
+/* Styles for project list container */
 #project-list {
     display: flex;
     flex-direction: column;
@@ -190,7 +284,11 @@ footer {
     margin: 0 auto;
 }
 
-/* Styles for project items */
+/* =========================
+   Styles for Project Items
+   ========================= */
+
+/* Styles for individual project items */
 .project-item {
     position: relative;
     width: 100%;
@@ -201,14 +299,17 @@ footer {
     margin-bottom: var(--spacing-large);
     border-radius: 8px; /* Rounded corners */
     padding: 1rem; /* Inner spacing */
-    transition: background-color 0.5s ease-in-out, 
-                border-radius 0.3s ease-in-out, 
-                box-shadow 0.3s ease-in-out,
-                transform 0.3s ease-in-out;
+    transition: background-color 0.5s var(--transition-ease), 
+                border-radius 0.3s var(--transition-ease), 
+                box-shadow 0.3s var(--transition-ease),
+                transform 0.3s var(--transition-ease),
+                opacity 0.3s var(--transition-ease);
     transform: scale(1);
     opacity: 0.95;
+    background-color: transparent; /* Ensure initial background is transparent */
 }
 
+/* Active state for project items */
 .project-item.active {
     background-color: var(--secondary-color);
     border-radius: 12px; /* Slightly more rounded when active */
@@ -229,6 +330,7 @@ footer {
     scroll-margin-top: 30px;
 }
 
+/* Header color when project is active */
 .project-item.active .project-header {
     color: var(--primary-color); /* Ensure text color contrasts with --secondary-color */
 }
@@ -260,6 +362,7 @@ footer {
     padding-left: max(100px, 300px);
 }
 
+/* Responsive adjustments for project name and date */
 @media(max-width: 768px) {
     .project-name, .project-date {
         padding-left: max(10vw, 100px);
@@ -286,11 +389,15 @@ footer {
     font-size: 2em; /* Adjust to desired larger size */
 }
 
+/* =========================
+   Styling for Close Button
+   ========================= */
+
 /* Styling for close button within projects */
 .close-project {
     position: absolute;
     right: var(--spacing-medium);
-    top: 50%;
+    top: 5%;
     transform: translateY(-50%);
     font-size: 1.5em;
     background: none;
@@ -301,18 +408,24 @@ footer {
     opacity: 0;
 }
 
+/* Close button visible when project is active */
 .project-item.active .close-project {
     opacity: 1;
 }
 
+/* Close button hover effect */
 .close-project:hover {
     color: var(--highlight-color);
 }
 
+/* =========================
+   Styles for Project Content
+   ========================= */
+
 /* Project content specific styles */
 .project-content {
-    transition: opacity 0.5s ease-in-out 0.2s, 
-                transform 0.5s ease-in-out 0.2s;
+    transition: opacity 0.5s var(--transition-ease) 0.2s, 
+                transform 0.5s var(--transition-ease) 0.2s;
     transform: translateY(20px);
     color: var(--primary-color);
     opacity: 0;
@@ -322,10 +435,15 @@ footer {
     max-width: 700px;
 }
 
+/* Show project content when the project is active */
 .project-item.active .project-content {
     transform: translateY(0);
     opacity: 1;
 }
+
+/* =========================
+   Styles for Video Container
+   ========================= */
 
 /* Video container styles */
 .video-container {
@@ -334,20 +452,25 @@ footer {
     margin: 0 auto;
     overflow: hidden;
     background-color: #000;
-    transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+    transition: opacity 0.5s var(--transition-ease), transform 0.5s var(--transition-ease);
     transform: translateY(20px);
     opacity: 0;
     max-height: 80vh;
 }
 
+/* Show video container when the project is active */
 .project-item.active .video-container {
     transform: translateY(0);
     opacity: 1;
 }
 
-/* Thumbnail styles */
+/* =========================
+   Updated Styles for Thumbnails
+   ========================= */
+
+/* Thumbnail styles with transition for opacity and max-height */
 .thumbnail {
-    width: 100%; /* Make thumbnails responsive within the project-item */
+    width: 100%;
     max-width: 320px;
     height: 180px;
     background-size: cover;
@@ -355,21 +478,203 @@ footer {
     opacity: 1;
     cursor: pointer;
     border-radius: 4px;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition: opacity 0.3s var(--transition-ease), 
+                max-height 0.3s var(--transition-ease),
+                margin 0.3s var(--transition-ease),
+                padding 0.3s var(--transition-ease);
     position: relative;
     margin: var(--spacing-small) auto 0;
+    display: block; /* Ensure thumbnail is displayed as a block element */
+    overflow: hidden; /* Hide any overflow during transition */
+    max-height: 180px; /* Initial max-height matching the height */
 }
 
+/* Thumbnail hover effects */
 .thumbnail:hover {
     transform: scale(1.05);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
-/* Other existing styles remain unchanged */
+/* =========================
+   Visibility Control for Thumbnails and Details
+   ========================= */
 
-/* Smooth scrolling for anchor links */
-html {
-    scroll-behavior: smooth;
+/* Ensure the thumbnail is visible by default */
+.project-item .thumbnail {
+    display: block;
+    opacity: 1;
+    max-height: 180px; /* Match the initial height */
+    margin: var(--spacing-small) auto 0;
+    padding: var(--spacing-small);
+    transition: opacity 0.3s var(--transition-ease), 
+                max-height 0.3s var(--transition-ease),
+                margin 0.3s var(--transition-ease),
+                padding 0.3s var(--transition-ease);
+}
+
+/* Hide the thumbnail when the project is active */
+.project-item.active .thumbnail {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    pointer-events: none; /* Prevent interaction when hidden */
+}
+
+/* Initially hide project details */
+.project-details {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
+}
+
+/* Show project details when the project is active */
+.project-item.active .project-details {
+    opacity: 1;
+    max-height: none;
+    transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
+}
+
+/* =========================
+   Project links
+   ========================= */
+
+/* Styles for project links and share icons */
+.project-links ul {
+    list-style-type: none;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+}
+
+.project-links li {
+    margin-right: var(--spacing-medium);
+}
+
+.project-links li:last-child {
+    margin-right: 0;
+}
+
+.project-links a,
+.project-links button {
+    display: inline-flex;
+    align-items: center;
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: var(--font-size-large);
+    cursor: pointer;
+    padding: 0;
+    text-decoration: none;
+    transition: color 0.3s ease, transform 0.3s ease;
+}
+
+.project-links a:hover,
+.project-links button:hover,
+.project-links a i:hover,
+.project-links button i:hover {
+    color: var(--highlight-color);
+}
+
+/* =========================
+   Styles for About page
+   ========================= */
+
+/* About page styles */
+.about-content {
+    max-width: 800px;
+    padding: 2rem;
+    margin: 0 auto; /* Center horizontally */
+    display: flex;
+    flex-direction: column; /* Stack elements vertically */
+    align-items: center; /* Center content within */
+    @media (max-width: 768px) {
+        padding: 0px; /* Smaller padding for mobile */
+    }
+}
+
+.about-content h4, ul {
+    text-align: left;
+    width: 100%; /* Ensure h4 takes the full width of the container */
+    margin: 0; /* Adjust margin if needed */
+}
+
+/* About photo container */
+.about-photo-container {
+    position: relative;
+    width: 85%; /* Reduce width to 50% */
+    margin: 0 auto; /* Center the container horizontally */
+    margin-bottom: 2rem;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.about-photo {
+    position: relative;
+    width: 100%; /* Ensure the image fits the container */
+    height: auto; /* Maintain the aspect ratio */
+    object-fit: cover;
+    opacity: 0; /* Start with the image invisible */
+    animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+/* =========================
+   Additional Styles
+   ========================= */
+
+dt {
+    font-style: italic;
+    font-weight: bold;
+}
+
+/* Styles for the infinite scroll sentinel */
+#infinite-scroll-sentinel-1 {
+    height: 100px;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Responsive Design Adjustments */
+@media(max-width: 768px) {
+    /* Adjust thumbnail size on smaller screens */
+    .thumbnail {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    /* Adjust project-item max-width */
+    .project-item {
+        max-width: 90vw;
+    }
+    
+    /* Adjust project-content max-width */
+    .project-content {
+        max-width: 90%;
+    }
+    
+    /* Adjust header padding and layout for smaller screens */
+    header {
+        padding: var(--spacing-small);
+    }
+    
+    header nav {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    header .site-title {
+        font-size: var(--font-size-base);
+    }
 }
 
 /* Ensure videos are responsive */

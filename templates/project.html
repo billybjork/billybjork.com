@@ -8,17 +8,24 @@
         <time class="project-date">{{ project.formatted_date }}</time>
         <h2 class="project-name">{{ project.name }}</h2>
     </header>
-    <div id="details-{{ project.slug }}" class="project-details">
+
+    <figure class="thumbnail" 
+            style="background-image: url('{{ project.thumbnail_link }}');"
+            data-frames="60"
+            data-frame-width="320"
+            data-frame-height="180"
+            data-columns="5"
+            hx-get="/{{ project.slug }}" 
+            hx-target="#details-{{ project.slug }}" 
+            hx-trigger="click" 
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            data-animate="true">
+    </figure>
+    
+    <article id="details-{{ project.slug }}" class="project-details">
         {% if is_open %}
             {% include "project_details.html" %}
-        {% else %}
-            <figure class="thumbnail"
-                style="background-image: url('{{ project.thumbnail_link }}');"
-                data-frames="60"
-                data-frame-width="320"
-                data-frame-height="180"
-                data-columns="5">
-            </figure>
         {% endif %}
-    </div>
+    </article>
 </article>

@@ -42,12 +42,4 @@
             hx-swap="innerHTML"
             hx-push-url="/" 
             aria-label="Close project">×</button>
-{% else %}
-    <figure class="thumbnail"
-        style="background-image: url('{{ project.thumbnail_link }}');"
-        data-frames="60"
-        data-frame-width="320"
-        data-frame-height="180"
-        data-columns="5">
-    </figure>
 {% endif %}
