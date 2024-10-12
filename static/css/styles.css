@@ -11,14 +11,14 @@
     --font-size-base: 16px;
     --font-size-small: 0.7em;
     --font-size-large: 1.2em;
-    --font-size-medium: 1em; /* Added for consistency */
+    --font-size-medium: 1em;
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
     --spacing-large: 3rem;
     --max-video-height: 80vh;
-    --fade-gradient-height: 33.33%; /* Bottom third */
-    --transition-duration: 0.3s; /* Added for consistency */
-    --transition-ease: ease-in-out; /* Added for consistency */
+    --fade-gradient-height: 33.33%;
+    --transition-duration: 0.3s;
+    --transition-ease: ease-in-out;
 }
 
 *, *::before, *::after {
@@ -43,7 +43,7 @@ html {
     scroll-behavior: smooth;
 }
 
-/* Fade gradient overlay */
+/* Fade gradient overlay over lower viewport */
 .home-page::before {
     content: '';
     position: fixed;
@@ -243,9 +243,11 @@ footer {
    Videos
    ========================= */
 
-video {
-    max-width: 100%;
+   video {
+    width: 100%;
     height: auto;
+    max-width: none;
+    object-fit: contain;
 }
 
 .video-reel {
@@ -253,6 +255,7 @@ video {
     justify-content: center;
     align-items: center;
     width: 100%;
+    height: auto;
     margin-bottom: var(--spacing-large);
     position: relative;
 }
@@ -286,7 +289,7 @@ video {
 }
 
 /* =========================
-   Projects list items and headers
+   Projects list and items
    ========================= */
 
    #project-list {
@@ -326,6 +329,10 @@ video {
     opacity: 1;
 }
 
+/* =========================
+   Projects header elements
+   ========================= */
+
 .project-header {
     width: 100%;
     background-color: transparent;
@@ -341,14 +348,6 @@ video {
     color: var(--primary-color);
 }
 
-.project-date {
-    font-size: var(--font-size-small);
-    color: inherit;
-    margin-right: var(--spacing-medium);
-    line-height: 1.2;
-    white-space: nowrap;
-}
-
 .project-name {
     font-size: var(--font-size-base);
     max-width: 90%;
@@ -360,6 +359,14 @@ video {
     white-space: normal;
     overflow: visible;
     flex-grow: 1;
+}
+
+.project-date {
+    font-size: var(--font-size-small);
+    color: inherit;
+    margin-right: var(--spacing-medium);
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 .project-name, .project-date {
@@ -385,9 +392,7 @@ video {
     will-change: padding-left, font-size, opacity;
 }
 
-/* =========================
-   Close button
-   ========================= */
+/* ====== Close button ====== */
 
 .close-project {
     position: absolute;
@@ -414,33 +419,12 @@ video {
 }
 
 /* =========================
-   Project content
-   ========================= */
-
-.project-content {
-    transition: opacity 0.3s var(--transition-ease), 
-                transform 0.3s var(--transition-ease);
-    transform: translateY(20px);
-    color: var(--primary-color);
-    opacity: 0;
-    overflow: hidden;
-    margin-top: var(--spacing-medium);
-    width: 100%;
-    max-width: 700px;
-}
-
-.project-item.active .project-content {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-/* =========================
-   Thumbnail
+   Thumbnails
    ========================= */
 
    .thumbnail {
     width: 100%;
-    max-width: 320px; /* Ensure this is set */
+    max-width: 320px;
     height: 180px;
     background-size: cover;
     background-position: center;
@@ -594,7 +578,7 @@ video {
 }
 
 /* =========================
-   Additional styles
+   Misc
    ========================= */
 
 dt {
@@ -606,12 +590,4 @@ dt {
     height: 100px;
     text-align: center;
     padding: 20px;
-}
-
-/* Reduce motion for users who prefer it */
-@media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
-        animation: none !important;
-        transition: none !important;
-    }
 }

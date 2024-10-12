@@ -179,6 +179,47 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
+     * Initializes lazy loading for video elements within a given root
+     * @param {HTMLElement} root - The root element to search for lazy videos
+     */
+    const initializeLazyVideos = (root = document) => {
+        const lazyVideos = root.querySelectorAll('.lazy-video');
+
+        if ('IntersectionObserver' in window) {
+            const videoObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const video = entry.target;
+                        setupHLSPlayer(video, false).catch(err => {
+                            console.error('Failed to initialize HLS player for video:', err);
+                        });
+                        observer.unobserve(video);
+                        video.dataset.loaded = 'true'; // Mark as loaded to prevent re-observing
+                    }
+                });
+            }, {
+                rootMargin: '0px 0px 200px 0px', // Start loading before the video fully enters the viewport
+                threshold: 0.25 // 25% of the video is visible
+            });
+
+            lazyVideos.forEach(video => {
+                // Avoid observing videos that have already been initialized
+                if (!video.dataset.loaded) {
+                    videoObserver.observe(video);
+                }
+            });
+        } else {
+            // Fallback for browsers that don't support IntersectionObserver
+            lazyVideos.forEach(video => {
+                setupHLSPlayer(video, false).catch(err => {
+                    console.error('Failed to initialize HLS player for video:', err);
+                });
+                video.dataset.loaded = 'true'; // Mark as loaded
+            });
+        }
+    };
+
+    /**
      * Initializes lazy loading for thumbnails within a given root
      * @param {HTMLElement} root - The root element to search for lazy thumbnails
      */
@@ -420,6 +461,9 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
         // Initialize lazy loading for newly inserted thumbnails
         initializeLazyThumbnails(elt);
+
+        // Initialize lazy loading for videos
+        initializeLazyVideos();
     };
 
     /**
@@ -446,13 +490,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
         // Initialize lazy loading for thumbnails
         initializeLazyThumbnails();
 
-        // Initialize HLS player if the reel video is present
-        const reelVideo = document.getElementById('reel-video-player');
-        if (reelVideo) {
-            setupHLSPlayer(reelVideo, false).catch(err => {
-                console.error('Failed to initialize reel HLS player:', err);
-            });
-        }
+        // Initialize lazy loading for videos
+        initializeLazyVideos();
 
         // Handle initial load (e.g., when navigating directly to an open project)
         handleInitialLoad();
