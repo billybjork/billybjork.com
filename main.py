@@ -312,7 +312,7 @@ async def get_share_url(request: Request, project_slug: str):
     base_url = str(request.base_url)
     share_url = f"{base_url}{project_slug}"
     return JSONResponse(content={"share_url": share_url})
-    
+
 @app.get("/{project_slug}/edit", response_class=HTMLResponse)
 async def edit_project(request: Request, project_slug: str, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
     project = db.query(Project).filter(Project.slug == project_slug).first()

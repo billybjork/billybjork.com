@@ -15,9 +15,9 @@
 
     {{ thumbnail_macros.render_thumbnail(project, data_animate=True) }}
     
-    <article id="details-{{ project.slug }}" class="project-details">
+    <section id="details-{{ project.slug }}" class="project-details">
         {% if is_open %}
             {% include "project_details.html" %}
         {% endif %}
-    </article>
+    </section>
 </article>

@@ -45,7 +45,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
      * @param {string} text - The text to copy
      * @param {string} notificationMessage - The message to display after copying
      */
-    const copyToClipboard = (text, notificationMessage) => {
+    const copyToClipboard = (text, notificationMessage = 'URL copied to clipboard!') => {
         navigator.clipboard.writeText(text)
             .then(() => {
                 showNotification(notificationMessage);
@@ -87,7 +87,13 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 videoElement.hlsInstance = hls;  // Store instance for cleanup
                 hls.loadSource(streamUrl);
                 hls.attachMedia(videoElement);
-                hls.on(Hls.Events.MANIFEST_PARSED, initializeVideo);
+                hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                    hls.on(Hls.Events.MANIFEST_PARSED, initializeVideo);
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    console.error('HLS.js error:', data);
+                    reject(data);
+                });
             } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                 videoElement.src = streamUrl;
                 videoElement.addEventListener('loadedmetadata', initializeVideo);
@@ -96,6 +102,21 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 reject('HLS is not supported');
             }
         });
+    };
+
+    /**
+     * Destroys the HLS player instance and revokes the blob URL
+     * @param {HTMLVideoElement} videoElement - The video element to clean up
+     */
+    const destroyHLSPlayer = (videoElement) => {
+        if (videoElement.hlsInstance) {
+            videoElement.hlsInstance.destroy();
+            videoElement.hlsInstance = null;
+        }
+        if (videoElement.src && videoElement.src.startsWith('blob:')) {
+            URL.revokeObjectURL(videoElement.src);
+            videoElement.src = '';
+        }
     };
 
     /**
@@ -192,12 +213,11 @@ function initTinyMCE(selector, additionalOptions = {}) {
     const handleProjectContent = async (projectItem) => {
         try {
             const video = projectItem.querySelector('video.project-video');
-            const videoContainer = projectItem.querySelector('.video-container');
             const thumbnail = projectItem.querySelector('.thumbnail');
 
             if (projectItem.classList.contains('active')) {
                 // Project is being opened
-                if (video && videoContainer) {
+                if (video) {
                     await setupHLSPlayer(video, true);
                 }
 
@@ -210,11 +230,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 // Project is being closed
                 if (video) {
                     video.pause();
-                    video.src = '';
-                    if (video.hlsInstance) {
-                        video.hlsInstance.destroy();
-                        video.hlsInstance = null;
-                    }
+                    destroyHLSPlayer(video);
                 }
                 if (thumbnail) {
                     resetThumbnailPosition(thumbnail);
@@ -359,14 +375,16 @@ function initTinyMCE(selector, additionalOptions = {}) {
         const target = event.target;
         if (target.classList.contains('project-details')) {
             const projectItem = target.closest('.project-item');
-            const isActive = target.innerHTML.trim() !== '' && !target.querySelector('.thumbnail');
+            const isActive = target.innerHTML.trim() !== '';
             toggleActiveClass(projectItem, isActive);
 
             if (isActive) {
                 // Initialize HLS player if video is present
                 const video = target.querySelector('video.project-video');
                 if (video) {
-                    setupHLSPlayer(video, true);
+                    setupHLSPlayer(video, true).catch(err => {
+                        console.error('Failed to initialize HLS player:', err);
+                    });
                 }
 
                 // Smooth scroll to the project header
@@ -379,14 +397,10 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 const video = target.querySelector('video.project-video');
                 if (video) {
                     video.pause();
-                    video.src = '';
-                    if (video.hlsInstance) {
-                        video.hlsInstance.destroy();
-                        video.hlsInstance = null;
-                    }
+                    destroyHLSPlayer(video);
                 }
                 // Reset thumbnail position if needed
-                const thumbnail = target.querySelector('.thumbnail');
+                const thumbnail = projectItem.querySelector('.thumbnail');
                 if (thumbnail) {
                     resetThumbnailPosition(thumbnail);
                 }
@@ -420,13 +434,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
-     * Handles the initial load of the page
-     */
-    const handleInitialPageLoad = async () => {
-        await handleInitialLoad();
-    };
-
-    /**
      * Initializes all necessary elements and event listeners
      */
     const initialize = () => {
@@ -438,11 +445,13 @@ function initTinyMCE(selector, additionalOptions = {}) {
         // Initialize HLS player if the reel video is present
         const reelVideo = document.getElementById('reel-video-player');
         if (reelVideo) {
-            setupHLSPlayer(reelVideo, false);
+            setupHLSPlayer(reelVideo, false).catch(err => {
+                console.error('Failed to initialize reel HLS player:', err);
+            });
         }
 
         // Handle initial load (e.g., when navigating directly to an open project)
-        handleInitialPageLoad();
+        handleInitialLoad();
 
         // Event delegation for elements with class 'copy-text-link'
         document.body.addEventListener('click', (event) => {
@@ -479,7 +488,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
                     // Directly copy the provided text
                     copyToClipboard(textToCopy, notificationMessage);
                 } else {
-                    console.warn('No text or fetch URL provided for copying.');
+                    console.warn('No fetch URL or copy text provided for copying.');
+                    showNotification('No content available to copy.', true);
                 }
             }
         });

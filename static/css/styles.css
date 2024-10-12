@@ -44,7 +44,7 @@ html {
 }
 
 /* Fade gradient overlay */
-#home-page::before {
+.home-page::before {
     content: '';
     position: fixed;
     bottom: 0;
@@ -346,6 +346,7 @@ video {
 
 .project-name {
     font-size: var(--font-size-base);
+    max-width: 90%;
     color: inherit;
     margin: 0;
     line-height: 1.2;
@@ -385,7 +386,7 @@ video {
 
 .close-project {
     position: absolute;
-    right: var(--spacing-medium);
+    right: 3%;
     top: var(--spacing-large);
     transform: translateY(-50%);
     font-size: 2em;
@@ -494,7 +495,7 @@ video {
 
 .project-item.active .project-details {
     opacity: 1;
-    max-height: 1000px; /* Adjust based on content */
+    max-height: none;
     transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
 }
 
@@ -512,7 +513,7 @@ video {
 }
 
 .project-links li {
-    margin-right: var(--spacing-medium);
+    margin-right: 3%;
 }
 
 .project-links li:last-child {
