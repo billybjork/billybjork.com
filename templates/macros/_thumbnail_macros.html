@@ -1,8 +1,8 @@
-{# macros/_thumbnail_macros.html #}
-
 {% macro render_thumbnail(project, data_animate=False) %}
-    <figure class="thumbnail"
-        style="background-image: url('{{ project.thumbnail_link }}');"
+    <figure 
+        id="thumbnail-{{ project.slug }}"
+        class="thumbnail lazy-thumbnail"
+        data-bg="{{ project.thumbnail_link }}"
         data-frames="{{ project.frames | default(60) }}"
         data-frame-width="{{ project.frame_width | default(320) }}"
         data-frame-height="{{ project.frame_height | default(180) }}"

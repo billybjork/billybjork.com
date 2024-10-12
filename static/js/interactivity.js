@@ -135,7 +135,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
-     * Callback for IntersectionObserver to handle visibility of thumbnails
+     * Callback for IntersectionObserver to handle visibility of thumbnails for animation
      * @param {IntersectionObserverEntry[]} entries 
      * @param {IntersectionObserver} observer 
      */
@@ -145,8 +145,11 @@ function initTinyMCE(selector, additionalOptions = {}) {
         });
     };
 
-    // Initialize IntersectionObserver
-    const observer = new IntersectionObserver(handleIntersection);
+    // Initialize IntersectionObserver for handling thumbnail animations
+    const observer = new IntersectionObserver(handleIntersection, {
+        rootMargin: '0px',
+        threshold: 0.1
+    });
 
     /**
      * Updates the background positions of all thumbnails based on animation progress
@@ -173,6 +176,49 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
             thumbnail.style.backgroundPosition = `-${frameX}px -${frameY}px`;
         });
+    };
+
+    /**
+     * Initializes lazy loading for thumbnails within a given root
+     * @param {HTMLElement} root - The root element to search for lazy thumbnails
+     */
+    const initializeLazyThumbnails = (root = document) => {
+        const lazyThumbnails = root.querySelectorAll('.lazy-thumbnail');
+
+        if ('IntersectionObserver' in window) {
+            const thumbnailObserver = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const thumbnail = entry.target;
+                        const bgImage = thumbnail.getAttribute('data-bg');
+                        if (bgImage) {
+                            thumbnail.style.backgroundImage = `url('${bgImage}')`;
+                            thumbnail.removeAttribute('data-bg');
+                        }
+                        observer.unobserve(thumbnail);
+                    }
+                });
+            }, {
+                rootMargin: '0px 0px 50px 0px',
+                threshold: 0.1
+            });
+
+            lazyThumbnails.forEach(thumbnail => {
+                // Avoid observing already processed thumbnails
+                if (thumbnail.getAttribute('data-bg')) {
+                    thumbnailObserver.observe(thumbnail);
+                }
+            });
+        } else {
+            // Fallback for browsers that don't support IntersectionObserver
+            lazyThumbnails.forEach(thumbnail => {
+                const bgImage = thumbnail.getAttribute('data-bg');
+                if (bgImage) {
+                    thumbnail.style.backgroundImage = `url('${bgImage}')`;
+                    thumbnail.removeAttribute('data-bg');
+                }
+            });
+        }
     };
 
     /**
@@ -371,6 +417,9 @@ function initTinyMCE(selector, additionalOptions = {}) {
         } else if (elt.classList.contains('project-details')) {
             handleHTMXSwap(event);
         }
+
+        // Initialize lazy loading for newly inserted thumbnails
+        initializeLazyThumbnails(elt);
     };
 
     /**
@@ -389,10 +438,13 @@ function initTinyMCE(selector, additionalOptions = {}) {
      * Initializes all necessary elements and event listeners
      */
     const initialize = () => {
-        // Observe thumbnails
+        // Observe thumbnails for animation
         document.querySelectorAll('.thumbnail').forEach(thumbnail => {
             observer.observe(thumbnail); // Start observing each thumbnail
         });
+
+        // Initialize lazy loading for thumbnails
+        initializeLazyThumbnails();
 
         // Initialize HLS player if the reel video is present
         const reelVideo = document.getElementById('reel-video-player');
@@ -425,7 +477,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     // Event listeners
-    document.addEventListener('DOMContentLoaded', initialize);
     document.body.addEventListener('htmx:afterSwap', handleHTMXAfterSwap);
     document.body.addEventListener('htmx:beforeRequest', preventHTMXOnActiveProject);
     document.body.addEventListener('htmx:load', (event) => {
@@ -434,5 +485,5 @@ function initTinyMCE(selector, additionalOptions = {}) {
             handleProjectContent(elt);
         }
     });
-
+    document.addEventListener('DOMContentLoaded', initialize);
 })();
