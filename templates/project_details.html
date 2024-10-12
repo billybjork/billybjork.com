@@ -1,6 +1,9 @@
 {% if is_open %}
     {% if project.video_link %}
-    <section class="video-container" style="aspect-ratio: 1.33333 / 1;">
+    <section 
+        class="video-container" 
+        data-aspect-ratio="{{ project.aspect_ratio }}"
+    >
         <video 
             id="video-player-{{ project.id }}"
             class="project-video"

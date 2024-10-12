@@ -11,8 +11,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
             { value: 'First.Name', title: 'First Name' },
             { value: 'Email', title: 'Email' },
         ],
-        setup: function(editor) {
-            editor.on('change', function() {
+        setup: function (editor) {
+            editor.on('change', function () {
                 tinymce.triggerSave();
             });
         }
@@ -77,7 +77,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
             }
 
             const initializeVideo = () => {
-                adjustVideoContainerAspectRatio(videoElement);
+                // No need to adjust aspect ratio here
                 if (autoplay) {
                     videoElement.play().catch(e => {
                         console.error("Autoplay failed:", e);
@@ -122,42 +122,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
             URL.revokeObjectURL(videoElement.src);
             videoElement.src = '';
         }
-    };
-
-    /**
-     * Adjusts the aspect ratio of the video container based on video dimensions
-     * @param {HTMLVideoElement} videoElement - The video element whose container to adjust
-     */
-    const adjustVideoContainerAspectRatio = (videoElement) => {
-        const container = videoElement.closest('.video-container');
-        if (!container) return;
-
-        const updateAspectRatio = () => {
-            const { videoWidth, videoHeight } = videoElement;
-            if (videoWidth && videoHeight) {
-                const videoAspectRatio = videoWidth / videoHeight;
-                container.style.aspectRatio = `${videoAspectRatio}`;
-
-                const maxContainerHeight = window.innerHeight * 0.8;
-                const containerWidth = container.offsetWidth;
-                const containerHeight = containerWidth / videoAspectRatio;
-
-                if (containerHeight > maxContainerHeight) {
-                    const adjustedWidth = maxContainerHeight * videoAspectRatio;
-                    container.style.width = `${adjustedWidth}px`;
-                } else {
-                    container.style.width = ''; // Reset to default if height is within limit
-                }
-            }
-        };
-
-        if (videoElement.readyState >= 1) {
-            updateAspectRatio();
-        } else {
-            videoElement.addEventListener('loadedmetadata', updateAspectRatio);
-        }
-
-        window.addEventListener('resize', debounce(updateAspectRatio, 200));
     };
 
     /**
@@ -218,11 +182,12 @@ function initTinyMCE(selector, additionalOptions = {}) {
     const handleProjectContent = async (projectItem) => {
         try {
             const video = projectItem.querySelector('video.project-video');
+            const videoContainer = projectItem.querySelector('.video-container');
             const thumbnail = projectItem.querySelector('.thumbnail');
 
             if (projectItem.classList.contains('active')) {
                 // Project is being opened
-                if (video) {
+                if (video && videoContainer) {
                     await setupHLSPlayer(video, true);
                 }
 
@@ -235,7 +200,11 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 // Project is being closed
                 if (video) {
                     video.pause();
-                    destroyHLSPlayer(video);
+                    video.src = '';
+                    if (video.hlsInstance) {
+                        video.hlsInstance.destroy();
+                        video.hlsInstance = null;
+                    }
                 }
                 if (thumbnail) {
                     resetThumbnailPosition(thumbnail);
@@ -251,14 +220,22 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
     /**
      * Handles the initial load of a project if it's already active
+     * Adjusted to scroll without animation when loaded directly via URL
      */
     const handleInitialLoad = async () => {
         const openProjectItem = document.querySelector('.project-item.active');
         if (openProjectItem) {
             await handleProjectContent(openProjectItem);
-            const projectHeader = openProjectItem.querySelector('.project-header');
-            if (projectHeader) {
-                projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const projectElement = openProjectItem; // Scroll to the entire project-item
+
+            if (projectElement) {
+                // Use multiple requestAnimationFrame calls to ensure rendering is complete
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        // Scroll without animation on initial load
+                        projectElement.scrollIntoView({ behavior: 'auto', block: 'start' });
+                    });
+                });
             }
         }
     };
@@ -284,20 +261,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 closeButton.classList.add('hidden');
             }
         }
-    };
-
-    /**
-     * Debounce function to limit the rate at which a function can fire
-     * @param {Function} func - The function to debounce
-     * @param {number} wait - The debounce delay in milliseconds
-     * @returns {Function}
-     */
-    const debounce = (func, wait) => {
-        let timeout;
-        return (...args) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
     };
 
     /**
@@ -457,24 +420,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
         // Handle initial load (e.g., when navigating directly to an open project)
         handleInitialLoad();
-
-        // Event delegation for elements with class 'copy-text-link'
-        document.body.addEventListener('click', (event) => {
-            const button = event.target.closest('.copy-text-link');
-            if (button) {
-                event.preventDefault(); // Prevent default button behavior if any
-
-                const textToCopy = button.getAttribute('data-copy-text');
-                const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
-
-                if (textToCopy) {
-                    copyToClipboard(textToCopy, notificationMessage);
-                } else {
-                    console.warn('No copy text provided for copying.');
-                    showNotification('No content available to copy.', true);
-                }
-            }
-        });
     };
 
     // Event listeners

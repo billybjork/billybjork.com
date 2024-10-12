@@ -95,7 +95,7 @@ a:hover {
    Header and footer content
    ========================= */
 
-header {
+   header {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -272,7 +272,9 @@ video {
     transition: opacity 0.5s var(--transition-ease), transform 0.5s var(--transition-ease);
     transform: translateY(20px);
     opacity: 0;
-    max-height: 80vh;
+
+    /* Set aspect ratio dynamically */
+    aspect-ratio: attr(data-aspect-ratio);
 }
 
 .project-item.active .video-container {
