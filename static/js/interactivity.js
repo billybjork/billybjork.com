@@ -46,14 +46,19 @@ function initTinyMCE(selector, additionalOptions = {}) {
      * @param {string} notificationMessage - The message to display after copying
      */
     const copyToClipboard = (text, notificationMessage = 'URL copied to clipboard!') => {
-        navigator.clipboard.writeText(text)
-            .then(() => {
-                showNotification(notificationMessage);
-            })
-            .catch(err => {
-                console.error('Failed to copy: ', err);
-                showNotification('Failed to copy the URL.', true);
-            });
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    showNotification(notificationMessage);
+                })
+                .catch(err => {
+                    console.error('Failed to copy using Clipboard API: ', err);
+                    showNotification('Failed to copy the URL.', true);
+                });
+        } else {
+            console.warn('Clipboard API not supported in this browser.');
+            showNotification('Copy to clipboard not supported in this browser.', true);
+        }
     };
 
     /**
@@ -459,36 +464,13 @@ function initTinyMCE(selector, additionalOptions = {}) {
             if (button) {
                 event.preventDefault(); // Prevent default button behavior if any
 
-                const fetchUrl = button.getAttribute('data-fetch-url');
                 const textToCopy = button.getAttribute('data-copy-text');
                 const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
 
-                if (fetchUrl) {
-                    // Fetch the share URL from the server
-                    fetch(fetchUrl)
-                        .then(response => {
-                            if (!response.ok) {
-                                throw new Error(`Network response was not ok: ${response.statusText}`);
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            if (data.share_url) {
-                                copyToClipboard(data.share_url, notificationMessage);
-                            } else {
-                                console.error('share_url not found in the response');
-                                showNotification('Failed to retrieve the share URL.', true);
-                            }
-                        })
-                        .catch(err => {
-                            console.error('Failed to fetch share URL:', err);
-                            showNotification('An error occurred while copying the URL.', true);
-                        });
-                } else if (textToCopy) {
-                    // Directly copy the provided text
+                if (textToCopy) {
                     copyToClipboard(textToCopy, notificationMessage);
                 } else {
-                    console.warn('No fetch URL or copy text provided for copying.');
+                    console.warn('No copy text provided for copying.');
                     showNotification('No content available to copy.', true);
                 }
             }

@@ -26,12 +26,12 @@
                 <li>
                     <button
                         class="copy-text-link"
-                        data-fetch-url="/get-share-url/{{ project.slug }}"
+                        data-copy-text="{{ request.url }}"
                         data-notification-message="URL copied to clipboard!"
                         aria-label="Share"
                     >
                         <i class="fas fa-share-from-square"></i>
-                </button>                                                                
+                    </button>                                                                           
                 </li>
             </ul>
         </footer>
