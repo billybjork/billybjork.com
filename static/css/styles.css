@@ -242,7 +242,22 @@ footer {
 /* =========================
    Videos
    ========================= */
-   .video-container {
+
+video {
+    max-width: 100%;
+    height: auto;
+}
+
+.video-reel {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin-bottom: var(--spacing-large);
+    position: relative;
+}
+
+.video-container {
     display: flex;
     justify-content: center;
     align-items: center;

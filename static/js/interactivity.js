@@ -11,8 +11,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
             { value: 'First.Name', title: 'First Name' },
             { value: 'Email', title: 'Email' },
         ],
-        setup: function (editor) {
-            editor.on('change', function () {
+        setup: function(editor) {
+            editor.on('change', function() {
                 tinymce.triggerSave();
             });
         }
@@ -178,33 +178,29 @@ function initTinyMCE(selector, additionalOptions = {}) {
     /**
      * Handles the opening or closing of project content
      * @param {HTMLElement} projectItem - The project item element
+     * @param {boolean} smoothScroll - Whether to scroll smoothly (default: true)
      */
-    const handleProjectContent = async (projectItem) => {
+    const handleProjectContent = async (projectItem, smoothScroll = true) => {
         try {
             const video = projectItem.querySelector('video.project-video');
-            const videoContainer = projectItem.querySelector('.video-container');
             const thumbnail = projectItem.querySelector('.thumbnail');
 
             if (projectItem.classList.contains('active')) {
                 // Project is being opened
-                if (video && videoContainer) {
+                if (video) {
                     await setupHLSPlayer(video, true);
                 }
 
-                // Smooth scroll to the project header
+                // Scroll to the project header
                 const projectHeader = projectItem.querySelector('.project-header');
                 if (projectHeader) {
-                    projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    projectHeader.scrollIntoView({ behavior: smoothScroll ? 'smooth' : 'auto', block: 'start' });
                 }
             } else {
                 // Project is being closed
                 if (video) {
                     video.pause();
-                    video.src = '';
-                    if (video.hlsInstance) {
-                        video.hlsInstance.destroy();
-                        video.hlsInstance = null;
-                    }
+                    destroyHLSPlayer(video);
                 }
                 if (thumbnail) {
                     resetThumbnailPosition(thumbnail);
@@ -220,23 +216,11 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
     /**
      * Handles the initial load of a project if it's already active
-     * Adjusted to scroll without animation when loaded directly via URL
      */
     const handleInitialLoad = async () => {
         const openProjectItem = document.querySelector('.project-item.active');
         if (openProjectItem) {
-            await handleProjectContent(openProjectItem);
-            const projectElement = openProjectItem; // Scroll to the entire project-item
-
-            if (projectElement) {
-                // Use multiple requestAnimationFrame calls to ensure rendering is complete
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        // Scroll without animation on initial load
-                        projectElement.scrollIntoView({ behavior: 'auto', block: 'start' });
-                    });
-                });
-            }
+            await handleProjectContent(openProjectItem, false); // Use instant scroll
         }
     };
 
@@ -420,6 +404,24 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
         // Handle initial load (e.g., when navigating directly to an open project)
         handleInitialLoad();
+
+        // Event delegation for elements with class 'copy-text-link'
+        document.body.addEventListener('click', (event) => {
+            const button = event.target.closest('.copy-text-link');
+            if (button) {
+                event.preventDefault(); // Prevent default button behavior if any
+
+                const textToCopy = button.getAttribute('data-copy-text');
+                const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
+
+                if (textToCopy) {
+                    copyToClipboard(textToCopy, notificationMessage);
+                } else {
+                    console.warn('No copy text provided for copying.');
+                    showNotification('No content available to copy.', true);
+                }
+            }
+        });
     };
 
     // Event listeners
