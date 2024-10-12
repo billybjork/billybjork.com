@@ -240,46 +240,34 @@ footer {
 }
 
 /* =========================
-   Video styles
+   Videos
    ========================= */
-
-video {
-    max-width: 100%;
-    height: auto;
-}
-
-.video-reel {
+   .video-container {
     display: flex;
     justify-content: center;
     align-items: center;
     width: 100%;
-    margin-bottom: var(--spacing-large);
-    position: relative;
-}
-
-.hls-video, .project-video {
-    width: 100%;
-    height: auto;
-    object-fit: contain;
-}
-
-.video-container {
-    position: relative;
-    width: 100%;
-    margin: 0 auto;
+    max-height: 90vh;
     overflow: hidden;
-    background-color: #000;
-    transition: opacity 0.5s var(--transition-ease), transform 0.5s var(--transition-ease);
+    background-color: var(--secondary-color); /* Disguise letterboxing */
+    transition: opacity 0.5s ease, transform 0.5s ease;
     transform: translateY(20px);
     opacity: 0;
-
-    /* Set aspect ratio dynamically */
-    aspect-ratio: attr(data-aspect-ratio);
 }
 
 .project-item.active .video-container {
     transform: translateY(0);
     opacity: 1;
+}
+
+.project-video {
+    display: block;
+    max-height: 90vh;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    background-color: #000;
 }
 
 /* =========================
