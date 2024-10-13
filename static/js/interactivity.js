@@ -307,7 +307,15 @@ function initTinyMCE(selector, additionalOptions = {}) {
     const handleInitialLoad = async () => {
         const openProjectItem = document.querySelector('.project-item.active');
         if (openProjectItem) {
-            await handleProjectContent(openProjectItem, false); // Use instant scroll
+            await handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
+
+            // Add a 'load' event listener to perform the scroll after all resources are loaded
+            window.addEventListener('load', () => {
+                const projectHeader = openProjectItem.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.scrollIntoView({ behavior: 'auto', block: 'start' });
+                }
+            });
         }
     };
 
@@ -524,5 +532,17 @@ function initTinyMCE(selector, additionalOptions = {}) {
             handleProjectContent(elt);
         }
     });
+
+    // Add a 'load' event listener for scrolling to the active project
+    window.addEventListener('load', () => {
+        const openProjectItem = document.querySelector('.project-item.active');
+        if (openProjectItem) {
+            const projectHeader = openProjectItem.querySelector('.project-header');
+            if (projectHeader) {
+                projectHeader.scrollIntoView({ behavior: 'auto', block: 'start' });
+            }
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', initialize);
 })();
