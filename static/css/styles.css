@@ -156,7 +156,7 @@ header .vu-ja-de-icon {
 #main-header {
     align-items: center;
     width: auto;
-    max-width: 40%;
+    max-width: 20em;
     margin: var(--spacing-large) auto;
     border-radius: 15px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
