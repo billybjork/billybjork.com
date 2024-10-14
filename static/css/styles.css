@@ -370,7 +370,7 @@ footer {
 
 .project-name {
     font-size: var(--font-size-base);
-    max-width: 90%;
+    max-width: 80%;
     color: inherit;
     margin: 0;
     line-height: 1.2;
@@ -416,7 +416,7 @@ footer {
 
 .close-project {
     position: absolute;
-    right: 3%;
+    right: 2%;
     top: var(--spacing-large);
     transform: translateY(-50%);
     font-size: 2em;

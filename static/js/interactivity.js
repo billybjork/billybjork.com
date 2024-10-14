@@ -415,47 +415,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
     requestAnimationFrame(animationLoop);
 
     /**
-     * Handles HTMX swap events to initialize or reset project content
-     * @param {Event} event - The HTMX event
-     */
-    const handleHTMXSwap = (event) => {
-        const target = event.target;
-        if (target.classList.contains('project-details')) {
-            const projectItem = target.closest('.project-item');
-            const isActive = target.innerHTML.trim() !== '';
-            toggleActiveClass(projectItem, isActive);
-
-            if (isActive) {
-                // Initialize HLS player if video is present
-                const video = target.querySelector('video.project-video');
-                if (video) {
-                    setupHLSPlayer(video, true).catch(err => {
-                        console.error('Failed to initialize HLS player:', err);
-                    });
-                }
-
-                // Smooth scroll to the project header
-                const projectHeader = projectItem.querySelector('.project-header');
-                if (projectHeader) {
-                    projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            } else {
-                // If project is closed, pause and reset video
-                const video = target.querySelector('video.project-video');
-                if (video) {
-                    video.pause();
-                    destroyHLSPlayer(video);
-                }
-                // Reset thumbnail position if needed
-                const thumbnail = projectItem.querySelector('.thumbnail');
-                if (thumbnail) {
-                    resetThumbnailPosition(thumbnail);
-                }
-            }
-        }
-    };
-
-    /**
      * Closes all open projects by removing their content and cleaning up resources
      */
     function closeAllOpenProjects() {
