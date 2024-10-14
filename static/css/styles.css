@@ -7,11 +7,10 @@
     --secondary-color: #434343;
     --highlight-color: #ff8940;
     --background-color: #1a1a1a;
-    --max-width: 1200px;
     --font-size-base: 16px;
     --font-size-small: 0.7em;
-    --font-size-large: 1.2em;
     --font-size-medium: 1em;
+    --font-size-large: 1.2em;
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
     --spacing-large: 3rem;
@@ -58,7 +57,6 @@ html {
 
 main {
     padding: var(--spacing-medium);
-    max-width: var(--max-width);
     margin: 0 auto;
     width: 100%;
 }
@@ -92,10 +90,10 @@ a:hover {
 }
 
 /* =========================
-   Header and footer content
+   Header and Footer Content
    ========================= */
 
-   header {
+header {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -153,6 +151,34 @@ header .vu-ja-de-icon {
     flex-shrink: 0;
 }
 
+/* Styles specific to #main-header */
+
+#main-header {
+    align-items: center;
+    width: auto;
+    max-width: 40%;
+    margin: var(--spacing-large) auto;
+    border-radius: 15px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: var(--spacing-medium);
+    background-color: var(--primary-color);
+}
+
+#main-header .site-title {
+    text-align: center;
+}
+
+#main-header nav {
+    justify-content: center;
+    width: auto;
+}
+
+#main-header nav a,
+#main-header nav .vu-ja-de-btn {
+    font-size: var(--font-size-medium);
+    padding: var(--spacing-small);
+}
+
 footer {
     padding: var(--spacing-small);
     text-align: center;
@@ -180,63 +206,56 @@ footer {
 }
 
 /* =========================
-   Copy link interactions
+   Thumbnails
    ========================= */
 
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0; }
-    10%, 90% { opacity: 1; }
-}
-
-.copy-notification {
-    position: fixed;
-    bottom: 3rem;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--highlight-color);
-    color: var(--background-color);
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    font-size: var(--font-size-small);
-    font-weight: 500;
-    z-index: 1000;
-    opacity: 0;
-    animation: fadeInOut 4s ease-in-out;
-}
-
-.copy-text-link {
-    color: var(--highlight-color);
-    font-weight: bold;
-    text-decoration: none;
-    position: relative;
-    cursor: pointer;
-    padding: 0.1rem 0.2rem;
-    border-radius: 4px;
-    transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.copy-text-link:hover {
-    background-color: var(--highlight-color);
-    color: var(--background-color);
-    text-decoration: none;
-}
-
-.copy-text-link::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    bottom: -2px;
+   .thumbnail {
     width: 100%;
-    height: 2px;
-    background-color: var(--highlight-color);
-    transform: scaleX(0);
-    transform-origin: right;
-    transition: transform 0.3s ease;
+    max-width: 320px;
+    height: 180px;
+    background-size: cover;
+    background-position: center;
+    opacity: 1;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: 
+        opacity 0.3s var(--transition-ease),
+        transform 0.3s var(--transition-ease),
+        box-shadow 0.3s var(--transition-ease),
+        max-height 0.3s var(--transition-ease),
+        margin 0.3s var(--transition-ease),
+        padding 0.3s var(--transition-ease);
+    position: relative;
+    margin: var(--spacing-small) auto 0;
+    display: block;
+    overflow: hidden;
+    transform: scale(1);
 }
 
-.copy-text-link:hover::after {
-    transform: scaleX(1);
-    transform-origin: left;
+.thumbnail:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.project-item .thumbnail {
+    display: block;
+    opacity: 1;
+    max-height: 180px;
+    margin: var(--spacing-small) auto 0;
+    padding: var(--spacing-small);
+}
+
+.project-item.active .thumbnail {
+    opacity: 0;
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    transition: 
+        opacity 0.3s var(--transition-ease),
+        max-height 0.3s var(--transition-ease),
+        margin 0.3s var(--transition-ease),
+        padding 0.3s var(--transition-ease);
 }
 
 /* =========================
@@ -420,59 +439,6 @@ footer {
 }
 
 /* =========================
-   Thumbnails
-   ========================= */
-
-   .thumbnail {
-    width: 100%;
-    max-width: 320px;
-    height: 180px;
-    background-size: cover;
-    background-position: center;
-    opacity: 1;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: 
-        opacity 0.3s var(--transition-ease),
-        transform 0.3s var(--transition-ease),
-        box-shadow 0.3s var(--transition-ease),
-        max-height 0.3s var(--transition-ease),
-        margin 0.3s var(--transition-ease),
-        padding 0.3s var(--transition-ease);
-    position: relative;
-    margin: var(--spacing-small) auto 0;
-    display: block;
-    overflow: hidden;
-    transform: scale(1);
-}
-
-.thumbnail:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.project-item .thumbnail {
-    display: block;
-    opacity: 1;
-    max-height: 180px;
-    margin: var(--spacing-small) auto 0;
-    padding: var(--spacing-small);
-}
-
-.project-item.active .thumbnail {
-    opacity: 0;
-    max-height: 0;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    transition: 
-        opacity 0.3s var(--transition-ease),
-        max-height 0.3s var(--transition-ease),
-        margin 0.3s var(--transition-ease),
-        padding 0.3s var(--transition-ease);
-}
-
-/* =========================
    Project details
    ========================= */
 
@@ -576,6 +542,66 @@ footer {
     object-fit: cover;
     opacity: 0;
     animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+/* =========================
+   Copy link interactions
+   ========================= */
+
+   @keyframes fadeInOut {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+}
+
+.copy-notification {
+    position: fixed;
+    bottom: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--highlight-color);
+    color: var(--background-color);
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-size: var(--font-size-small);
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    animation: fadeInOut 4s ease-in-out;
+}
+
+.copy-text-link {
+    color: var(--highlight-color);
+    font-weight: bold;
+    text-decoration: none;
+    position: relative;
+    cursor: pointer;
+    padding: 0.1rem 0.2rem;
+    border-radius: 4px;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.copy-text-link:hover {
+    background-color: var(--highlight-color);
+    color: var(--background-color);
+    text-decoration: none;
+}
+
+.copy-text-link::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    width: 100%;
+    height: 2px;
+    background-color: var(--highlight-color);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.3s ease;
+}
+
+.copy-text-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
 }
 
 /* =========================

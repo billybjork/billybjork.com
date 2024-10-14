@@ -3,6 +3,9 @@
 {% block main_class %}home-page{% endblock %}
 
 {% block content %}
+
+<p style="padding-left: 1%;">Some highlights...</p>
+
 <section class="video-reel">
     {% if reel_video_link %}
     <video 
@@ -20,7 +23,7 @@
 
 <p style="text-align: center; font-size: var(--font-size-large);"><strong>* * *</strong></p>
 
-<p style="padding-left: 5%;">Some projects I've worked on...</p>
+<p style="padding-left: 1%;">Some projects I've worked on...</p>
 
 <section id="project-list">
     {% for project in projects %}
