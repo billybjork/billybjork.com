@@ -360,7 +360,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
             const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime; // pixels per second
 
             // Convert scrollVelocity to animationSpeed (frames per second)
-            const pixelsPerFrame = 1; // Adjust to control base animation speed (decrease to speed up)
+            const pixelsPerFrame = 3; // Adjust to control base animation speed (decrease to speed up)
             animationSpeed = scrollVelocity / pixelsPerFrame; // frames per second
 
             // Cap the animationSpeed to prevent it from becoming too fast
@@ -456,15 +456,91 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
-     * Handles HTMX:afterSwap event for initializing newly loaded content
+     * Closes all open projects by removing their content and cleaning up resources
+     */
+    function closeAllOpenProjects() {
+        const openProjectItems = document.querySelectorAll('.project-item.active');
+        openProjectItems.forEach(projectItem => {
+            // Remove 'active' class
+            projectItem.classList.remove('active');
+
+            // Find video and destroy player
+            const video = projectItem.querySelector('video.project-video');
+            if (video) {
+                video.pause();
+                destroyHLSPlayer(video);
+            }
+
+            // Remove project details content
+            const projectDetails = projectItem.querySelector('.project-details');
+            if (projectDetails) {
+                projectDetails.innerHTML = '';
+            }
+
+            // Reset thumbnail position if needed
+            const thumbnail = projectItem.querySelector('.thumbnail');
+            if (thumbnail) {
+                resetThumbnailPosition(thumbnail);
+            }
+        });
+    }
+
+    /**
+     * Handles HTMX beforeRequest event to close any open projects before making a new request
+     * @param {Event} event - The HTMX event
+     */
+    const handleHTMXBeforeRequest = (event) => {
+        const triggerElt = event.detail.elt;
+        const projectItem = triggerElt.closest('.project-item');
+
+        if (triggerElt.matches('.project-header, .thumbnail') && projectItem.classList.contains('active')) {
+            // Prevent HTMX request if the project is already open
+            event.preventDefault();
+        } else {
+            // Close any open projects before proceeding
+            closeAllOpenProjects();
+        }
+    };
+
+    /**
+     * Handles HTMX afterSwap event for initializing newly loaded content
      * @param {Event} event - The HTMX event
      */
     const handleHTMXAfterSwap = (event) => {
         const { elt } = event.detail;
-        if (elt.classList.contains('project-item')) {
-            handleProjectContent(elt);
-        } else if (elt.classList.contains('project-details')) {
-            handleHTMXSwap(event);
+
+        if (elt.classList.contains('project-details')) {
+            const projectItem = elt.closest('.project-item');
+            if (elt.innerHTML.trim() !== '') {
+                projectItem.classList.add('active');
+
+                // Initialize HLS player if video is present
+                const video = elt.querySelector('video.project-video');
+                if (video) {
+                    setupHLSPlayer(video, true).catch(err => {
+                        console.error('Failed to initialize HLS player:', err);
+                    });
+                }
+
+                // Smooth scroll to the project header
+                const projectHeader = projectItem.querySelector('.project-header');
+                if (projectHeader) {
+                    projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            } else {
+                projectItem.classList.remove('active');
+
+                // Clean up resources
+                const video = projectItem.querySelector('video.project-video');
+                if (video) {
+                    video.pause();
+                    destroyHLSPlayer(video);
+                }
+                const thumbnail = projectItem.querySelector('.thumbnail');
+                if (thumbnail) {
+                    resetThumbnailPosition(thumbnail);
+                }
+            }
         }
 
         // Initialize lazy loading for newly inserted thumbnails
@@ -472,18 +548,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
         // Initialize lazy loading for videos
         initializeLazyVideos();
-    };
-
-    /**
-     * Prevents HTMX requests when clicking on an already open project
-     * @param {Event} event - The HTMX event
-     */
-    const preventHTMXOnActiveProject = (event) => {
-        const triggerElt = event.detail.elt;
-        if (triggerElt.matches('.project-header') && triggerElt.closest('.project-item').classList.contains('active')) {
-            // Prevent HTMX request if the project is already open
-            event.preventDefault();
-        }
     };
 
     /**
@@ -525,7 +589,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
     // Event listeners
     document.body.addEventListener('htmx:afterSwap', handleHTMXAfterSwap);
-    document.body.addEventListener('htmx:beforeRequest', preventHTMXOnActiveProject);
+    document.body.addEventListener('htmx:beforeRequest', handleHTMXBeforeRequest);
     document.body.addEventListener('htmx:load', (event) => {
         const { elt } = event.detail;
         if (elt.classList.contains('project-item')) {
