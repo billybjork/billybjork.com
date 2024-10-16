@@ -119,8 +119,9 @@ function initTinyMCE(selector, additionalOptions = {}) {
             videoElement.hlsInstance = null;
         }
         if (videoElement.src && videoElement.src.startsWith('blob:')) {
-            URL.revokeObjectURL(videoElement.src);
-            videoElement.src = '';
+            const blobUrl = videoElement.src; // Store the Blob URL
+            videoElement.src = ''; // Clear the src attribute first
+            URL.revokeObjectURL(blobUrl); // Then revoke the Blob URL
         }
     };
 

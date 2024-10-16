@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status, Query
-from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -34,8 +34,20 @@ class ForwardedProtoMiddleware(BaseHTTPMiddleware):
             request.scope['scheme'] = x_forwarded_proto
         response = await call_next(request)
         return response
-
+    
 app.add_middleware(ForwardedProtoMiddleware)
+
+# Redirect billybjork.com to www.billybjork.com
+class WWWRedirectMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        host = request.headers.get("host")
+        if host == "billybjork.com":
+            # Redirect to www.billybjork.com
+            url = request.url.replace(netloc="www.billybjork.com")
+            return RedirectResponse(url=str(url), status_code=301)
+        return await call_next(request)
+
+app.add_middleware(WWWRedirectMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")

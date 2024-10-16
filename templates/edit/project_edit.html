@@ -1,43 +1,40 @@
 {% extends "base.html" %}
 
 {% block content %}
-<main>
-    <h1>Edit: {{ project.name }}</h1>
-    <form id="edit-form" hx-post="/{{ project.slug }}/edit" hx-target="body">
-        <fieldset>
-            <legend>Project Details</legend>
-            
-            <label for="name">Name:</label>
-            <input type="text" id="name" name="name" value="{{ project.name }}" required>
-            <br><br>
-            <label for="slug">Slug:</label>
-            <input type="text" id="slug" name="slug" value="{{ project.slug }}" required>
-            <br><br>
-            <label for="creation_date">Creation Date:</label>
-            <input type="date" id="creation_date" name="creation_date" value="{{ project.creation_date.isoformat() }}" required>
-            <br><br>
-            <label for="youtube_link">YouTube Link:</label>
-            <input type="url" id="youtube_link" name="youtube_link" value="{{ project.youtube_link or '' }}">
-            <br><br>
-            <label for="show_project">Show Project:</label>
-            <input type="checkbox" id="show_project" name="show_project" {% if project.show_project %}checked{% endif %}>
-        </fieldset>
-        <br>
-        <fieldset>
-            <legend>Project Content</legend>
+<h1>Edit: {{ project.name }}</h1>
+<form id="edit-form" hx-post="/{{ project.slug }}/edit" hx-target="body">
+    <fieldset>
+        <legend>Project Details</legend>
+        
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="{{ project.name }}" required>
+        <br><br>
+        <label for="slug">Slug:</label>
+        <input type="text" id="slug" name="slug" value="{{ project.slug }}" required>
+        <br><br>
+        <label for="creation_date">Creation Date:</label>
+        <input type="date" id="creation_date" name="creation_date" value="{{ project.creation_date.isoformat() }}" required>
+        <br><br>
+        <label for="youtube_link">YouTube Link:</label>
+        <input type="url" id="youtube_link" name="youtube_link" value="{{ project.youtube_link or '' }}">
+        <br><br>
+        <label for="show_project">Show Project:</label>
+        <input type="checkbox" id="show_project" name="show_project" {% if project.show_project %}checked{% endif %}>
+    </fieldset>
+    <br>
+    <fieldset>
+        <legend>Project Content</legend>
 
-            <textarea id="html_content" name="html_content">{{ project.html_content | safe }}</textarea>
-        </fieldset>
-        <br>
-        <button type="submit">Save</button>
-    </form>
-</main>
+        <textarea id="html_content" name="html_content">{{ project.html_content | safe }}</textarea>
+    </fieldset>
+    <br>
+    <button type="submit">Save</button>
+</form>
 {% endblock %}
 
 {% block additional_scripts %}
 <script src="https://cdn.tiny.cloud/1/{{ tinymce_api_key }}/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
     initTinyMCE('#html_content');
-    setupFormListeners('edit-form');
 </script>
 {% endblock %}
