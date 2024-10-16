@@ -264,6 +264,22 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
+     * Custom function to scroll to the project header with an offset
+     * @param {HTMLElement} projectHeader - The project header element to scroll to
+     */
+    const scrollToProjectHeader = (projectHeader) => {
+        const offset = 40; // Desired padding in pixels from the top
+        const headerRect = projectHeader.getBoundingClientRect();
+        const absoluteElementTop = headerRect.top + window.pageYOffset;
+        const scrollToPosition = absoluteElementTop - offset;
+
+        window.scrollTo({
+            top: scrollToPosition,
+            behavior: 'smooth'
+        });
+    };
+
+    /**
      * Handles the opening or closing of project content
      * @param {HTMLElement} projectItem - The project item element
      * @param {boolean} smoothScroll - Whether to scroll smoothly (default: true)
@@ -272,18 +288,19 @@ function initTinyMCE(selector, additionalOptions = {}) {
         try {
             const video = projectItem.querySelector('video.project-video');
             const thumbnail = projectItem.querySelector('.thumbnail');
-
+    
             if (projectItem.classList.contains('active')) {
                 // Project is being opened
                 if (video) {
                     await setupHLSPlayer(video, true);
                 }
-
-                // Scroll to the project header
+    
+                // Scroll to the project header using the custom function
                 const projectHeader = projectItem.querySelector('.project-header');
                 if (projectHeader) {
-                    projectHeader.scrollIntoView({ behavior: smoothScroll ? 'smooth' : 'auto', block: 'start' });
+                    scrollToProjectHeader(projectHeader);
                 }
+    
             } else {
                 // Project is being closed
                 if (video) {
@@ -294,7 +311,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
                     resetThumbnailPosition(thumbnail);
                 }
             }
-
+    
             // Update all thumbnails
             updateThumbnails();
         } catch (error) {
@@ -310,11 +327,11 @@ function initTinyMCE(selector, additionalOptions = {}) {
         if (openProjectItem) {
             await handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
 
-            // Add a 'load' event listener to perform the scroll after all resources are loaded
+            // Perform the scroll after all resources are loaded
             window.addEventListener('load', () => {
                 const projectHeader = openProjectItem.querySelector('.project-header');
                 if (projectHeader) {
-                    projectHeader.scrollIntoView({ behavior: 'auto', block: 'start' });
+                    scrollToProjectHeader(projectHeader);
                 }
             });
         }
@@ -459,10 +476,10 @@ function initTinyMCE(selector, additionalOptions = {}) {
                     });
                 }
 
-                // Smooth scroll to the project header
+                // Scroll to the project header using the custom function
                 const projectHeader = projectItem.querySelector('.project-header');
                 if (projectHeader) {
-                    projectHeader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    scrollToProjectHeader(projectHeader);
                 }
             } else {
                 projectItem.classList.remove('active');
@@ -484,7 +501,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
         initializeLazyThumbnails(elt);
 
         // Initialize lazy loading for videos
-        initializeLazyVideos();
+        initializeLazyVideos(elt);
     };
 
     /**
@@ -540,7 +557,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
         if (openProjectItem) {
             const projectHeader = openProjectItem.querySelector('.project-header');
             if (projectHeader) {
-                projectHeader.scrollIntoView({ behavior: 'auto', block: 'start' });
+                scrollToProjectHeader(projectHeader);
             }
         }
     });
