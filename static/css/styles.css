@@ -13,7 +13,7 @@
     --font-size-large: 1.2em;
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
-    --spacing-large: 3rem;
+    --spacing-large: 2rem;
     --max-video-height: 80vh;
     --fade-gradient-height: 33.33%;
     --transition-duration: 0.3s;
@@ -209,7 +209,7 @@ footer {
    Thumbnails
    ========================= */
 
-   .thumbnail {
+.thumbnail {
     width: 100%;
     max-width: 320px;
     height: 180px;
@@ -218,18 +218,15 @@ footer {
     opacity: 1;
     cursor: pointer;
     border-radius: 4px;
-    transition: 
-        opacity 0.3s var(--transition-ease),
-        transform 0.3s var(--transition-ease),
-        box-shadow 0.3s var(--transition-ease),
-        max-height 0.3s var(--transition-ease),
-        margin 0.3s var(--transition-ease),
-        padding 0.3s var(--transition-ease);
     position: relative;
     margin: var(--spacing-small) auto 0;
     display: block;
     overflow: hidden;
     transform: scale(1);
+    transition: 
+        opacity 0.3s var(--transition-ease),
+        transform 0.3s var(--transition-ease),
+        max-height 0.3s var(--transition-ease);
 }
 
 .thumbnail:hover {
@@ -248,14 +245,10 @@ footer {
 .project-item.active .thumbnail {
     opacity: 0;
     max-height: 0;
+    transform: translateY(-20px);
     margin: 0;
     padding: 0;
     overflow: hidden;
-    transition: 
-        opacity 0.3s var(--transition-ease),
-        max-height 0.3s var(--transition-ease),
-        margin 0.3s var(--transition-ease),
-        padding 0.3s var(--transition-ease);
 }
 
 /* =========================
@@ -312,7 +305,7 @@ footer {
    Projects list and items
    ========================= */
 
-   #project-list {
+#project-list {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -331,14 +324,16 @@ footer {
     margin-bottom: var(--spacing-large);
     border-radius: 8px;
     padding: 1rem;
-    transition: background-color 0.5s var(--transition-ease), 
-                border-radius 0.3s var(--transition-ease), 
-                box-shadow 0.3s var(--transition-ease),
-                transform 0.3s var(--transition-ease),
-                opacity 0.3s var(--transition-ease);
     transform: scale(1);
     opacity: 0.95;
     background-color: transparent;
+    overflow: hidden; /* Ensures content doesn't overflow during transitions */
+    transition: 
+        background-color 0.3s var(--transition-ease), 
+        border-radius 0.3s var(--transition-ease), 
+        box-shadow 0.3s var(--transition-ease),
+        transform 0.3s var(--transition-ease),
+        opacity 0.3s var(--transition-ease);
 }
 
 .project-item.active {
@@ -408,8 +403,9 @@ footer {
 .project-name, 
 .project-date, 
 .close-project {
-    transition: font-size 0.3s ease-in-out, padding-left 0.3s ease-in-out;
     will-change: padding-left, font-size, opacity;
+    transition: font-size 0.3s ease-in-out,
+                padding-left 0.3s ease-in-out;
 }
 
 /* ====== Close button ====== */
@@ -418,13 +414,11 @@ footer {
     position: absolute;
     right: 2%;
     top: var(--spacing-large);
-    transform: translateY(-50%);
     font-size: 2em;
     background: none;
     border: none;
     color: inherit;
     cursor: pointer;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
     opacity: 0;
     visibility: hidden;
 }
@@ -436,6 +430,11 @@ footer {
 
 .close-project:hover {
     color: var(--highlight-color);
+    transform: scale(1.3);
+    transition:
+        opacity 0.3s ease,
+        visibility 0.3s ease,
+        transform 0.3s ease;
 }
 
 /* =========================
@@ -446,13 +445,17 @@ footer {
     opacity: 0;
     max-height: 0;
     overflow: hidden;
-    transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
+    transform: translateY(20px);
+    transition: 
+        opacity 0.3s var(--transition-ease),
+        max-height 0.3s var(--transition-ease),
+        transform 0.3s var(--transition-ease);
 }
 
 .project-item.active .project-details {
     opacity: 1;
-    max-height: none;
-    transition: opacity 0.5s var(--transition-ease), max-height 0.5s var(--transition-ease);
+    max-height: 5000px; /* Adjust based on your content's maximum height */
+    transform: translateY(0);
 }
 
 /* =========================

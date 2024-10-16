@@ -39,10 +39,4 @@
             </ul>
         </footer>
     </section>
-    <button class="close-project" 
-            hx-get="/{{ project.slug }}?close=true" 
-            hx-target="#details-{{ project.slug }}" 
-            hx-swap="innerHTML"
-            hx-push-url="/" 
-            aria-label="Close project">×</button>
 {% endif %}

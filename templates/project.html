@@ -6,14 +6,24 @@
     data-slug="{{ project.slug }}">
     
     <header class="project-header" 
-            hx-get="/{{ project.slug }}" 
-            hx-target="#details-{{ project.slug }}" 
-            hx-trigger="click" 
-            hx-swap="innerHTML"
-            hx-push-url="true">
-        <time class="project-date">{{ project.formatted_date }}</time>
-        <h2 class="project-name">{{ project.name }}</h2>
+             hx-get="/{{ project.slug }}" 
+             hx-target="#details-{{ project.slug }}" 
+             hx-trigger="click" 
+             hx-swap="innerHTML"
+             hx-push-url="true">
+            <time class="project-date">{{ project.formatted_date }}</time>
+            <h2 class="project-name">{{ project.name }}</h2>
     </header>
+        
+    <button class="close-project" 
+            hx-get="/{{ project.slug }}?close=true" 
+            hx-target="#details-{{ project.slug }}" 
+            hx-swap="innerHTML" 
+            hx-push-url="/" 
+            aria-label="Close project">
+        &times;
+    </button>
+    
 
     {{ thumbnail_macros.render_thumbnail(project, data_animate=True) }}
     
