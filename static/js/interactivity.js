@@ -321,29 +321,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
-     * Toggles the 'active' class on a project item and manages the visibility of the close button
-     * @param {HTMLElement} projectItem - The project item element
-     * @param {boolean} isActive - Whether to activate or deactivate the project item
-     */
-    const toggleActiveClass = (projectItem, isActive) => {
-        if (isActive) {
-            projectItem.classList.add('active');
-            // Show the close button
-            const closeButton = projectItem.querySelector('.close-project.hidden');
-            if (closeButton) {
-                closeButton.classList.remove('hidden');
-            }
-        } else {
-            projectItem.classList.remove('active');
-            // Hide the close button
-            const closeButton = projectItem.querySelector('.close-project:not(.hidden)');
-            if (closeButton) {
-                closeButton.classList.add('hidden');
-            }
-        }
-    };
-
-    /**
      * Scroll event handler to update scroll velocity and animation speed
      */
     let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
