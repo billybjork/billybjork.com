@@ -5,7 +5,7 @@
  */
 function initTinyMCE(selector, additionalOptions = {}) {
     const defaultOptions = {
-        plugins: 'anchor autolink charmap codesample code emoticons image link lists media searchreplace table visualblocks wordcount linkchecker',
+        plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount linkchecker',
         toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table mergetags | addcomment showcomments | spellcheckdialog a11ycheck typography | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat',
         mergetags_list: [
             { value: 'First.Name', title: 'First Name' },
@@ -21,7 +21,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
     tinymce.init({ ...defaultOptions, ...additionalOptions, selector });
 }
 
-(() => {
+(function() {
     /**
      * Generic function to display notifications
      * @param {string} message - The message to display
@@ -77,7 +77,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
             }
 
             const initializeVideo = () => {
-                // No need to adjust aspect ratio here
                 if (autoplay) {
                     videoElement.play().catch(e => {
                         console.error("Autoplay failed:", e);
@@ -120,8 +119,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
         }
         if (videoElement.src && videoElement.src.startsWith('blob:')) {
             const blobUrl = videoElement.src; // Store the Blob URL
-            videoElement.src = ''; // Clear the src attribute first
-            URL.revokeObjectURL(blobUrl); // Then revoke the Blob URL
+            URL.revokeObjectURL(blobUrl); // Revoke the Blob URL first
+            videoElement.src = ''; // Then clear the src attribute
         }
     };
 
@@ -184,7 +183,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
      * @param {HTMLElement} root - The root element to search for lazy videos
      */
     const initializeLazyVideos = (root = document) => {
-        const lazyVideos = root.querySelectorAll('.lazy-video');
+        const lazyVideos = root.querySelectorAll('video.lazy-video');
 
         if ('IntersectionObserver' in window) {
             const videoObserver = new IntersectionObserver((entries, observer) => {
@@ -288,19 +287,19 @@ function initTinyMCE(selector, additionalOptions = {}) {
         try {
             const video = projectItem.querySelector('video.project-video');
             const thumbnail = projectItem.querySelector('.thumbnail');
-    
+
             if (projectItem.classList.contains('active')) {
                 // Project is being opened
                 if (video) {
                     await setupHLSPlayer(video, true);
                 }
-    
+
                 // Scroll to the project header using the custom function
                 const projectHeader = projectItem.querySelector('.project-header');
                 if (projectHeader) {
                     scrollToProjectHeader(projectHeader);
                 }
-    
+
             } else {
                 // Project is being closed
                 if (video) {
@@ -311,7 +310,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
                     resetThumbnailPosition(thumbnail);
                 }
             }
-    
+
             // Update all thumbnails
             updateThumbnails();
         } catch (error) {
@@ -322,17 +321,11 @@ function initTinyMCE(selector, additionalOptions = {}) {
     /**
      * Handles the initial load of a project if it's already active
      */
-    const handleInitialLoad = async () => {
+    const handleInitialLoad = () => {
         const openProjectItem = document.querySelector('.project-item.active');
         if (openProjectItem) {
-            await handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
-
-            // Perform the scroll after all resources are loaded
             window.addEventListener('load', () => {
-                const projectHeader = openProjectItem.querySelector('.project-header');
-                if (projectHeader) {
-                    scrollToProjectHeader(projectHeader);
-                }
+                handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
             });
         }
     };
@@ -440,6 +433,16 @@ function initTinyMCE(selector, additionalOptions = {}) {
     }
 
     /**
+     * Cleans up all active HLS players in the current DOM.
+     */
+    const cleanupActiveHLSPlayers = () => {
+        const activeVideos = document.querySelectorAll('video.hls-video');
+        activeVideos.forEach(video => {
+            destroyHLSPlayer(video);
+        });
+    };
+
+    /**
      * Handles HTMX beforeRequest event to close any open projects before making a new request
      * @param {Event} event - The HTMX event
      */
@@ -454,6 +457,14 @@ function initTinyMCE(selector, additionalOptions = {}) {
             // Close any open projects before proceeding
             closeAllOpenProjects();
         }
+    };
+
+    /**
+     * Handles HTMX beforeSwap event to perform cleanup before content is swapped.
+     * @param {Event} event - The HTMX event.
+     */
+    const handleHTMXBeforeSwap = (event) => {
+        cleanupActiveHLSPlayers();
     };
 
     /**
@@ -505,6 +516,17 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
+     * Handles HTMX load event for project items
+     * @param {Event} event - The HTMX event
+     */
+    const handleHTMXLoad = (event) => {
+        const { elt } = event.detail;
+        if (elt.classList.contains('project-item')) {
+            handleProjectContent(elt);
+        }
+    };
+
+    /**
      * Initializes all necessary elements and event listeners
      */
     const initialize = () => {
@@ -539,28 +561,65 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 }
             }
         });
+
+        // Event listener for close project buttons using event delegation
+        document.body.addEventListener('click', function(event) {
+            const target = event.target;
+            if (target.classList.contains('close-project')) {
+                event.preventDefault();
+                closeProject(target);
+            }
+        });
     };
 
-    // Event listeners
-    document.body.addEventListener('htmx:afterSwap', handleHTMXAfterSwap);
-    document.body.addEventListener('htmx:beforeRequest', handleHTMXBeforeRequest);
-    document.body.addEventListener('htmx:load', (event) => {
-        const { elt } = event.detail;
-        if (elt.classList.contains('project-item')) {
-            handleProjectContent(elt);
-        }
-    });
+    /**
+     * Closes a specific project item smoothly.
+     * @param {HTMLElement} button - The close button element.
+     * @returns {Promise} Resolves when the close transition is complete.
+     */
+    function closeProject(button) {
+        const projectItem = button.closest('.project-item');
+        if (projectItem) {
+            // Remove 'active' class to trigger any CSS transitions if applicable
+            projectItem.classList.remove('active');
 
-    // Add a 'load' event listener for scrolling to the active project
-    window.addEventListener('load', () => {
-        const openProjectItem = document.querySelector('.project-item.active');
-        if (openProjectItem) {
-            const projectHeader = openProjectItem.querySelector('.project-header');
-            if (projectHeader) {
-                scrollToProjectHeader(projectHeader);
+            // Find and destroy the HLS player if present
+            const video = projectItem.querySelector('video.project-video');
+            if (video) {
+                video.pause();
+                destroyHLSPlayer(video);
+            }
+
+            // Reset thumbnail position
+            const thumbnail = projectItem.querySelector('.thumbnail');
+            if (thumbnail) {
+                resetThumbnailPosition(thumbnail);
+            }
+
+            // Remove project details content
+            const projectDetails = projectItem.querySelector('.project-details');
+            if (projectDetails) {
+                projectDetails.innerHTML = '';
             }
         }
-    });
+    }
 
+    /**
+     * Handles window unload events to ensure all HLS players are destroyed.
+     */
+    const handleWindowUnload = () => {
+        cleanupActiveHLSPlayers();
+    };
+
+    // Attach the window unload event listener
+    window.addEventListener('beforeunload', handleWindowUnload);
+
+    // Event listeners for HTMX
+    document.body.addEventListener('htmx:afterSwap', handleHTMXAfterSwap);
+    document.body.addEventListener('htmx:beforeRequest', handleHTMXBeforeRequest);
+    document.body.addEventListener('htmx:load', handleHTMXLoad);
+    document.body.addEventListener('htmx:beforeSwap', handleHTMXBeforeSwap);
+
+    // Initialize on DOMContentLoaded
     document.addEventListener('DOMContentLoaded', initialize);
 })();
