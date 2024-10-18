@@ -109,6 +109,10 @@ a:hover {
     text-decoration: none;
 }
 
+#main-header a {
+    color: var(--primary-color);
+}
+
 #main-header .site-title {
     font-size: var(--font-size-large);
     margin: 0;
@@ -447,7 +451,10 @@ footer {
 }
 
 .project-name, .project-date {
-    padding-left: 25%;
+    padding-left: 35%;
+    @media(max-width: 900px) {
+        padding-left: 25%;
+    }
     @media(max-width: 768px) {
         padding-left: 1%;
     }
