@@ -128,7 +128,7 @@ async def read_root(
         # Fetch the current page of projects
         projects = db.query(Project)\
                      .filter(Project.show_project == True)\
-                     .order_by(Project.creation_date.desc())\
+                     .order_by(Project.creation_date.desc(), Project.id.desc())\
                      .offset(skip)\
                      .limit(limit)\
                      .all()

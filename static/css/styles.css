@@ -91,8 +91,7 @@ a:hover {
 
 /* =========================
    Header and Footer Content
-   ========================= */
-
+   =========================*/
 
 /* Specific styles for #main-header */
 #main-header {
@@ -101,17 +100,22 @@ a:hover {
     align-items: center;
     padding: var(--spacing-small) var(--spacing-medium);
     width: 100%;
-    background-color: var(--primary-color);
-    color: var(--background-color);
+    color: var(--secondary-color);
+    text-decoration: none;
+}
+
+#main-header * {
+    color: var(--secondary-color);
     text-decoration: none;
 }
 
 #main-header .site-title {
     font-size: var(--font-size-large);
     margin: 0;
-    color: var(--background-color);
-    text-decoration: none;
-    @media(max-width: 768px) {
+}
+
+@media(max-width: 768px) {
+    #main-header .site-title {
         font-size: var(--font-size-small);
     }
 }
@@ -123,18 +127,21 @@ a:hover {
 
 #main-header nav a,
 #main-header nav .vu-ja-de-btn {
-    color: var(--background-color);
     font-size: var(--font-size-medium);
     font-weight: 500;
     padding: var(--spacing-small);
     transition: color var(--transition-duration) var(--transition-ease);
-    text-decoration: none;
-    @media(max-width: 768px) {
+}
+
+@media(max-width: 768px) {
+    #main-header nav a,
+    #main-header nav .vu-ja-de-btn {
         font-size: var(--font-size-small);
     }
 }
 
-#main-header .site-title:hover , #main-header nav a:hover,
+#main-header .site-title:hover,
+#main-header nav a:hover,
 #main-header nav .vu-ja-de-btn:hover {
     color: var(--highlight-color);
 }
@@ -175,7 +182,6 @@ header:not(#main-header) .site-title:hover,
 header:not(#main-header) nav a:hover,
 header:not(#main-header) .vu-ja-de-btn:hover {
     color: var(--highlight-color);
-    text-decoration: none;
 }
 
 header:not(#main-header) .site-title {
@@ -328,6 +334,33 @@ footer {
     height: auto;
     object-fit: contain;
     background-color: #000;
+}
+
+/* =========================
+   Fade-In Animation for Project Items
+   ========================= */
+
+/* Keyframes for the fade-in and upward translation */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Initial hidden state for project items */
+.project-item {
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+/* Fade-in class to trigger the animation */
+.project-item.fade-in {
+    animation: fadeInUp 1s forwards;
 }
 
 /* =========================

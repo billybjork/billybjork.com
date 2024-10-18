@@ -62,6 +62,19 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
+     * Animates project items by adding the 'fade-in' class with staggered delays.
+     * @param {NodeList} items - The project items to animate.
+     */
+    const animateProjectItems = (items) => {
+        items.forEach((item, index) => {
+            // Set a staggered delay for each item (e.g., 100ms apart)
+            item.style.animationDelay = `${index * 100}ms`;
+            // Add the 'fade-in' class to trigger the animation
+            item.classList.add('fade-in');
+        });
+    };
+
+    /**
      * Sets up HLS video player for a given video element
      * @param {HTMLVideoElement} videoElement - The video element to initialize
      * @param {boolean} autoplay - Whether to autoplay the video
@@ -508,10 +521,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
             }
         }
 
-        // Initialize lazy loading for newly inserted thumbnails
+        // Initialize lazy loading for newly inserted thumbnails and videos
         initializeLazyThumbnails(elt);
-
-        // Initialize lazy loading for videos
         initializeLazyVideos(elt);
     };
 
@@ -570,6 +581,10 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 closeProject(target);
             }
         });
+
+        // Animate existing project items on initial load
+        const existingProjectItems = document.querySelectorAll('.project-item');
+        animateProjectItems(existingProjectItems);
     };
 
     /**
