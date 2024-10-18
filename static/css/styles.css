@@ -294,7 +294,7 @@ footer {
    Videos
    ========================= */
 
-   video {
+video {
     width: 100%;
     height: auto;
     max-width: none;
@@ -416,22 +416,31 @@ footer {
 
 .project-header {
     width: 100%;
+    max-width: 320px; /* Align with thumbnail width */
+    margin: 0 auto; /* Center align */
+    transform: translateX(-10px);
     background-color: transparent;
     color: var(--primary-color);
-    transition: color 0.3s ease;
+    transition: 
+        color 0.3s ease,
+        max-width 0.3s ease,
+        margin 0.3s ease;
     padding: var(--spacing-medium) 0;
     cursor: pointer;
     position: relative;
     scroll-margin-top: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
 }
 
 .project-item.active .project-header {
-    color: var(--primary-color);
+    max-width: 100%; /* Expand to full width of project-item */
+    margin-left: 0; /* Align to left edge */
 }
 
 .project-name {
     font-size: var(--font-size-base);
-    max-width: 80%;
     color: inherit;
     margin: 0;
     line-height: 1.2;
@@ -445,28 +454,31 @@ footer {
 .project-date {
     font-size: var(--font-size-small);
     color: inherit;
-    margin-right: var(--spacing-medium);
+    margin: 0;
     line-height: 1.2;
     white-space: nowrap;
 }
 
+/* Remove padding-left and align items to the left */
 .project-name, .project-date {
-    padding-left: 35%;
-    @media(max-width: 900px) {
-        padding-left: 25%;
-    }
-    @media(max-width: 768px) {
-        padding-left: 1%;
+    padding-left: 0;
+}
+
+@media(max-width: 768px) {
+    .project-header {
+        max-width: 100%; /* Full width on mobile */
+        padding: var(--spacing-small) 0;
     }
 }
 
 .project-item.active .project-name,
 .project-item.active .project-date {
     font-size: var(--font-size-large);
-    padding-left: 6%;
-    @media(max-width: 768px) {
-        font-size: var(--font-size-medium);
-    }
+    /* No padding-left needed as aligned to left */
+}
+
+.project-item.active .project-name {
+    font-size: var(--font-size-large);
 }
 
 .project-name, 
