@@ -4,27 +4,6 @@
 
 {% block content %}
 
-<p style="padding-left: 1%;">Some highlights...</p>
-
-<section class="video-reel">
-    {% if reel_video_link %}
-    <video 
-        id="reel-video-player"
-        class="hls-video lazy-video"
-        controls 
-        loop
-        playsinline 
-        preload="none"
-        data-hls-url="{{ reel_video_link }}"
-        poster="https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/Reel_thumb-1.webp">
-    </video>
-    {% endif %}
-</section>
-
-<p style="text-align: center; font-size: var(--font-size-large);"><strong>* * *</strong></p>
-
-<p style="padding-left: 1%;">Some projects I've worked on...</p>
-
 <section id="project-list">
     {% for project in projects %}
         {% set is_open = (open_project and open_project.slug == project.slug) %}

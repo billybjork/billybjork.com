@@ -69,7 +69,7 @@ h1, h2, h3, h4, h5, h6 {
 a {
     text-decoration: none;
     color: var(--highlight-color);
-    transition: color 0.3s ease;
+    transition: color var(--transition-duration) var(--transition-ease);
 }
 
 a:hover {
@@ -93,7 +93,66 @@ a:hover {
    Header and Footer Content
    ========================= */
 
-header {
+
+/* Specific styles for #main-header */
+#main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-small) var(--spacing-medium);
+    width: 100%;
+    background-color: var(--primary-color);
+    color: var(--background-color);
+    text-decoration: none;
+}
+
+#main-header .site-title {
+    font-size: var(--font-size-large);
+    margin: 0;
+    color: var(--background-color);
+    text-decoration: none;
+    @media(max-width: 768px) {
+        font-size: var(--font-size-small);
+    }
+}
+
+#main-header nav {
+    display: flex;
+    gap: var(--spacing-medium);
+}
+
+#main-header nav a,
+#main-header nav .vu-ja-de-btn {
+    color: var(--background-color);
+    font-size: var(--font-size-medium);
+    font-weight: 500;
+    padding: var(--spacing-small);
+    transition: color var(--transition-duration) var(--transition-ease);
+    text-decoration: none;
+    @media(max-width: 768px) {
+        font-size: var(--font-size-small);
+    }
+}
+
+#main-header .site-title:hover , #main-header nav a:hover,
+#main-header nav .vu-ja-de-btn:hover {
+    color: var(--highlight-color);
+}
+
+#main-header .vu-ja-de-btn {
+    display: inline-flex;
+    align-items: center;
+}
+
+#main-header .vu-ja-de-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: var(--spacing-small);
+    flex-shrink: 0;
+}
+
+/* General header styles for other headers */
+header:not(#main-header) {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -101,31 +160,30 @@ header {
     width: 100vw;
     margin-left: calc(-50vw + 50%);
     margin-right: calc(-50vw + 50%);
-    background-color: var(--primary-color);
 }
 
-header .site-title,
-header nav a,
-header .vu-ja-de-btn {
+header:not(#main-header) .site-title,
+header:not(#main-header) nav a,
+header:not(#main-header) .vu-ja-de-btn {
     color: var(--background-color);
     text-decoration: none;
-    transition: color 0.3s ease;
+    transition: color var(--transition-duration) var(--transition-ease);
     font-weight: 700;
 }
 
-header .site-title:hover,
-header nav a:hover,
-header .vu-ja-de-btn:hover {
+header:not(#main-header) .site-title:hover,
+header:not(#main-header) nav a:hover,
+header:not(#main-header) .vu-ja-de-btn:hover {
     color: var(--highlight-color);
     text-decoration: none;
 }
 
-header .site-title {
+header:not(#main-header) .site-title {
     font-size: var(--font-size-large);
     margin-bottom: var(--spacing-small);
 }
 
-header nav {
+header:not(#main-header) nav {
     display: flex;
     align-items: center;
     gap: var(--spacing-medium);
@@ -133,75 +191,46 @@ header nav {
     justify-content: flex-end;
 }
 
-header nav a,
-header nav .vu-ja-de-btn {
+header:not(#main-header) nav a,
+header:not(#main-header) nav .vu-ja-de-btn {
     font-size: var(--font-size-medium);
     padding: var(--spacing-small);
 }
 
-header .vu-ja-de-btn {
+header:not(#main-header) .vu-ja-de-btn {
     display: inline-flex;
     align-items: center;
 }
 
-header .vu-ja-de-icon {
+header:not(#main-header) .vu-ja-de-icon {
     width: 16px;
     height: 16px;
     margin-right: var(--spacing-small);
     flex-shrink: 0;
 }
 
-/* Styles specific to #main-header */
-
-#main-header {
-    align-items: center;
-    width: auto;
-    max-width: 20em;
-    margin: var(--spacing-large) auto;
-    border-radius: 15px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    padding: var(--spacing-medium);
-    background-color: var(--primary-color);
-}
-
-#main-header .site-title {
-    text-align: center;
-}
-
-#main-header nav {
-    justify-content: center;
-    width: auto;
-}
-
-#main-header nav a,
-#main-header nav .vu-ja-de-btn {
-    font-size: var(--font-size-medium);
-    padding: var(--spacing-small);
-}
-
+/* Footer Styles */
 footer {
     padding: var(--spacing-small);
     text-align: center;
 }
 
 .social-links ul {
-    padding: 0;
     list-style: none;
+    padding: 0;
+    margin: 0;
     display: flex;
     justify-content: center;
-    gap: var(--spacing-medium);
+    gap: var(--spacing-small);
 }
 
-.social-links a {
-    font-size: var(--font-size-large);
+.social-links li a {
     color: var(--primary-color);
-    transition: color 0.3s ease;
-    display: inline-flex;
-    align-items: center;
-    text-decoration: none;
+    font-size: 1.2em;
+    transition: color var(--transition-duration) var(--transition-ease);
 }
 
-.social-links a:hover {
+.social-links li a:hover {
     color: var(--highlight-color);
 }
 
@@ -394,7 +423,7 @@ footer {
 .project-item.active .project-name,
 .project-item.active .project-date {
     font-size: var(--font-size-large);
-    padding-left: 2%;
+    padding-left: 6%;
     @media(max-width: 768px) {
         font-size: var(--font-size-medium);
     }
