@@ -219,7 +219,6 @@ header:not(#main-header) .vu-ja-de-icon {
     flex-shrink: 0;
 }
 
-/* Footer Styles */
 footer {
     padding: var(--spacing-small);
     text-align: center;
@@ -362,7 +361,6 @@ video {
    Fade-In Animation for Project Items
    ========================= */
 
-/* Keyframes for the fade-in and upward translation */
 @keyframes fadeInUp {
     from {
         opacity: 0;
@@ -374,15 +372,15 @@ video {
     }
 }
 
-/* Initial hidden state for project items */
-.project-item {
-    opacity: 0;
-    transform: translateY(20px);
-}
-
-/* Fade-in class to trigger the animation */
 .project-item.fade-in {
     animation: fadeInUp 1s forwards;
+}
+
+/* Override animation */
+   .project-item.no-fade {
+    opacity: 1;
+    transform: translateY(0);
+    transition: none;
 }
 
 /* =========================
@@ -400,7 +398,7 @@ video {
 
 .project-item {
     opacity: 0; /* Initial hidden state */
-    transform: translateY(20px); /* Initial position */
+    transform: translateY(20px);
     position: relative;
     width: 100%;
     max-width: 80vh;
@@ -411,17 +409,15 @@ video {
     border-radius: 8px;
     padding: 1rem;
     background-color: transparent;
-    overflow: hidden; /* Ensures content doesn't overflow during transitions */
+    overflow: hidden;
     transition: 
         background-color 0.3s var(--transition-ease), 
         border-radius 0.3s var(--transition-ease), 
         box-shadow 0.3s var(--transition-ease),
         transform 0.3s var(--transition-ease),
         opacity 0.3s var(--transition-ease);
-    /* Remove conflicting opacity and transform */
 }
 
-/* Fade-in animation */
 .project-item.fade-in {
     animation: fadeInUp 1s forwards;
 }
@@ -437,7 +433,6 @@ video {
     }
 }
 
-/* Active state styles */
 .project-item.active {
     background-color: var(--secondary-color);
     border-radius: 12px;
@@ -452,8 +447,8 @@ video {
 
 .project-header {
     width: 100%;
-    max-width: 320px; /* Align with thumbnail width */
-    margin: 0 auto; /* Center align */
+    max-width: 320px; /* Depends on thumbnail width */
+    margin: 0 auto;
     transform: translateX(-10px);
     background-color: transparent;
     color: var(--primary-color);
@@ -471,8 +466,8 @@ video {
 }
 
 .project-item.active .project-header {
-    max-width: 100%; /* Expand to full width of project-item */
-    margin-left: 0; /* Align to left edge */
+    max-width: 100%;
+    margin-left: 0;
 }
 
 .project-name {
@@ -495,14 +490,13 @@ video {
     white-space: nowrap;
 }
 
-/* Remove padding-left and align items to the left */
 .project-name, .project-date {
     padding-left: 0;
 }
 
 @media(max-width: 768px) {
     .project-header {
-        max-width: 100%; /* Full width on mobile */
+        max-width: 100%;
         padding: var(--spacing-small) 0;
     }
 }
@@ -510,7 +504,6 @@ video {
 .project-item.active .project-name,
 .project-item.active .project-date {
     font-size: var(--font-size-large);
-    /* No padding-left needed as aligned to left */
 }
 
 .project-item.active .project-name {
@@ -571,7 +564,7 @@ video {
 
 .project-item.active .project-details {
     opacity: 1;
-    max-height: 5000px; /* Adjust based on your content's maximum height */
+    max-height: 5000px; /* May need to increase or change */
     transform: translateY(0);
 }
 

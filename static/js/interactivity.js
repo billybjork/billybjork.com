@@ -564,7 +564,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
         // Detect if the current path is the root URL
         const isRoot = window.location.pathname === '/';
         const projectList = document.getElementById('project-list');
-
+    
         if (isRoot) {
             // Animate existing project items on initial load only on root URL
             const existingProjectItems = document.querySelectorAll('.project-item');
