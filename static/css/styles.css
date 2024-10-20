@@ -4,9 +4,9 @@
 
    :root {
     --primary-color: #e0e0e0;
-    --secondary-color: #434343;
+    --secondary-color: #2e3233;
     --highlight-color: #ff8940;
-    --background-color: #1a1a1a;
+    --background-color: #221f1f;
     --font-size-base: 16px;
     --font-size-small: 0.7em;
     --font-size-medium: 1em;
@@ -97,6 +97,9 @@ a:hover {
     width: 100%;
     color: var(--secondary-color);
     text-decoration: none;
+    @media(max-width: 768px) {
+        padding: var(--spacing-small) var(--spacing-medium) var(--spacing-small) var(--spacing-medium);
+    }
 }
 
 /* Remove default padding/margin on h1 */
@@ -123,8 +126,8 @@ a:hover {
     font-size: var(--font-size-large);
     margin: 0;
     @media(max-width: 768px) {
-            font-size: var(--font-size-small);
-        }
+        font-size: var(--font-size-small);
+    }
 }
 
 #main-header nav {
@@ -673,6 +676,10 @@ video {
     opacity: 0;
     animation: fadeIn 0.7s ease-in-out forwards;
     animation-delay: 0.15s;
+}
+
+.about-details li {
+    color: #a5a5a5
 }
 
 /* =========================

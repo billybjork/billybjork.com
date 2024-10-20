@@ -3,9 +3,9 @@
     {% include "project.html" %}
 {% endfor %}
 
-{% if has_more %}
-    <div 
-        id="infinite-scroll-sentinel-{{ page }}"
+<div 
+    id="infinite-scroll-sentinel-{{ page }}"
+    {% if has_more %}
         data-page="{{ page + 1 }}"
         hx-get="/?page={{ page + 1 }}" 
         hx-trigger="revealed" 
@@ -14,5 +14,7 @@
         style="height: 100px; text-align: center; padding: 20px;">
         <div class="spinner"></div>
         <p>Loading more projects...</p>
-    </div>
-{% endif %}
+    {% else %}
+        style="height: 100px; text-align: center; padding: 20px; display: none;">
+    {% endif %}
+</div>

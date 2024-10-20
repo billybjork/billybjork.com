@@ -321,12 +321,12 @@
      */
     const handleHTMXAfterSwap = (event) => {
         const { elt } = event.detail;
-
+    
         // Check if the swapped element is an infinite scroll sentinel
         if (elt.id && elt.id.startsWith('infinite-scroll-sentinel')) {
             // Select all new project items that do not have 'fade-in' or 'no-fade' classes
             const newProjectItems = elt.parentElement.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
-
+    
             if (window.location.pathname === '/') {
                 // Animate the newly loaded project items
                 if (typeof animateProjectItems === 'function') {
