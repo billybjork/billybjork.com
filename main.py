@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.status import HTTP_404_NOT_FOUND, HTTP_500_INTERNAL_SERVER_ERROR
+from starlette.status import HTTP_404_NOT_FOUND, HTTP_401_UNAUTHORIZED, HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -404,7 +404,15 @@ async def favicon():
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == HTTP_404_NOT_FOUND:
         return templates.TemplateResponse("404.html", {"request": request}, status_code=HTTP_404_NOT_FOUND)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    elif exc.status_code == HTTP_401_UNAUTHORIZED:
+        # Preserve the WWW-Authenticate header for 401 errors
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=exc.headers
+        )
+    else:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 @app.exception_handler(500)
 async def server_error_handler(request: Request, exc: Exception):
