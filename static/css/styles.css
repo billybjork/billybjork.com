@@ -93,7 +93,7 @@ a:hover {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    padding: var(--spacing-small) var(--spacing-medium);
+    padding: var(--spacing-medium);
     width: 100%;
     color: var(--secondary-color);
     text-decoration: none;
@@ -183,8 +183,8 @@ footer {
 
 .pinned-icon {
     position: absolute;
-    top: 2.5em;
-    right: 0.5em;
+    top: var(--spacing-large);
+    right: var(--spacing-small);
     font-size: var(--font-size-medium);
     color: var(--highlight-color);
     opacity: 1;
@@ -351,7 +351,7 @@ video {
     transform: translateY(20px);
     position: relative;
     width: 100%;
-    max-width: 90vw;
+    max-width: 70vw;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -366,6 +366,9 @@ video {
         box-shadow 0.3s var(--transition-ease),
         transform 0.3s var(--transition-ease),
         opacity 0.3s var(--transition-ease);
+    @media (max-width: 768px) {
+        max-width: 90vw;
+    }
 }
 
 .project-item.fade-in {
@@ -388,26 +391,23 @@ video {
     display: flex;
     flex-direction: column;
     position: relative;
-    align-items: flex-start;
+    align-items: stretch; /* Allows children to take full width */
     width: 100%;
-    max-width: 320px; /* Depends on thumbnail width */
+    max-width: 320px; /* Adjust as needed */
     background-color: transparent;
     color: var(--primary-color);
     padding: 0 0 var(--spacing-medium) 0;
-    margin: 0 calc(-50vw + 50%);
     transform: translateX(-10px);
     scroll-margin-top: 40px;
     cursor: pointer;
     transition: 
         color 0.3s ease,
         max-width 0.3s ease,
-        margin 0.3s ease,
         transform 0.3s ease;
 }
 
 .project-item.active .project-header {
-    max-width: 100%;
-    margin-left: 0;
+    max-width: 95%;
 }
 
 /* =========================
@@ -425,24 +425,17 @@ video {
 }
 
 .project-name {
-    transform: translateZ(0) scale(0.7);
+    font-size: var(--font-size-medium);
+    width: 90%;
     transform-origin: left center;
     backface-visibility: hidden;
 }
 
 .project-date {
-    transform: translateZ(0) scale(0.7) translateY(15px); /* Slightly slide down */
+    transform: translateZ(0) scale(0.7) translateY(10px); /* Slightly slide down */
     transform-origin: left center;
     backface-visibility: hidden;
 }
-
-.project-item.active .project-name {
-    transform: translateZ(0) scale(1.0); /* For GPU acceleration */
-}
-
-.project-item.active .project-date {
-    transform: translateZ(0) scale(1.0) translateY(10px); /* Maintain slide down in active state */
-}   
 
 /* =========================
    Close button
@@ -500,7 +493,7 @@ video {
    Project links
    ========================= */
 
-.project-links ul {
+   .project-links ul {
     list-style-type: none;
     display: flex;
     justify-content: flex-end;
@@ -510,7 +503,7 @@ video {
 }
 
 .project-links li {
-    margin-right: 3%;
+    margin-right: var(--spacing-medium);
 }
 
 .project-links li:last-child {
@@ -528,7 +521,9 @@ video {
     cursor: pointer;
     padding: 0;
     text-decoration: none;
-    transition: color 0.3s ease, transform 0.3s ease;
+    transition:
+        color 0.3s ease,
+        transform 0.3s ease;
 }
 
 .project-links a:hover,
@@ -536,67 +531,36 @@ video {
 .project-links a i:hover,
 .project-links button i:hover {
     color: var(--highlight-color);
+    transition:
+    color 0.3s ease;
 }
 
-/* =========================
-   About page
-   ========================= */
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+/* Override for .project-links to ensure .copy-text-link styles do not apply */
+.project-links a,
+.project-links button,
+.project-links a i,
+.project-links button i {
+    color: var(--primary-color) !important;
+    font-weight: bold !important;
+    text-decoration: none !important;
+    background: none !important;
+    padding: 0 !important;
+    border: none !important;
 }
 
-.about-content {
-    max-width: 800px;
-    padding: 1rem;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    @media (max-width: 768px) {
-        padding: 0px;
-    }
-}
-
-.about-content h4, ul {
-    text-align: left;
-    width: 100%;
-    margin: 0;
-}
-
-.about-photo-container {
-    position: relative;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    margin: 0 auto;
-    margin-bottom: 2rem;
-}
-
-.about-photo {
-    width: 50%;
-    height: auto;
-    object-fit: cover;
-    opacity: 0;
-    animation: fadeIn 0.5s ease-in-out forwards;
-}
-
-.about-details {
-    opacity: 0;
-    animation: fadeIn 0.7s ease-in-out forwards;
-    animation-delay: 0.15s;
+.project-links a:hover,
+.project-links button:hover,
+.project-links a i:hover,
+.project-links button i:hover {
+    color: var(--highlight-color) !important;
+    transition: color 0.3s ease;
 }
 
 /* =========================
    Copy link interactions
    ========================= */
 
-   @keyframes fadeInOut {
+@keyframes fadeInOut {
     0%, 100% { opacity: 0; }
     10%, 90% { opacity: 1; }
 }
@@ -652,6 +616,60 @@ video {
 .copy-text-link:hover::after {
     transform: scaleX(1);
     transform-origin: left;
+}
+
+/* =========================
+   About page
+   ========================= */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.about-content {
+    max-width: 800px;
+    padding: 1rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    @media (max-width: 768px) {
+        padding: 0px;
+    }
+}
+
+.about-content h4, ul {
+    text-align: left;
+    width: 100%;
+    margin: 0;
+}
+
+.about-photo-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 0 auto;
+    margin-bottom: 2rem;
+}
+
+.about-photo {
+    width: 50%;
+    height: auto;
+    object-fit: cover;
+    opacity: 0;
+    animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+.about-details {
+    opacity: 0;
+    animation: fadeIn 0.7s ease-in-out forwards;
+    animation-delay: 0.15s;
 }
 
 /* =========================
