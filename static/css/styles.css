@@ -89,19 +89,26 @@ a:hover {
     display: block;
 }
 
-/* =========================
-   Header and Footer Content
-   =========================*/
-
 /* Specific styles for #main-header */
 #main-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
     padding: var(--spacing-small) var(--spacing-medium);
     width: 100%;
     color: var(--secondary-color);
     text-decoration: none;
+}
+
+/* Remove default padding/margin on h1 */
+#main-header h1 {
+    margin: 0; 
+    padding: 0;
+}
+
+#main-header h1 a {
+    display: inline-block;
+    vertical-align: bottom;
 }
 
 #main-header * {
@@ -116,12 +123,9 @@ a:hover {
 #main-header .site-title {
     font-size: var(--font-size-large);
     margin: 0;
-}
-
-@media(max-width: 768px) {
-    #main-header .site-title {
-        font-size: var(--font-size-small);
-    }
+    @media(max-width: 768px) {
+            font-size: var(--font-size-small);
+        }
 }
 
 #main-header nav {
@@ -137,84 +141,15 @@ a:hover {
     transition: color var(--transition-duration) var(--transition-ease);
 }
 
-@media(max-width: 768px) {
-    #main-header nav a,
-    #main-header nav .vu-ja-de-btn {
-        font-size: var(--font-size-small);
-    }
-}
-
 #main-header .site-title:hover,
 #main-header nav a:hover,
 #main-header nav .vu-ja-de-btn:hover {
     color: var(--highlight-color);
 }
 
-#main-header .vu-ja-de-btn {
-    display: inline-flex;
-    align-items: center;
-}
-
 #main-header .vu-ja-de-icon {
-    width: 16px;
-    height: 16px;
-    margin-right: var(--spacing-small);
-    flex-shrink: 0;
-}
-
-/* General header styles for other headers */
-header:not(#main-header) {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    padding: var(--spacing-medium);
-    width: 100vw;
-    margin-left: calc(-50vw + 50%);
-    margin-right: calc(-50vw + 50%);
-}
-
-header:not(#main-header) .site-title,
-header:not(#main-header) nav a,
-header:not(#main-header) .vu-ja-de-btn {
-    color: var(--background-color);
-    text-decoration: none;
-    transition: color var(--transition-duration) var(--transition-ease);
-    font-weight: 700;
-}
-
-header:not(#main-header) .site-title:hover,
-header:not(#main-header) nav a:hover,
-header:not(#main-header) .vu-ja-de-btn:hover {
-    color: var(--highlight-color);
-}
-
-header:not(#main-header) .site-title {
-    font-size: var(--font-size-large);
-    margin-bottom: var(--spacing-small);
-}
-
-header:not(#main-header) nav {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-medium);
-    width: 100%;
-    justify-content: flex-end;
-}
-
-header:not(#main-header) nav a,
-header:not(#main-header) nav .vu-ja-de-btn {
-    font-size: var(--font-size-medium);
-    padding: var(--spacing-small);
-}
-
-header:not(#main-header) .vu-ja-de-btn {
-    display: inline-flex;
-    align-items: center;
-}
-
-header:not(#main-header) .vu-ja-de-icon {
-    width: 16px;
-    height: 16px;
+    width: var(--font-size-base);
+    height: var(--font-size-base);
     margin-right: var(--spacing-small);
     flex-shrink: 0;
 }
@@ -249,7 +184,7 @@ footer {
 
 .pinned-icon {
     position: absolute;
-    top: 1.5em;
+    top: 2.5em;
     right: 0.5em;
     font-size: var(--font-size-medium);
     color: var(--highlight-color);
@@ -437,17 +372,6 @@ video {
     animation: fadeInUp 1s forwards;
 }
 
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .project-item.active {
     background-color: var(--secondary-color);
     border-radius: 12px;
@@ -461,23 +385,24 @@ video {
    ========================= */
 
 .project-header {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    align-items: flex-start;
     width: 100%;
     max-width: 320px; /* Depends on thumbnail width */
-    margin: 0 auto;
-    transform: translateX(-10px);
     background-color: transparent;
     color: var(--primary-color);
+    padding: var(--spacing-medium) 0;
+    margin: 0 calc(-50vw + 50%);
+    transform: translateX(-10px);
+    scroll-margin-top: 40px;
+    cursor: pointer;
     transition: 
         color 0.3s ease,
         max-width 0.3s ease,
-        margin 0.3s ease;
-    padding: var(--spacing-medium) 0;
-    cursor: pointer;
-    position: relative;
-    scroll-margin-top: 40px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+        margin 0.3s ease,
+        transform 0.3s ease;
 }
 
 .project-item.active .project-header {
@@ -485,55 +410,39 @@ video {
     margin-left: 0;
 }
 
-.project-name {
-    font-size: var(--font-size-base);
-    color: inherit;
-    margin: 0;
-    line-height: 1.2;
-    font-weight: bold;
-    text-align: left;
-    white-space: normal;
-    overflow: visible;
-    flex-grow: 1;
-}
-
-.project-date {
-    font-size: var(--font-size-small);
-    color: inherit;
-    margin: 0;
-    line-height: 1.2;
-    white-space: nowrap;
-}
-
-.project-name, .project-date {
-    padding-left: 0;
-}
-
-@media(max-width: 768px) {
-    .project-header {
-        max-width: 100%;
-        padding: var(--spacing-small) 0;
-    }
-}
-
-.project-item.active .project-name,
-.project-item.active .project-date {
-    font-size: var(--font-size-large);
-}
-
-.project-item.active .project-name {
-    font-size: var(--font-size-large);
-}
+/* =========================
+   Project-name and Project-date
+   ========================= */
 
 .project-name, 
 .project-date, 
 .close-project {
-    will-change: padding-left, font-size, opacity;
-    transition: font-size 0.3s ease-in-out,
-                padding-left 0.3s ease-in-out;
+    will-change: transform, opacity;
+    transition: 
+        transform 0.3s ease-in-out,
+        padding-left 0.3s ease-in-out,
+        opacity 0.3s ease-in-out;
 }
 
-/* ====== Close button ====== */
+.project-name, 
+.project-date {
+    transform: translateZ(0) scale(0.7);
+    transform-origin: left center;
+    backface-visibility: hidden;
+}
+
+.project-item.active .project-name,
+.project-item.active .project-date {
+    transform: translateZ(0) scale(0.9); /* For GPU acceleration */
+}
+
+.project-date {
+    transform: translateY(0.5em);
+}
+
+/* =========================
+   Close button
+   ========================= */
 
 .close-project {
     position: absolute;
@@ -546,6 +455,7 @@ video {
     cursor: pointer;
     opacity: 0;
     visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
 }
 
 .project-item.active .close-project {
@@ -556,10 +466,6 @@ video {
 .close-project:hover {
     color: var(--highlight-color);
     transform: scale(1.3);
-    transition:
-        opacity 0.3s ease,
-        visibility 0.3s ease,
-        transform 0.3s ease;
 }
 
 /* =========================
@@ -666,7 +572,7 @@ video {
 }
 
 .about-photo {
-    width: 25%;
+    width: 50%;
     height: auto;
     object-fit: cover;
     opacity: 0;
