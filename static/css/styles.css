@@ -429,6 +429,9 @@ video {
     width: 90%;
     transform-origin: left center;
     backface-visibility: hidden;
+    @media (max-width: 768px) {
+        font-size: var(--font-size-large);
+    }
 }
 
 .project-date {
@@ -456,6 +459,9 @@ video {
         opacity 0.3s ease,
         visibility 0.3s ease,
         transform 0.3s ease;
+    @media (max-width: 768px) {
+        right: var(--spacing-small);
+    }
 }
 
 .project-item.active .close-project {
