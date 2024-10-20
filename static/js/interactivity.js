@@ -95,8 +95,10 @@ function initTinyMCE(selector, additionalOptions = {}) {
             const initializeVideo = () => {
                 if (autoplay) {
                     videoElement.play().catch(e => {
-                        console.error("Autoplay failed:", e);
-                        // Optional: Show play button or user prompt here
+                        if (e.name !== 'AbortError') { // Only log errors that are not AbortError
+                            console.error("Autoplay failed:", e);
+                        }
+                        // Optionally, handle AbortError differently if needed
                     });
                 }
                 resolve();
@@ -111,8 +113,32 @@ function initTinyMCE(selector, additionalOptions = {}) {
                     hls.on(Hls.Events.MANIFEST_PARSED, initializeVideo);
                 });
                 hls.on(Hls.Events.ERROR, (event, data) => {
-                    console.error('HLS.js error:', data);
-                    reject(data);
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.error('Fatal network error encountered, trying to recover');
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.error('Fatal media error encountered, trying to recover');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                // Cannot recover
+                                console.error('Fatal error encountered, destroying HLS instance:', data);
+                                hls.destroy();
+                                reject(data);
+                                break;
+                        }
+                    } else {
+                        // Non-fatal error
+                        if (data.details === 'bufferAppendError') {
+                            // Ignore bufferAppendError or handle differently
+                            console.warn('HLS.js bufferAppendError encountered and ignored:', data);
+                        } else {
+                            console.warn('HLS.js non-fatal error:', data);
+                        }
+                    }
                 });
             } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
                 videoElement.src = streamUrl;

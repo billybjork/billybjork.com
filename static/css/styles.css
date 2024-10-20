@@ -640,7 +640,7 @@ video {
 
 .about-content {
     max-width: 800px;
-    padding: 2rem;
+    padding: 1rem;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -658,14 +658,15 @@ video {
 
 .about-photo-container {
     position: relative;
-    width: 85%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
     margin: 0 auto;
     margin-bottom: 2rem;
 }
 
 .about-photo {
-    position: relative;
-    width: 50%;
+    width: 25%;
     height: auto;
     object-fit: cover;
     opacity: 0;
