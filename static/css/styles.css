@@ -10,7 +10,7 @@
     --font-size-base: 16px;
     --font-size-small: 0.7em;
     --font-size-medium: 1em;
-    --font-size-large: 1.2em;
+    --font-size-large: 1.3em;
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
@@ -93,7 +93,7 @@ a:hover {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    padding: var(--spacing-medium);
+    padding: var(--spacing-medium) var(--spacing-large) var(--spacing-medium) var(--spacing-large);
     width: 100%;
     color: var(--secondary-color);
     text-decoration: none;
@@ -183,7 +183,7 @@ footer {
 
 .pinned-icon {
     position: absolute;
-    top: var(--spacing-large);
+    top: var(--spacing-medium);
     right: var(--spacing-small);
     font-size: var(--font-size-medium);
     color: var(--highlight-color);
@@ -429,9 +429,6 @@ video {
     width: 90%;
     transform-origin: left center;
     backface-visibility: hidden;
-    @media (max-width: 768px) {
-        font-size: var(--font-size-large);
-    }
 }
 
 .project-date {
