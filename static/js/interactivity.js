@@ -63,14 +63,17 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
     /**
      * Animates project items by adding the 'fade-in' class with staggered delays.
-     * @param {NodeList} items - The project items to animate.
+     * @param {NodeList | Array} items - The project items to animate.
      */
     const animateProjectItems = (items) => {
         items.forEach((item, index) => {
-            // Set a staggered delay for each item (e.g., 100ms apart)
-            item.style.animationDelay = `${index * 100}ms`;
-            // Add the 'fade-in' class to trigger the animation
-            item.classList.add('fade-in');
+            // Avoid re-animating items that already have the fade-in or no-fade class
+            if (!item.classList.contains('fade-in') && !item.classList.contains('no-fade')) {
+                // Set a staggered delay for each item (e.g., 150ms apart)
+                item.style.animationDelay = `${index * 100}ms`;
+                // Add the 'fade-in' class to trigger the animation
+                item.classList.add('fade-in');
+            }
         });
     };
 
@@ -481,12 +484,29 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
-     * Handles HTMX afterSwap event for initializing newly loaded content
+     * Handles HTMX afterSwap event to animate newly loaded project items
      * @param {Event} event - The HTMX event
      */
     const handleHTMXAfterSwap = (event) => {
         const { elt } = event.detail;
 
+        // Check if the swapped element is an infinite scroll sentinel
+        if (elt.id && elt.id.startsWith('infinite-scroll-sentinel')) {
+            // Select all new project items that do not have 'fade-in' or 'no-fade' classes
+            const newProjectItems = elt.parentElement.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
+
+            if (window.location.pathname === '/') {
+                // Animate the newly loaded project items
+                animateProjectItems(newProjectItems);
+            } else {
+                // Ensure newly loaded project items are visible without animation
+                newProjectItems.forEach(item => {
+                    item.classList.add('no-fade');
+                });
+            }
+        }
+
+        // Existing logic for handling project-details swaps
         if (elt.classList.contains('project-details')) {
             const projectItem = elt.closest('.project-item');
             if (elt.innerHTML.trim() !== '') {
@@ -541,6 +561,22 @@ function initTinyMCE(selector, additionalOptions = {}) {
      * Initializes all necessary elements and event listeners
      */
     const initialize = () => {
+        // Detect if the current path is the root URL
+        const isRoot = window.location.pathname === '/';
+        const projectList = document.getElementById('project-list');
+
+        if (isRoot) {
+            // Animate existing project items on initial load only on root URL
+            const existingProjectItems = document.querySelectorAll('.project-item');
+            animateProjectItems(existingProjectItems);
+        } else {
+            // Directly show project items without animation
+            const existingProjectItems = document.querySelectorAll('.project-item');
+            existingProjectItems.forEach(item => {
+                item.classList.add('no-fade');
+            });
+        }
+
         // Observe thumbnails for animation
         document.querySelectorAll('.thumbnail').forEach(thumbnail => {
             observer.observe(thumbnail); // Start observing each thumbnail
@@ -581,10 +617,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 closeProject(target);
             }
         });
-
-        // Animate existing project items on initial load
-        const existingProjectItems = document.querySelectorAll('.project-item');
-        animateProjectItems(existingProjectItems);
     };
 
     /**

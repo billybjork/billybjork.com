@@ -399,6 +399,8 @@ video {
 }
 
 .project-item {
+    opacity: 0; /* Initial hidden state */
+    transform: translateY(20px); /* Initial position */
     position: relative;
     width: 100%;
     max-width: 80vh;
@@ -408,8 +410,6 @@ video {
     margin-bottom: var(--spacing-large);
     border-radius: 8px;
     padding: 1rem;
-    transform: scale(1);
-    opacity: 0.95;
     background-color: transparent;
     overflow: hidden; /* Ensures content doesn't overflow during transitions */
     transition: 
@@ -418,8 +418,26 @@ video {
         box-shadow 0.3s var(--transition-ease),
         transform 0.3s var(--transition-ease),
         opacity 0.3s var(--transition-ease);
+    /* Remove conflicting opacity and transform */
 }
 
+/* Fade-in animation */
+.project-item.fade-in {
+    animation: fadeInUp 1s forwards;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Active state styles */
 .project-item.active {
     background-color: var(--secondary-color);
     border-radius: 12px;
@@ -669,6 +687,8 @@ video {
     z-index: 1000;
     opacity: 0;
     animation: fadeInOut 4s ease-in-out;
+    display: inline-block;
+    white-space: nowrap;
 }
 
 .copy-text-link {
