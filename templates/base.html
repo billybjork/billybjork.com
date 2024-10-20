@@ -14,7 +14,7 @@
     <link rel="icon" type="image/x-icon" href="{{ request.url_for('static', path='assets/favicon.ico') }}">
     {% block additional_head %}{% endblock %}
 </head>
-<body>
+<body data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}">
     <header id="main-header">
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>

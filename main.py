@@ -310,18 +310,18 @@ async def read_project(
                 # Return empty content for closing to prevent thumbnail duplication
                 return Response(content='', status_code=200)
         
-        # For direct navigation, render the full index page with the project open
-        projects = db.query(Project).filter(Project.show_project == True).order_by(Project.creation_date.desc()).all()
-        for p in projects:
-            p.formatted_date = format_date(p.creation_date)
-        
+        # For direct navigation, render the page with only the project
+        # Set a flag to indicate that we're in isolation mode
+        projects = [project]
+        isolation_mode = True  # New flag
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
             "open_project": project if is_open else None,
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
-            "general_info": general_info
+            "general_info": general_info,
+            "isolation_mode": isolation_mode  # Pass the flag to the template
         })
     except HTTPException as http_exc:
         raise http_exc  # Let FastAPI handle HTTP exceptions

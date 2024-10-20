@@ -8,10 +8,10 @@
     {% set open_project = open_project if open_project is defined else None %}
     {% for project in projects %}
         {% set is_open = (open_project and open_project.slug == project.slug) %}
-        {% include "project.html" %}
+        {% include "project.html" with context %}
     {% endfor %}
-
-    {% if has_more %}
+    
+    {% if not isolation_mode and has_more %}
         <div 
             id="infinite-scroll-sentinel-1"
             data-page="{{ page + 1 }}"

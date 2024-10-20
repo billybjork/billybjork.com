@@ -358,7 +358,7 @@ video {
 }
 
 /* =========================
-   Fade-In Animation for Project Items
+   Fade-In/Out Animations for Project Items
    ========================= */
 
 @keyframes fadeInUp {
@@ -381,6 +381,21 @@ video {
     opacity: 1;
     transform: translateY(0);
     transition: none;
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+}
+
+.project-item.fade-out {
+    animation: fadeOut 0.25s forwards;
 }
 
 /* =========================
@@ -650,7 +665,7 @@ video {
 
 .about-photo {
     position: relative;
-    width: 100%;
+    width: 50%;
     height: auto;
     object-fit: cover;
     opacity: 0;

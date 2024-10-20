@@ -199,7 +199,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
      * @param {HTMLElement} root - The root element to search for lazy videos
      */
     const initializeLazyVideos = (root = document) => {
-        const lazyVideos = root.querySelectorAll('video.lazy-video');
+        const lazyVideos = root.querySelectorAll('video.lazy-video, video.project-video');
 
         if ('IntersectionObserver' in window) {
             const videoObserver = new IntersectionObserver((entries, observer) => {
@@ -295,13 +295,13 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
-     * Handles the opening or closing of project content
-     * @param {HTMLElement} projectItem - The project item element
-     * @param {boolean} smoothScroll - Whether to scroll smoothly (default: true)
-     */
+    * Handles the opening or closing of project content
+    * @param {HTMLElement} projectItem - The project item element
+    * @param {boolean} smoothScroll - Whether to scroll smoothly (default: true)
+    */
     const handleProjectContent = async (projectItem, smoothScroll = true) => {
         try {
-            const video = projectItem.querySelector('video.project-video');
+            const video = projectItem.querySelector('video.project-video, video.lazy-video');
             const thumbnail = projectItem.querySelector('.thumbnail');
 
             if (projectItem.classList.contains('active')) {
@@ -312,7 +312,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
                 // Scroll to the project header using the custom function
                 const projectHeader = projectItem.querySelector('.project-header');
-                if (projectHeader) {
+                if (projectHeader && smoothScroll) {
                     scrollToProjectHeader(projectHeader);
                 }
 
@@ -331,18 +331,6 @@ function initTinyMCE(selector, additionalOptions = {}) {
             updateThumbnails();
         } catch (error) {
             console.error('Error in handleProjectContent:', error);
-        }
-    };
-
-    /**
-     * Handles the initial load of a project if it's already active
-     */
-    const handleInitialLoad = () => {
-        const openProjectItem = document.querySelector('.project-item.active');
-        if (openProjectItem) {
-            window.addEventListener('load', () => {
-                handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
-            });
         }
     };
 
@@ -558,6 +546,18 @@ function initTinyMCE(selector, additionalOptions = {}) {
     };
 
     /**
+     * Handles the initial load of a project if it's already active
+    */
+    const handleInitialLoad = () => {
+        const openProjectItem = document.querySelector('.project-item.active');
+        if (openProjectItem) {
+            window.addEventListener('load', () => {
+                handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
+            });
+        }
+    };
+
+    /**
      * Initializes all necessary elements and event listeners
      */
     const initialize = () => {
@@ -611,10 +611,14 @@ function initTinyMCE(selector, additionalOptions = {}) {
 
         // Event listener for close project buttons using event delegation
         document.body.addEventListener('click', function(event) {
-            const target = event.target;
-            if (target.classList.contains('close-project')) {
-                event.preventDefault();
-                closeProject(target);
+            const target = event.target.closest('.close-project');
+            if (target) {
+                const isIsolationMode = document.body.dataset.isolationMode === 'true';
+                if (isIsolationMode) {
+                    event.preventDefault();
+                    closeProject(target);
+                }
+                // Else, let HTMX handle the click
             }
         });
     };
@@ -627,26 +631,39 @@ function initTinyMCE(selector, additionalOptions = {}) {
     function closeProject(button) {
         const projectItem = button.closest('.project-item');
         if (projectItem) {
-            // Remove 'active' class to trigger any CSS transitions if applicable
-            projectItem.classList.remove('active');
-
-            // Find and destroy the HLS player if present
-            const video = projectItem.querySelector('video.project-video');
-            if (video) {
-                video.pause();
-                destroyHLSPlayer(video);
-            }
-
-            // Reset thumbnail position
-            const thumbnail = projectItem.querySelector('.thumbnail');
-            if (thumbnail) {
-                resetThumbnailPosition(thumbnail);
-            }
-
-            // Remove project details content
-            const projectDetails = projectItem.querySelector('.project-details');
-            if (projectDetails) {
-                projectDetails.innerHTML = '';
+            const isIsolationMode = document.body.dataset.isolationMode === 'true';
+    
+            if (isIsolationMode) {
+                // Add the fade-out class to trigger the CSS animation
+                projectItem.classList.add('fade-out');
+    
+                // Listen for the animationend event
+                projectItem.addEventListener('animationend', function handler() {
+                    // Remove the event listener to avoid multiple triggers
+                    projectItem.removeEventListener('animationend', handler);
+                    // Navigate back to the root URL
+                    window.location.href = '/';
+                });
+            } else {
+                // Existing behavior for normal mode
+                projectItem.classList.remove('active');
+    
+                // Clean up resources
+                const video = projectItem.querySelector('video.project-video');
+                if (video) {
+                    video.pause();
+                    destroyHLSPlayer(video);
+                }
+    
+                const thumbnail = projectItem.querySelector('.thumbnail');
+                if (thumbnail) {
+                    resetThumbnailPosition(thumbnail);
+                }
+    
+                const projectDetails = projectItem.querySelector('.project-details');
+                if (projectDetails) {
+                    projectDetails.innerHTML = '';
+                }
             }
         }
     }

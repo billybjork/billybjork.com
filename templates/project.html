@@ -18,14 +18,22 @@
             {% endif %}
     </header>
         
-    <button class="close-project" 
-            hx-get="/{{ project.slug }}?close=true" 
-            hx-target="#details-{{ project.slug }}" 
-            hx-swap="innerHTML" 
-            hx-push-url="/" 
-            aria-label="Close project">
-        &times;
-    </button>
+    {% if isolation_mode %}
+        <!-- Close button when in isolation mode -->
+        <button class="close-project" aria-label="Close project">
+            &times;
+        </button>
+    {% else %}
+        <!-- Close button when in normal mode -->
+        <button class="close-project" 
+                hx-get="/{{ project.slug }}?close=true" 
+                hx-target="#details-{{ project.slug }}" 
+                hx-swap="innerHTML" 
+                hx-push-url="pop" 
+                aria-label="Close project">
+            &times;
+        </button>
+    {% endif %}
 
     {{ thumbnail_macros.render_thumbnail(project, data_animate=True) }}
     
