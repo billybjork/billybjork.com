@@ -14,7 +14,6 @@
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
-    --max-video-height: 80vh;
     --fade-gradient-height: 33.33%;
     --transition-duration: 0.3s;
     --transition-ease: ease-in-out;
@@ -342,7 +341,7 @@ video {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: var(--spacing-medium) 0;
+    padding: 0 0 var(--spacing-medium) 0;
     width: 100%;
     margin: 0 auto;
 }
@@ -352,7 +351,7 @@ video {
     transform: translateY(20px);
     position: relative;
     width: 100%;
-    max-width: 80vh;
+    max-width: 90vw;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -394,7 +393,7 @@ video {
     max-width: 320px; /* Depends on thumbnail width */
     background-color: transparent;
     color: var(--primary-color);
-    padding: var(--spacing-medium) 0;
+    padding: 0 0 var(--spacing-medium) 0;
     margin: 0 calc(-50vw + 50%);
     transform: translateX(-10px);
     scroll-margin-top: 40px;
@@ -451,8 +450,8 @@ video {
 
 .close-project {
     position: absolute;
-    right: 2%;
-    top: var(--spacing-large);
+    right: var(--spacing-medium);
+    top: var(--spacing-medium);
     font-size: 2em;
     background: none;
     border: none;
@@ -585,6 +584,12 @@ video {
     object-fit: cover;
     opacity: 0;
     animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+.about-details {
+    opacity: 0;
+    animation: fadeIn 0.7s ease-in-out forwards;
+    animation-delay: 0.15s;
 }
 
 /* =========================
