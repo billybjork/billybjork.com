@@ -91,7 +91,10 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 reject('No HLS URL provided');
                 return;
             }
-
+    
+            // Add 'hls-video' class to identify HLS-initialized videos
+            videoElement.classList.add('hls-video');
+    
             const initializeVideo = () => {
                 if (autoplay) {
                     videoElement.play().catch(e => {
@@ -103,8 +106,14 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 }
                 resolve();
             };
-
+    
             if (Hls.isSupported()) {
+                // Prevent multiple HLS instances on the same video
+                if (videoElement.hlsInstance) {
+                    console.warn('HLS instance already exists for this video element. Destroying existing instance.');
+                    videoElement.hlsInstance.destroy();
+                }
+    
                 const hls = new Hls();
                 videoElement.hlsInstance = hls;  // Store instance for cleanup
                 hls.loadSource(streamUrl);
@@ -127,6 +136,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
                                 // Cannot recover
                                 console.error('Fatal error encountered, destroying HLS instance:', data);
                                 hls.destroy();
+                                videoElement.hlsInstance = null;
                                 reject(data);
                                 break;
                         }
@@ -135,6 +145,8 @@ function initTinyMCE(selector, additionalOptions = {}) {
                         if (data.details === 'bufferAppendError') {
                             // Ignore bufferAppendError or handle differently
                             console.warn('HLS.js bufferAppendError encountered and ignored:', data);
+                            // Optionally, attempt to recover
+                            hls.recoverMediaError();
                         } else {
                             console.warn('HLS.js non-fatal error:', data);
                         }
@@ -148,7 +160,7 @@ function initTinyMCE(selector, additionalOptions = {}) {
                 reject('HLS is not supported');
             }
         });
-    };
+    };    
 
     /**
      * Destroys the HLS player instance and revokes the blob URL
@@ -470,7 +482,15 @@ function initTinyMCE(selector, additionalOptions = {}) {
         activeVideos.forEach(video => {
             destroyHLSPlayer(video);
         });
-    };
+    
+        // Additionally, clean up any HLS instances not marked with 'hls-video'
+        const videosWithHlsInstance = document.querySelectorAll('video');
+        videosWithHlsInstance.forEach(video => {
+            if (video.hlsInstance) {
+                destroyHLSPlayer(video);
+            }
+        });
+    };    
 
     /**
      * Handles HTMX beforeRequest event to close any open projects before making a new request
@@ -577,11 +597,16 @@ function initTinyMCE(selector, additionalOptions = {}) {
     const handleInitialLoad = () => {
         const openProjectItem = document.querySelector('.project-item.active');
         if (openProjectItem) {
-            window.addEventListener('load', () => {
-                handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
-            });
+            // Use DOMContentLoaded or ensure it's already loaded
+            if (document.readyState === 'complete') {
+                handleProjectContent(openProjectItem, false);
+            } else {
+                window.addEventListener('load', () => {
+                    handleProjectContent(openProjectItem, false); // Open the project without smooth scrolling
+                });
+            }
         }
-    };
+    };    
 
     /**
      * Initializes all necessary elements and event listeners

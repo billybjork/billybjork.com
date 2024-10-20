@@ -318,6 +318,7 @@ video {
     transition: none;
 }
 
+/* Fade out project-item after direct navigation */
 @keyframes fadeOut {
     from {
         opacity: 1;
@@ -330,7 +331,7 @@ video {
 }
 
 .project-item.fade-out {
-    animation: fadeOut 0.25s forwards;
+    animation: fadeOut 0.15s forwards;
 }
 
 /* =========================
@@ -424,21 +425,25 @@ video {
         opacity 0.3s ease-in-out;
 }
 
-.project-name, 
-.project-date {
+.project-name {
     transform: translateZ(0) scale(0.7);
     transform-origin: left center;
     backface-visibility: hidden;
 }
 
-.project-item.active .project-name,
-.project-item.active .project-date {
-    transform: translateZ(0) scale(0.9); /* For GPU acceleration */
+.project-date {
+    transform: translateZ(0) scale(0.7) translateY(15px); /* Slightly slide down */
+    transform-origin: left center;
+    backface-visibility: hidden;
 }
 
-.project-date {
-    transform: translateY(0.5em);
+.project-item.active .project-name {
+    transform: translateZ(0) scale(1.0); /* For GPU acceleration */
 }
+
+.project-item.active .project-date {
+    transform: translateZ(0) scale(1.0) translateY(10px); /* Maintain slide down in active state */
+}   
 
 /* =========================
    Close button
@@ -455,7 +460,10 @@ video {
     cursor: pointer;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease;
+    transition:
+        opacity 0.3s ease,
+        visibility 0.3s ease,
+        transform 0.3s ease;
 }
 
 .project-item.active .close-project {
