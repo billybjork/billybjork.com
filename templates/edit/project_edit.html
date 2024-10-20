@@ -20,6 +20,8 @@
         <br><br>
         <label for="show_project">Show Project:</label>
         <input type="checkbox" id="show_project" name="show_project" {% if project.show_project %}checked{% endif %}>
+        <label for="pinned">Pinned:</label>
+        <input type="checkbox" id="pinned" name="pinned" {% if project.pinned %}checked{% endif %}>
     </fieldset>
     <br>
     <fieldset>

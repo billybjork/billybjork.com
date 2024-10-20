@@ -13,6 +13,9 @@
              hx-push-url="true">
             <time class="project-date">{{ project.formatted_date }}</time>
             <h2 class="project-name">{{ project.name }}</h2>
+            {% if project.pinned and not is_open %}
+                <i class="fas fa-thumbtack pinned-icon"></i>
+            {% endif %}
     </header>
         
     <button class="close-project" 

@@ -12,7 +12,6 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
 from dotenv import load_dotenv
 from datetime import datetime
-import logging
 import secrets
 import os
 
@@ -21,10 +20,6 @@ load_dotenv()
 security = HTTPBasic()
 
 app = FastAPI()
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Custom middleware to handle 'X-Forwarded-Proto' header
 class ForwardedProtoMiddleware(BaseHTTPMiddleware):
@@ -76,6 +71,7 @@ class Project(Base):
     video_link = Column(Text)
     show_project = Column(Boolean)
     youtube_link = Column(Text)
+    pinned = Column(Boolean, default=False, nullable=False)
 
 class General(Base):
     __tablename__ = "general"
@@ -117,48 +113,65 @@ def format_date(date):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(
-    request: Request, 
-    db: Session = Depends(get_db), 
-    page: int = Query(1, ge=1), 
+    request: Request,
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100)
 ):
     try:
-        skip = (page - 1) * limit
+        # Fetch IDs of pinned projects
+        pinned_projects = db.query(Project.id)\
+            .filter(Project.show_project == True, Project.pinned == True)\
+            .order_by(Project.creation_date.desc(), Project.id.desc())\
+            .all()
+        pinned_project_ids = [id for (id,) in pinned_projects]
+        num_pinned = len(pinned_project_ids)
 
-        # Fetch the current page of projects
-        projects = db.query(Project)\
-                     .filter(Project.show_project == True)\
-                     .order_by(Project.creation_date.desc(), Project.id.desc())\
-                     .offset(skip)\
-                     .limit(limit)\
-                     .all()
+        if page == 1:
+            # For the first page, fetch projects ordered by pinned status
+            projects = db.query(Project)\
+                .filter(Project.show_project == True)\
+                .order_by(func.coalesce(Project.pinned, False).desc(), Project.creation_date.desc(), Project.id.desc())\
+                .limit(limit)\
+                .all()
+        else:
+            # For subsequent pages, exclude pinned projects
+            non_pinned_skip = (page - 1) * limit - num_pinned
+            if non_pinned_skip < 0:
+                non_pinned_skip = 0
+
+            projects = db.query(Project)\
+                .filter(Project.show_project == True, Project.pinned == False)\
+                .order_by(Project.creation_date.desc(), Project.id.desc())\
+                .offset(non_pinned_skip)\
+                .limit(limit)\
+                .all()
 
         # Format projects
         formatted_projects = []
         for project in projects:
-            try:
-                formatted_project = {
-                    "id": project.id,
-                    "name": project.name,
-                    "slug": project.slug,
-                    "thumbnail_link": project.thumbnail_link,
-                    "video_link": project.video_link,
-                    "youtube_link": project.youtube_link,
-                    "formatted_date": format_date(project.creation_date),
-                    "is_open": False  # Default to closed
-                }
-                formatted_projects.append(formatted_project)
-            except Exception as project_error:
-                print(f"Error formatting project: {str(project_error)}")
-                print(f"Project data: {project.__dict__}")
+            formatted_project = {
+                "id": project.id,
+                "name": project.name,
+                "slug": project.slug,
+                "thumbnail_link": project.thumbnail_link,
+                "video_link": project.video_link,
+                "youtube_link": project.youtube_link,
+                "formatted_date": format_date(project.creation_date),
+                "pinned": project.pinned,
+                "is_open": False
+            }
+            formatted_projects.append(formatted_project)
 
         # Determine if there are more projects to load
         total_projects = db.query(Project).filter(Project.show_project == True).count()
-        has_more = skip + limit < total_projects
+        total_loaded = (page - 1) * limit + len(projects)
+        has_more = total_loaded < total_projects
 
+        # Fetch general info
         general_info = db.query(General).first()
 
-        # Detect if the request is an HTMX request
+        # Render the appropriate template
         if request.headers.get("HX-Request") == "true":
             return templates.TemplateResponse("macros/_projects.html", {
                 "request": request,
@@ -167,9 +180,8 @@ async def read_root(
                 "has_more": has_more
             })
 
-        # For non-HTMX requests, render the full page
         return templates.TemplateResponse("index.html", {
-            "request": request, 
+            "request": request,
             "projects": formatted_projects,
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
@@ -179,11 +191,6 @@ async def read_root(
             "limit": limit
         })
     except Exception as e:
-        print(f"Error in read_root: {str(e)}")
-        print(f"Error type: {type(e)}")
-        print(f"Error args: {e.args}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/about", response_class=HTMLResponse)
@@ -244,6 +251,8 @@ async def create_project_form(request: Request, db: Session = Depends(get_db), u
 async def create_project(request: Request, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
     form_data = await request.form()
     
+    pinned = "pinned" in form_data
+
     # Create a new Project instance
     new_project = Project(
         creation_date=datetime.strptime(form_data.get("creation_date"), "%Y-%m-%d").date(),
@@ -253,7 +262,8 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
         thumbnail_link=form_data.get("thumbnail_link"),
         video_link=form_data.get("video_link"),
         show_project="show_project" in form_data,
-        youtube_link=form_data.get("youtube_link")
+        youtube_link=form_data.get("youtube_link"),
+        pinned=pinned
     )
     
     db.add(new_project)
@@ -335,7 +345,12 @@ async def edit_project(request: Request, project_slug: str, db: Session = Depend
     })
 
 @app.post("/{project_slug}/edit", response_class=Response)
-async def update_project(request: Request, project_slug: str, db: Session = Depends(get_db), username: str = Depends(check_credentials)):
+async def update_project(
+    request: Request, 
+    project_slug: str, 
+    db: Session = Depends(get_db), 
+    username: str = Depends(check_credentials)
+):
     form_data = await request.form()
     project = db.query(Project).filter(Project.slug == project_slug).first()
     if not project:
@@ -354,6 +369,9 @@ async def update_project(request: Request, project_slug: str, db: Session = Depe
     project.youtube_link = form_data.get("youtube_link")
     project.creation_date = datetime.strptime(form_data.get("creation_date"), "%Y-%m-%d").date()
     project.show_project = "show_project" in form_data
+    
+    # Handle the 'pinned' checkbox
+    project.pinned = "pinned" in form_data
     
     db.commit()
     

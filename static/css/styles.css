@@ -231,7 +231,7 @@ footer {
     margin: 0;
     display: flex;
     justify-content: center;
-    gap: var(--spacing-small);
+    gap: var(--spacing-medium);
 }
 
 .social-links li a {
@@ -242,6 +242,24 @@ footer {
 
 .social-links li a:hover {
     color: var(--highlight-color);
+}
+
+/* =========================
+   Pins
+   ========================= */
+
+.pinned-icon {
+    position: absolute;
+    top: 1.5em;
+    right: 0.5em;
+    font-size: var(--font-size-medium);
+    color: var(--highlight-color);
+    opacity: 1;
+    transition: opacity 0.1s var(--transition-ease);
+}
+
+.project-item.active .pinned-icon {
+    opacity: 0;
 }
 
 /* =========================
