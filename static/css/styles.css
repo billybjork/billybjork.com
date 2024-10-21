@@ -267,17 +267,21 @@ video {
 }
 
 .video-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    position: relative;
     width: 100%;
-    max-height: 90vh;
-    overflow: hidden;
-    padding-bottom: 0.5em;
-    background-color: var(--secondary-color); /* Disguise letterboxing */
-    transition: opacity 0.5s ease, transform 0.5s ease;
-    transform: translateY(20px);
-    opacity: 0;
+    aspect-ratio: 16 / 9; /* Default aspect ratio */
+    background-color: var(--secondary-color); /* Placeholder background */
+    transition: aspect-ratio 0.5s ease, max-height 0.5s ease; /* Smooth transition */
+    overflow: hidden; /* Hide overflow */
+    max-height: 90vh; /* Prevent exceeding viewport height */
+}
+
+.video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain; /* Maintain aspect ratio within container */
+    background-color: #000; /* Video background */
+    display: block;
 }
 
 .project-item.active .video-container {
@@ -286,13 +290,12 @@ video {
 }
 
 .project-video {
-    display: block;
-    max-height: 90vh;
-    max-width: 100%;
-    width: auto;
-    height: auto;
+    /* Removed conflicting width and height properties */
     object-fit: contain;
     background-color: #000;
+    max-height: 90vh; /* Ensure video does not exceed 90vh */
+    width: 100%; /* Fill the container's width */
+    height: 100%; /* Fill the container's height */
 }
 
 /* =========================
@@ -419,20 +422,21 @@ video {
    ========================= */
 
 .project-name, 
-.project-date, 
-.close-project {
+.project-date {
     will-change: transform, opacity;
     transition: 
         transform 0.3s ease-in-out,
-        padding-left 0.3s ease-in-out,
         opacity 0.3s ease-in-out;
 }
 
 .project-name {
     font-size: var(--font-size-medium);
-    width: 90%;
     transform-origin: left center;
     backface-visibility: hidden;
+}
+
+.project-item.active .project-name {
+    transform: scale(1.25); /* Creates text pixellation; find a different approach that works for Safari */
 }
 
 .project-date {
@@ -461,7 +465,7 @@ video {
         visibility 0.3s ease,
         transform 0.3s ease;
     @media (max-width: 768px) {
-        right: 2%;
+        right: 1%;
     }
 }
 

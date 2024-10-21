@@ -17,16 +17,54 @@
             // Add 'hls-video' class to identify HLS-initialized videos
             videoElement.classList.add('hls-video');
 
-            const initializeVideo = () => {
-                if (autoplay) {
-                    videoElement.play().catch(e => {
-                        if (e.name !== 'AbortError') { // Only log errors that are not AbortError
-                            console.error("Autoplay failed:", e);
+            let resizeListener = null;
+
+            const adjustAspectRatio = () => {
+                const videoWidth = videoElement.videoWidth;
+                const videoHeight = videoElement.videoHeight;
+                if (videoWidth && videoHeight) {
+                    const aspectRatio = videoWidth / videoHeight; // Width divided by height
+
+                    // Calculate the container's current width in pixels
+                    const container = videoElement.parentElement;
+                    if (container) {
+                        const containerWidth = container.clientWidth;
+                        const expectedHeight = containerWidth / aspectRatio;
+
+                        // Calculate 90vh in pixels
+                        const maxHeightPx = window.innerHeight * 0.9;
+
+                        if (expectedHeight > maxHeightPx) {
+                            // Adjust aspect ratio to fit within 90vh
+                            const adjustedAspectRatio = containerWidth / maxHeightPx;
+                            container.style.aspectRatio = `${adjustedAspectRatio} / 1`;
+                        } else {
+                            // Set the container's aspect ratio to the video's aspect ratio
+                            container.style.aspectRatio = `${aspectRatio} / 1`;
                         }
-                        // Optionally, handle AbortError differently if needed
-                    });
+                    }
                 }
-                resolve();
+            };
+
+            const initializeVideo = () => {
+                // Listen for loadedmetadata to get video dimensions
+                videoElement.addEventListener('loadedmetadata', () => {
+                    adjustAspectRatio();
+
+                    if (autoplay) {
+                        videoElement.play().catch(e => {
+                            if (e.name !== 'AbortError') { // Only log errors that are not AbortError
+                                console.error("Autoplay failed:", e);
+                            }
+                            // Optionally, handle AbortError differently if needed
+                        });
+                    }
+                    resolve();
+
+                    // Add resize event listener
+                    resizeListener = adjustAspectRatio;
+                    window.addEventListener('resize', resizeListener);
+                }, { once: true }); // Ensure the event listener is called only once
             };
 
             if (Hls.isSupported()) {
@@ -81,8 +119,15 @@
                 console.error('HLS is not supported in this browser');
                 reject('HLS is not supported');
             }
+
+            // Cleanup function to remove resize listener
+            videoElement.cleanup = () => {
+                if (resizeListener) {
+                    window.removeEventListener('resize', resizeListener);
+                }
+            };
         });
-    };    
+    };
 
     /**
      * Destroys the HLS player instance and revokes the blob URL
@@ -97,6 +142,12 @@
             const blobUrl = videoElement.src; // Store the Blob URL
             URL.revokeObjectURL(blobUrl); // Revoke the Blob URL first
             videoElement.src = ''; // Then clear the src attribute
+        }
+
+        // Remove resize event listener if it was added
+        if (typeof videoElement.cleanup === 'function') {
+            videoElement.cleanup();
+            delete videoElement.cleanup;
         }
     };
 
@@ -288,7 +339,7 @@
                 destroyHLSPlayer(video);
             }
         });
-    };    
+    };
 
     /**
      * Handles HTMX beforeRequest event to close any open projects before making a new request
