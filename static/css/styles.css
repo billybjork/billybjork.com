@@ -154,6 +154,7 @@ a:hover {
     height: var(--font-size-base);
     margin-right: var(--spacing-small);
     flex-shrink: 0;
+    transform: translateX(4px) translateY(2px);
 }
 
 footer {
