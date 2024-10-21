@@ -93,12 +93,12 @@ a:hover {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    padding: var(--spacing-medium) var(--spacing-large) var(--spacing-medium) var(--spacing-large);
+    padding: var(--spacing-large);
     width: 100%;
     color: var(--secondary-color);
     text-decoration: none;
     @media(max-width: 768px) {
-        padding: var(--spacing-small) var(--spacing-medium) var(--spacing-small) var(--spacing-medium);
+        padding: var(--spacing-medium);
     }
 }
 
@@ -461,7 +461,7 @@ video {
         visibility 0.3s ease,
         transform 0.3s ease;
     @media (max-width: 768px) {
-        right: var(--spacing-small);
+        right: 2%;
     }
 }
 
@@ -542,7 +542,7 @@ video {
     color 0.3s ease;
 }
 
-/* Override for .project-links to ensure .copy-text-link styles do not apply */
+/* Override .copy-text-link styles */
 .project-links a,
 .project-links button,
 .project-links a i,
