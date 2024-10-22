@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
 from dotenv import load_dotenv
 from datetime import datetime
+from bs4 import BeautifulSoup
 import secrets
 import os
 
@@ -266,6 +267,31 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
     response.headers["HX-Redirect"] = f"/{new_project.slug}"
     return response
 
+def extract_meta_description(html_content: str, word_limit: int = 25) -> str:
+    """
+    Extracts the first `word_limit` words from the HTML content for the meta description.
+
+    Args:
+        html_content (str): The HTML content of the project.
+        word_limit (int, optional): Number of words to extract. Defaults to 25.
+
+    Returns:
+        str: A plain text snippet for the meta description.
+    """
+    # Remove HTML tags using BeautifulSoup
+    soup = BeautifulSoup(html_content, "lxml")
+    text = soup.get_text(separator=' ', strip=True)
+    
+    # Split the text into words and take the first `word_limit` words
+    words = text.split()
+    snippet = ' '.join(words[:word_limit])
+    
+    # Optionally, add ellipsis if the text was truncated
+    if len(words) > word_limit:
+        snippet += '...'
+    
+    return snippet
+
 @app.get("/{project_slug}", response_class=HTMLResponse)
 async def read_project(
     request: Request, 
@@ -288,6 +314,9 @@ async def read_project(
         # Determine if the project should be open or closed
         is_open = not close
     
+        # Extract meta description
+        meta_description = extract_meta_description(project.html_content)
+        
         # Check if the request is an HTMX request
         is_htmx = request.headers.get("HX-Request") == "true"
     
@@ -297,7 +326,8 @@ async def read_project(
                 return templates.TemplateResponse("project_details.html", {
                     "request": request, 
                     "project": project,
-                    "is_open": is_open
+                    "is_open": is_open,
+                    "meta_description": meta_description  # Pass meta_description if needed
                 })
             else:
                 # Return empty content for closing to prevent thumbnail duplication
@@ -307,6 +337,11 @@ async def read_project(
         # Set a flag to indicate that we're in isolation mode
         projects = [project]
         isolation_mode = True  # New flag
+        
+        # Dynamic title and description
+        page_title = project.name
+        page_meta_description = meta_description
+        
         return templates.TemplateResponse("index.html", {
             "request": request, 
             "projects": projects,
@@ -314,7 +349,9 @@ async def read_project(
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info,
-            "isolation_mode": isolation_mode  # Pass the flag to the template
+            "isolation_mode": isolation_mode,  # Pass the flag to the template
+            "page_title": page_title,            # New context variable
+            "page_meta_description": page_meta_description  # New context variable
         })
     except HTTPException as http_exc:
         raise http_exc  # Let FastAPI handle HTTP exceptions

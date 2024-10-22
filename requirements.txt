@@ -7,3 +7,5 @@ python-dotenv
 httpx
 pydantic
 python-multipart
+beautifulsoup4
+lxml
