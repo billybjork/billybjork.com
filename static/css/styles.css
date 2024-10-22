@@ -475,7 +475,7 @@ video {
 }
 
 /* =========================
-   Project details
+   Project content
    ========================= */
 
 .project-details {
@@ -499,7 +499,7 @@ video {
    Project links
    ========================= */
 
-   .project-links ul {
+.project-links ul {
     list-style-type: none;
     display: flex;
     justify-content: flex-end;

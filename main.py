@@ -32,18 +32,6 @@ class ForwardedProtoMiddleware(BaseHTTPMiddleware):
     
 app.add_middleware(ForwardedProtoMiddleware)
 
-# Redirect billybjork.com to www.billybjork.com
-class WWWRedirectMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        host = request.headers.get("host")
-        if host == "billybjork.com":
-            # Redirect to www.billybjork.com
-            url = request.url.replace(netloc="www.billybjork.com")
-            return RedirectResponse(url=str(url), status_code=301)
-        return await call_next(request)
-
-app.add_middleware(WWWRedirectMiddleware)
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -192,6 +180,11 @@ async def read_root(
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+# Redirect /home to /
+@app.get("/home", include_in_schema=False)
+async def redirect_home():
+    return RedirectResponse(url="/")
 
 @app.get("/about", response_class=HTMLResponse)
 async def read_about(request: Request, db: Session = Depends(get_db)):
