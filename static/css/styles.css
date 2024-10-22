@@ -270,17 +270,17 @@ video {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9; /* Default aspect ratio */
-    background-color: var(--secondary-color); /* Placeholder background */
-    transition: aspect-ratio 0.5s ease, max-height 0.5s ease; /* Smooth transition */
-    overflow: hidden; /* Hide overflow */
+    background-color: var(--secondary-color);
+    transition: aspect-ratio 0.5s ease, max-height 0.5s ease;
+    overflow: hidden;
     max-height: 90vh; /* Prevent exceeding viewport height */
 }
 
 .video-container video {
     width: 100%;
     height: 100%;
-    object-fit: contain; /* Maintain aspect ratio within container */
-    background-color: #000; /* Video background */
+    object-fit: contain;
+    background-color: #000;
     display: block;
 }
 
@@ -290,12 +290,11 @@ video {
 }
 
 .project-video {
-    /* Removed conflicting width and height properties */
     object-fit: contain;
     background-color: #000;
-    max-height: 90vh; /* Ensure video does not exceed 90vh */
-    width: 100%; /* Fill the container's width */
-    height: 100%; /* Fill the container's height */
+    max-height: 90vh; /* Prevent exceeding viewport height */
+    width: 100%;
+    height: 100%;
 }
 
 /* =========================
@@ -354,7 +353,7 @@ video {
 }
 
 .project-item {
-    opacity: 0; /* Initial hidden state */
+    opacity: 0;
     transform: translateY(20px);
     position: relative;
     width: 100%;
@@ -398,9 +397,9 @@ video {
     display: flex;
     flex-direction: column;
     position: relative;
-    align-items: stretch; /* Allows children to take full width */
+    align-items: stretch;
     width: 100%;
-    max-width: 320px; /* Adjust as needed */
+    max-width: 320px; /* Align with thumbnail width */
     background-color: transparent;
     color: var(--primary-color);
     padding: 0 0 var(--spacing-medium) 0;
@@ -416,10 +415,6 @@ video {
 .project-item.active .project-header {
     max-width: 95%;
 }
-
-/* =========================
-   Project-name and Project-date
-   ========================= */
 
 .project-name, 
 .project-date {

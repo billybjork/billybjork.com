@@ -4,14 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Billy Bjork{% endblock %}</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <!-- Defer loading for HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+
+    <!-- Preload resources -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" rel="stylesheet">
+    </noscript>
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    </noscript>
+
+    <!-- Preconnect to required origins -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+
+    <!-- Main stylesheet -->
     <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+
+    <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ request.url_for('static', path='assets/favicon.ico') }}">
+
     {% block additional_head %}{% endblock %}
 </head>
 <body data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}">
@@ -20,7 +38,7 @@
         <nav>
             <a href="/about">About</a>
             <a href="https://www.vujade.world/" class="vu-ja-de-btn" target="_blank" rel="noopener">
-                <img src="{{ request.url_for('static', path='assets/cube.gif') }}" alt="Cube icon" class="vu-ja-de-icon">
+                <img src="{{ request.url_for('static', path='assets/cube.gif') }}" alt="Cube icon" class="vu-ja-de-icon" loading="lazy">
                 VU JA DE
             </a>
         </nav>
@@ -29,10 +47,15 @@
         {% block content %}{% endblock %}
     </main>
 
-    <script src="{{ request.url_for('static', path='js/tinymce-init.js') }}"></script>
-    <script src="{{ request.url_for('static', path='js/notifications.js') }}"></script>
-    <script src="{{ request.url_for('static', path='js/thumbnails.js') }}"></script>
-    <script src="{{ request.url_for('static', path='js/project-handling.js') }}"></script>    
+    <!-- Deferred scripts -->
+    <script src="{{ request.url_for('static', path='js/tinymce-init.js') }}" defer></script>
+    <script src="{{ request.url_for('static', path='js/notifications.js') }}" defer></script>
+    <script src="{{ request.url_for('static', path='js/thumbnails.js') }}" defer></script>
+    <script src="{{ request.url_for('static', path='js/project-handling.js') }}" defer></script>
+
+    <!-- Defer loading for hls.js -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" defer></script>
+
     {% block additional_scripts %}{% endblock %}
 </body>
 </html>
