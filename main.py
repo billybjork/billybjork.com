@@ -191,12 +191,20 @@ async def redirect_home():
 async def read_about(request: Request, db: Session = Depends(get_db)):
     general_info = db.query(General).first()
     about_content = general_info.about_content if general_info else ""
+    about_photo_link = general_info.about_photo_link if general_info else None
+
+    # Define dynamic title and meta description
+    page_title = "About"
+    page_meta_description = "Learn more about Billy Bjork and his work."
+
     return templates.TemplateResponse("about.html", {
         "request": request,
         "current_year": datetime.now().year,
         "about_content": about_content,
-        "about_photo_link": general_info.about_photo_link if general_info else None,
-        "general_info": general_info
+        "about_photo_link": about_photo_link,
+        "general_info": general_info,
+        "page_title": page_title,
+        "page_meta_description": page_meta_description
     })
 
 @app.get("/about/edit", response_class=HTMLResponse)
