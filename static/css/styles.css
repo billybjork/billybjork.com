@@ -301,7 +301,7 @@ video {
    Fade-In/Out Animations for Project Items
    ========================= */
 
-@keyframes fadeInUp {
+   @keyframes fadeInUp {
     from {
         opacity: 0;
         transform: translateY(30px);
@@ -312,12 +312,30 @@ video {
     }
 }
 
+/* Base project item state */
+.project-item {
+    opacity: 0;
+}
+
+/* Staggered fade-in animations */
 .project-item.fade-in {
     animation: fadeInUp 1s forwards;
 }
 
+/* Generate staggered delays - repeating every 10 items */
+.project-item:nth-child(10n+1).fade-in { animation-delay: 0s; }
+.project-item:nth-child(10n+2).fade-in { animation-delay: 0.02s; }
+.project-item:nth-child(10n+3).fade-in { animation-delay: 0.04s; }
+.project-item:nth-child(10n+4).fade-in { animation-delay: 0.06s; }
+.project-item:nth-child(10n+5).fade-in { animation-delay: 0.08s; }
+.project-item:nth-child(10n+6).fade-in { animation-delay: 0.1s; }
+.project-item:nth-child(10n+7).fade-in { animation-delay: 0.12s; }
+.project-item:nth-child(10n+8).fade-in { animation-delay: 0.14s; }
+.project-item:nth-child(10n+9).fade-in { animation-delay: 0.16s; }
+.project-item:nth-child(10n+10).fade-in { animation-delay: 0.18s; }
+
 /* Override animation */
-   .project-item.no-fade {
+.project-item.no-fade {
     opacity: 1;
     transform: translateY(0);
     transition: none;
@@ -331,12 +349,12 @@ video {
     }
     to {
         opacity: 0;
-        transform: translateY(-20px);
+        transform: translateY(-60px);
     }
 }
 
 .project-item.fade-out {
-    animation: fadeOut 0.15s forwards;
+    animation: fadeOut 0.15
 }
 
 /* =========================
@@ -375,10 +393,6 @@ video {
     @media (max-width: 768px) {
         max-width: 90vw;
     }
-}
-
-.project-item.fade-in {
-    animation: fadeInUp 1s forwards;
 }
 
 .project-item.active {
@@ -691,7 +705,7 @@ dt {
     font-weight: bold;
 }
 
-#infinite-scroll-sentinel-1 {
+#infinite-scroll-sentinel {
     height: 100px;
     text-align: center;
     padding: 20px;
