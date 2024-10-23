@@ -1,33 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page not found!</title>
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: 'Arial', sans-serif;
-            background-color: #f0f0f0;
-            color: #333;
-        }
-        h1 {
-            font-size: 48px;
-            margin: 0;
-        }
-        p {
-            font-size: 24px;
-        }
-    </style>
-</head>
-<body>
-   <main>
+{% extends "base.html" %}
+
+{% block title %}Page not found!{% endblock %}
+
+{% block content %}
+   <main style="display: flex; flex-direction: column; align-items: center; height: 100vh; text-align: center;">
        <h1>¯\_(ツ)_/¯</h1>
        <p>404 - Page not found!</p>
    </main>
-</body>
-</html>
+{% endblock %}
