@@ -41,19 +41,6 @@ html {
     scroll-behavior: smooth;
 }
 
-/* Fade gradient overlay over lower viewport */
-.home-page::before {
-    content: '';
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: var(--fade-gradient-height);
-    background: linear-gradient(to top, rgba(26, 26, 26, 0.8), transparent);
-    pointer-events: none;
-    z-index: 10;
-}
-
 main {
     padding: var(--spacing-medium);
     margin: 0 auto;
@@ -88,6 +75,23 @@ a:hover {
     display: block;
 }
 
+/* Fade gradient overlay over lower viewport */
+.home-page::before {
+    content: '';
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: var(--fade-gradient-height);
+    background: linear-gradient(to top, rgba(26, 26, 26, 0.8), transparent);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.home-page {
+    padding-top: var(--spacing-large);
+}
+
 /* Specific styles for #main-header */
 #main-header {
     display: flex;
@@ -98,11 +102,10 @@ a:hover {
     color: var(--secondary-color);
     text-decoration: none;
     @media(max-width: 768px) {
-        padding: var(--spacing-medium);
+        padding: 0 var(--spacing-medium) var(--spacing-medium) var(--spacing-medium);
     }
 }
 
-/* Remove default padding/margin on h1 */
 #main-header h1 {
     margin: 0; 
     padding: 0;
@@ -269,7 +272,6 @@ video {
 .video-container {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 9; /* Default aspect ratio */
     background-color: var(--secondary-color);
     transition: aspect-ratio 0.5s ease, max-height 0.5s ease;
     overflow: hidden;
@@ -427,7 +429,7 @@ video {
 }
 
 .project-item.active .project-header {
-    max-width: 95%;
+    max-width: 90%;
 }
 
 .project-name, 
@@ -474,7 +476,7 @@ video {
         visibility 0.3s ease,
         transform 0.3s ease;
     @media (max-width: 768px) {
-        right: 1%;
+        right: 0.5%;
     }
 }
 
@@ -507,6 +509,10 @@ video {
     opacity: 1;
     max-height: 5000px; /* May need to increase or change */
     transform: translateY(0);
+}
+
+.project-content {
+    padding-top: var(--spacing-small);
 }
 
 /* =========================
