@@ -16,7 +16,8 @@
                 editor.on('change', function() {
                     tinymce.triggerSave();
                 });
-            }
+            },
+            height: 800
         };
 
         tinymce.init({ ...defaultOptions, ...additionalOptions, selector });

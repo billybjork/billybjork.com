@@ -429,7 +429,10 @@ video {
 }
 
 .project-item.active .project-header {
-    max-width: 90%;
+    max-width: 95%;
+    @media (max-width: 768px) {
+        max-width: 90%;
+    }
 }
 
 .project-name, 
@@ -507,12 +510,12 @@ video {
 
 .project-item.active .project-details {
     opacity: 1;
-    max-height: 5000px; /* May need to increase or change */
+    max-height: none;
     transform: translateY(0);
 }
 
 .project-content {
-    padding-top: var(--spacing-small);
+    padding-top: var(--spacing-medium);
 }
 
 /* =========================
