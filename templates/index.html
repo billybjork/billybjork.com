@@ -12,16 +12,7 @@
     {% endfor %}
     
     {% if not isolation_mode and has_more %}
-        <div 
-            id="infinite-scroll-sentinel"
-            data-page="{{ page + 1 }}"
-            hx-get="/?page={{ page + 1 }}" 
-            hx-trigger="revealed" 
-            hx-target="#infinite-scroll-sentinel" 
-            hx-swap="outerHTML"
-            style="height: 100px; text-align: center; padding: 20px;">
-            <p>Loading more projects...</p>
-        </div>
+        {% include "infinite_scroll_sentinel.html" %}
     {% endif %}
 </section>
 <br><br>
