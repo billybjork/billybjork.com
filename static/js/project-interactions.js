@@ -190,44 +190,32 @@
                 reject('No HLS URL provided');
                 return;
             }
-
+    
             // Add 'hls-video' class to identify HLS-initialized videos
             videoElement.classList.add('hls-video');
-
+    
             let resizeListener = null;
-
+    
             const adjustAspectRatio = () => {
                 const videoWidth = videoElement.videoWidth;
                 const videoHeight = videoElement.videoHeight;
                 if (videoWidth && videoHeight) {
                     const aspectRatio = videoWidth / videoHeight; // Width divided by height
-
-                    // Calculate the container's current width in pixels
+            
+                    // Set the container's aspect ratio directly
                     const container = videoElement.parentElement;
                     if (container) {
-                        const containerWidth = container.clientWidth;
-                        const expectedHeight = containerWidth / aspectRatio;
-
-                        // Calculate 90vh in pixels
-                        const maxHeightPx = window.innerHeight * 0.9;
-
-                        if (expectedHeight > maxHeightPx) {
-                            // Adjust aspect ratio to fit within 90vh
-                            const adjustedAspectRatio = containerWidth / maxHeightPx;
-                            container.style.aspectRatio = `${adjustedAspectRatio} / 1`;
-                        } else {
-                            // Set the container's aspect ratio to the video's aspect ratio
-                            container.style.aspectRatio = `${aspectRatio} / 1`;
-                        }
+                        container.style.aspectRatio = `${aspectRatio}`;
+                        container.setAttribute('data-aspect-ratio', `${aspectRatio}`);
                     }
                 }
-            };
-
+            };            
+    
             const initializeVideo = () => {
                 // Listen for loadedmetadata to get video dimensions
                 videoElement.addEventListener('loadedmetadata', () => {
                     adjustAspectRatio();
-
+    
                     if (autoplay) {
                         videoElement.play().catch(e => {
                             if (e.name !== 'AbortError') { // Only log errors that are not AbortError
@@ -237,20 +225,20 @@
                         });
                     }
                     resolve();
-
+    
                     // Add resize event listener
                     resizeListener = adjustAspectRatio;
                     window.addEventListener('resize', resizeListener);
                 }, { once: true }); // Ensure the event listener is called only once
             };
-
+    
             if (Hls.isSupported()) {
                 // Prevent multiple HLS instances on the same video
                 if (videoElement.hlsInstance) {
                     console.warn('HLS instance already exists for this video element. Destroying existing instance.');
                     videoElement.hlsInstance.destroy();
                 }
-
+    
                 const hls = new Hls();
                 videoElement.hlsInstance = hls;  // Store instance for cleanup
                 hls.loadSource(streamUrl);
@@ -296,7 +284,7 @@
                 console.error('HLS is not supported in this browser');
                 reject('HLS is not supported');
             }
-
+    
             // Cleanup function to remove resize listener
             videoElement.cleanup = () => {
                 if (resizeListener) {
@@ -304,7 +292,7 @@
                 }
             };
         });
-    };
+    };    
 
     /**
      * Destroys the HLS player instance and revokes the blob URL.

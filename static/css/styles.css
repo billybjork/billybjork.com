@@ -14,7 +14,6 @@
     --spacing-small: 0.2rem;
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
-    --fade-gradient-height: 33.33%;
     --transition-duration: 0.3s;
     --transition-ease: ease-in-out;
 }
@@ -82,7 +81,7 @@ a:hover {
     bottom: 0;
     left: 0;
     width: 100%;
-    height: var(--fade-gradient-height);
+    height: 33.33%;
     background: linear-gradient(to top, rgba(26, 26, 26, 0.8), transparent);
     pointer-events: none;
     z-index: 10;
@@ -254,28 +253,20 @@ footer {
 
 video {
     width: 100%;
-    height: auto;
     max-width: none;
     object-fit: contain;
-}
-
-.video-reel {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    height: auto;
-    margin-bottom: var(--spacing-large);
-    position: relative;
 }
 
 .video-container {
     position: relative;
     width: 100%;
     background-color: var(--secondary-color);
-    transition: aspect-ratio 0.5s ease, max-height 0.5s ease;
     overflow: hidden;
-    max-height: 90vh; /* Prevent exceeding viewport height */
+    max-height: 90vh; /* Prevent container from exceeding viewport height */
+    aspect-ratio: attr(data-aspect-ratio); /* Default aspect ratio; will be reset via JavaScript */
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .video-container video {
@@ -289,14 +280,6 @@ video {
 .project-item.active .video-container {
     transform: translateY(0);
     opacity: 1;
-}
-
-.project-video {
-    object-fit: contain;
-    background-color: #000;
-    max-height: 90vh; /* Prevent exceeding viewport height */
-    width: 100%;
-    height: 100%;
 }
 
 /* =========================
