@@ -162,7 +162,7 @@ async def read_root(
 
         # Render the appropriate template
         if request.headers.get("HX-Request") == "true":
-            return templates.TemplateResponse("macros/_projects.html", {
+            return templates.TemplateResponse("projects_infinite_scroll.html", {
                 "request": request,
                 "projects": formatted_projects,
                 "page": page,

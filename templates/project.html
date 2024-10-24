@@ -1,4 +1,4 @@
-{% import "macros/_thumbnail.html" as thumbnail_macros %}
+{% import "thumbnail.html" as thumbnail_macro %}
 
 <article 
     id="project-{{ project.slug }}" 
@@ -35,7 +35,7 @@
         </button>
     {% endif %}
 
-    {{ thumbnail_macros.render_thumbnail(project, data_animate=True) }}
+    {{ thumbnail_macro.render_thumbnail(project, data_animate=True) }}
     
     <section id="details-{{ project.slug }}" class="project-details">
         {% if is_open %}
