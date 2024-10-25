@@ -2,7 +2,7 @@
    Global Styles and Variables
    ========================= */
 
-   :root {
+:root {
     --primary-color: #e0e0e0;
     --secondary-color: #2e3233;
     --highlight-color: #ff8940;
@@ -90,6 +90,10 @@ a:hover {
 .home-page {
     padding-top: var(--spacing-large);
 }
+
+/* =========================
+   Site header
+   ========================= */
 
 /* Specific styles for #main-header */
 #main-header {
@@ -206,18 +210,19 @@ footer {
    ========================= */
 
 .thumbnail {
+    display: block;
+    position: relative;
+    overflow: hidden;
     width: 100%;
     max-width: 320px;
     height: 180px;
+    margin: var(--spacing-small) auto 0;
+    padding: var(--spacing-small);
+    cursor: pointer;
+    border-radius: 4px;
     background-size: cover;
     background-position: center;
     opacity: 1;
-    cursor: pointer;
-    border-radius: 4px;
-    position: relative;
-    margin: var(--spacing-small) auto 0;
-    display: block;
-    overflow: hidden;
     transform: scale(1);
     transition: 
         opacity 0.3s var(--transition-ease),
@@ -228,14 +233,6 @@ footer {
 .thumbnail:hover {
     transform: scale(1.05);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-}
-
-.project-item .thumbnail {
-    display: block;
-    opacity: 1;
-    max-height: 180px;
-    margin: var(--spacing-small) auto 0;
-    padding: var(--spacing-small);
 }
 
 .project-item.active .thumbnail {
@@ -251,8 +248,9 @@ footer {
    Videos
    ========================= */
 
-video {
+   video {
     width: 100%;
+    height: auto;
     max-width: none;
     object-fit: contain;
 }
@@ -262,8 +260,8 @@ video {
     width: 100%;
     background-color: var(--secondary-color);
     overflow: hidden;
-    max-height: 90vh; /* Prevent container from exceeding viewport height */
-    aspect-ratio: attr(data-aspect-ratio); /* Default aspect ratio; will be reset via JavaScript */
+    max-height: 90vh;
+    aspect-ratio: 16 / 9; /* Default aspect ratio */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -272,7 +270,7 @@ video {
 .video-container video {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover; /* Ensures no letterboxing */
     background-color: #000;
     display: block;
 }
@@ -286,7 +284,7 @@ video {
    Fade-In/Out Animations for Project Items
    ========================= */
 
-   @keyframes fadeInUp {
+@keyframes fadeInUp {
     from {
         opacity: 0;
         transform: translateY(30px);
@@ -302,7 +300,6 @@ video {
     opacity: 0;
 }
 
-/* Staggered fade-in animations */
 .project-item.fade-in {
     animation: fadeInUp 1s forwards;
 }
@@ -350,7 +347,7 @@ video {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 0 0 var(--spacing-medium) 0;
+    padding: 0 0 var(--spacing-large) 0;
     width: 100%;
     margin: 0 auto;
 }
@@ -384,7 +381,6 @@ video {
     background-color: var(--secondary-color);
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    transform: scale(1.02);
     opacity: 1;
 }
 
@@ -499,6 +495,7 @@ video {
 
 .project-content {
     padding-top: var(--spacing-medium);
+    overflow: hidden;
 }
 
 /* =========================
@@ -566,6 +563,25 @@ video {
 .project-links button i:hover {
     color: var(--highlight-color) !important;
     transition: color 0.3s ease;
+}
+
+/* =========================
+   Override TinyMCE styles
+   ========================= */
+
+.project-content img,
+.project-content video,
+.project-content iframe {
+       max-width: 100% !important;
+       width: auto !important;
+       height: auto !important;
+}
+
+.project-content pre {
+    white-space: pre-wrap; /* Wrap long lines */
+    word-wrap: break-word;
+    overflow-x: auto; /* Add horizontal scrollbar if necessary */
+    max-width: 100%;
 }
 
 /* =========================

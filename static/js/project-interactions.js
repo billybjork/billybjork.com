@@ -200,16 +200,13 @@
                 const videoWidth = videoElement.videoWidth;
                 const videoHeight = videoElement.videoHeight;
                 if (videoWidth && videoHeight) {
-                    const aspectRatio = videoWidth / videoHeight; // Width divided by height
-            
-                    // Set the container's aspect ratio directly
+                    const aspectRatio = videoWidth / videoHeight;
                     const container = videoElement.parentElement;
                     if (container) {
-                        container.style.aspectRatio = `${aspectRatio}`;
-                        container.setAttribute('data-aspect-ratio', `${aspectRatio}`);
+                        container.style.aspectRatio = aspectRatio;
                     }
                 }
-            };            
+            };                      
     
             const initializeVideo = () => {
                 // Listen for loadedmetadata to get video dimensions

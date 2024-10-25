@@ -12,9 +12,16 @@
                 { value: 'First.Name', title: 'First Name' },
                 { value: 'Email', title: 'Email' },
             ],
+            image_dimensions: false,
+            object_resizing: false,
+            valid_elements: '*[*]',
             setup: function(editor) {
                 editor.on('change', function() {
                     tinymce.triggerSave();
+                });
+                // Remove inline styles on content retrieval
+                editor.on('GetContent', function(e) {
+                    e.content = e.content.replace(/style="[^"]*"/g, '');
                 });
             },
             height: 800
