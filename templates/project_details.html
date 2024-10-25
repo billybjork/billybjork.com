@@ -1,19 +1,14 @@
 {% if is_open %}
     {% if project.video_link %}
-    <!-- Set default aspect ratio -->
-    <section 
-        class="video-container"
-        style="aspect-ratio: 16 / 9;"
-        data-aspect-ratio="16 / 9"
-    >
+    <section class="video-container">
         <video id="video-player-{{ project.id }}"
-                class="lazy-video"
-                controls 
-                playsinline 
-                autoplay 
-                preload="auto" 
-                fetchpriority="high"
-                data-hls-url="{{ project.video_link }}">
+               class="lazy-video"
+               controls 
+               playsinline 
+               preload="auto" 
+               fetchpriority="high"
+               autoplay="true"
+               data-hls-url="{{ project.video_link }}">
         </video>
     </section>
     {% endif %}

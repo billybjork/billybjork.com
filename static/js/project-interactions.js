@@ -194,39 +194,15 @@
             // Add 'hls-video' class to identify HLS-initialized videos
             videoElement.classList.add('hls-video');
     
-            let resizeListener = null;
-    
-            const adjustAspectRatio = () => {
-                const videoWidth = videoElement.videoWidth;
-                const videoHeight = videoElement.videoHeight;
-                if (videoWidth && videoHeight) {
-                    const aspectRatio = videoWidth / videoHeight;
-                    const container = videoElement.parentElement;
-                    if (container) {
-                        container.style.aspectRatio = aspectRatio;
-                    }
-                }
-            };                      
-    
             const initializeVideo = () => {
-                // Listen for loadedmetadata to get video dimensions
-                videoElement.addEventListener('loadedmetadata', () => {
-                    adjustAspectRatio();
-    
-                    if (autoplay) {
-                        videoElement.play().catch(e => {
-                            if (e.name !== 'AbortError') { // Only log errors that are not AbortError
-                                console.error("Autoplay failed:", e);
-                            }
-                            // Optionally, handle AbortError differently if needed
-                        });
-                    }
-                    resolve();
-    
-                    // Add resize event listener
-                    resizeListener = adjustAspectRatio;
-                    window.addEventListener('resize', resizeListener);
-                }, { once: true }); // Ensure the event listener is called only once
+                if (autoplay) {
+                    videoElement.play().catch(e => {
+                        if (e.name !== 'AbortError') {
+                            console.error("Autoplay failed:", e);
+                        }
+                    });
+                }
+                resolve();
             };
     
             if (Hls.isSupported()) {
