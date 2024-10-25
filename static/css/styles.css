@@ -572,7 +572,11 @@ footer {
 .project-content img,
 .project-content video,
 .project-content iframe {
-       max-width: 100% !important;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    /* For images and videos */
+    object-fit: contain !important;
 }
 
 .project-content pre {
