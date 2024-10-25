@@ -13,8 +13,6 @@
             codesample_global_prismjs: true,
             codesample_content_css: 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css',
             codesample_content_js: 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js',
-            image_dimensions: false,
-            object_resizing: false,
             entity_encoding: 'named',
             protect: [
                 /\{\{.*?\}\}/g,

@@ -1,4 +1,4 @@
-// Function to dynamically load a JavaScript file
+// Dynamically load a JavaScript file
 function loadScript(url, callback) {
     var script = document.createElement("script");
     script.type = "text/javascript";
@@ -11,7 +11,7 @@ function loadScript(url, callback) {
     document.head.appendChild(script);
 }
 
-// Function to dynamically load a CSS file
+// Dynamically load a CSS file
 function loadCSS(url, callback) {
     var link = document.createElement("link");
     link.rel = "stylesheet";
@@ -24,7 +24,7 @@ function loadCSS(url, callback) {
     document.head.appendChild(link);
 }
 
-// Function to load Prism.js and its CSS
+// Load Prism.js and its CSS
 function loadPrism(callback) {
     loadCSS("https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css", function() {
         loadScript("https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js", function() {
@@ -36,7 +36,7 @@ function loadPrism(callback) {
     });
 }
 
-// Function to check for code snippets and highlight them
+// Check for code snippets and highlight them
 function checkAndHighlightCode(targetElement) {
     if (targetElement.querySelector("pre code")) {
         if (typeof Prism === 'undefined') {
