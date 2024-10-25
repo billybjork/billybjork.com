@@ -10,10 +10,13 @@ from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boole
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
+from bs4 import BeautifulSoup
+from jinja2 import pass_context
+from markupsafe import Markup
 from dotenv import load_dotenv
 from datetime import datetime
-from bs4 import BeautifulSoup
 import secrets
+import re
 import os
 
 load_dotenv()
@@ -99,6 +102,24 @@ def check_credentials(credentials: HTTPBasicCredentials = Depends(security)):
 
 def format_date(date):
     return date.strftime("%B, %Y")
+
+# Escape Jinja2 code
+@pass_context
+def escape_jinja2_in_code_snippets(context, content):
+    # Define a regex pattern to find code snippets
+    pattern = r'(<pre.*?>.*?</pre>)'
+
+    def replace_jinja2_in_snippet(match):
+        snippet = match.group(1)
+        # Escape { and } characters
+        snippet_escaped = snippet.replace('{', '&#123;').replace('}', '&#125;')
+        return snippet_escaped
+
+    content = re.sub(pattern, replace_jinja2_in_snippet, content, flags=re.DOTALL)
+    return Markup(content)
+
+# Register the filter
+templates.env.filters['escape_jinja2_in_code_snippets'] = escape_jinja2_in_code_snippets
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(

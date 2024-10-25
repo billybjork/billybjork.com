@@ -74,8 +74,8 @@ a:hover {
     display: block;
 }
 
-/* Fade gradient overlay over lower viewport */
-.home-page::before {
+/* Fade gradient overlay over lower viewport, excluding isolation mode */
+.home-page:not(.isolation-mode)::before {
     content: '';
     position: fixed;
     bottom: 0;
@@ -566,58 +566,58 @@ footer {
 }
 
 /* =========================
-   Override TinyMCE styles
+   Override TinyMCE styles and Prism.js styles
    ========================= */
 
+/* Constrain media elements */
 .project-content img,
 .project-content video,
 .project-content iframe {
-    width: 100% !important;
-    height: auto !important;
-    max-width: 100% !important;
-    /* For images and videos */
-    object-fit: contain !important;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
+
+/* Adjust code blocks */
+.project-content pre,
+.project-content code {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .project-content pre {
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    max-width: 100%;
+    overflow-x: auto;
+    background: #2d2d2d;
+    padding: 1em;
+    border-radius: 5px;
+    margin: 0;
 }
 
-/* =========================
-   Override Prism.js Styles
-   ========================= */
+.project-content code {
+    background: none;
+    padding: 0;
+    margin: 0;
+}
 
-.project-item {
+/* Prevent container overflow */
+.project-item,
+.project-content {
     overflow-x: hidden;
 }
 
-.project-item .project-content pre[class*="language-"],
-.project-item .project-content code[class*="language-"] {
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
-    word-break: break-word !important;
-    overflow-x: auto !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    margin: 0 !important;
-    padding: 1em !important;
+/* Ensure consistent box-sizing */
+.project-content * {
+    box-sizing: border-box;
 }
 
-.project-item .project-content pre[class*="language-"] {
-    width: 100% !important;
-    font-size: 0.9em;
-    line-height: 1.5;
-    background: #2d2d2d !important;
-    border-radius: 5px;
-}
-
-.project-item .project-content pre[class*="language-"] code {
-    display: block;
-    padding: 0;
-    margin: 0;
-    background: none;
+/* Handle long words */
+.project-content {
+    word-break: break-word;
 }
 
 /* =========================

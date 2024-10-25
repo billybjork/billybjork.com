@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block main_class %}home-page{% endblock %}
+{% block main_class %}
+    home-page{% if isolation_mode %} isolation-mode{% endif %}
+{% endblock %}
 
 {% block content %}
 
