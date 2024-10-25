@@ -27,7 +27,7 @@
     <fieldset>
         <legend>Project Content</legend>
 
-        <textarea id="html_content" name="html_content">{{ project.html_content | safe }}</textarea>
+        <textarea id="html_content" name="html_content">{{ project.html_content | e }}</textarea>
     </fieldset>
     <br>
     <button type="submit">Save</button>

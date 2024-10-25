@@ -1,41 +1,37 @@
 (function() {
-    /**
-     * Initializes TinyMCE for a given selector
-     * @param {string} selector - The selector for the textarea to initialize TinyMCE on
-     * @param {Object} additionalOptions - Additional options to merge with the default TinyMCE config
-     */
     function initTinyMCE(selector, additionalOptions = {}) {
         const defaultOptions = {
-            plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount linkchecker',
-            toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table mergetags | addcomment showcomments | spellcheckdialog a11ycheck typography | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat',
-            mergetags_list: [
-                { value: 'First.Name', title: 'First Name' },
-                { value: 'Email', title: 'Email' },
+            selector,
+            plugins: 'anchor autolink charmap codesample code emoticons image link lists media searchreplace table visualblocks wordcount linkchecker',
+            toolbar: 'undo redo | codesample code | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table mergetags | addcomment showcomments | spellcheckdialog a11ycheck typography | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat',
+            codesample_languages: [
+                { text: 'HTML/XML', value: 'markup' },
+                { text: 'JavaScript', value: 'javascript' },
+                { text: 'Python', value: 'python' },
+                { text: 'CSS', value: 'css' },
             ],
+            codesample_global_prismjs: true,
+            codesample_content_css: 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css',
+            codesample_content_js: 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js',
             image_dimensions: false,
             object_resizing: false,
-            valid_elements: '*[*]',
+            entity_encoding: 'named',
+            protect: [
+                /\{\{.*?\}\}/g,
+                /\{%.*?%\}/g,
+            ],
+            content_style: 'body { font-family:Helvetica,Arial,sans-serif; font-size:14px }',
+            height: 800,
             setup: function(editor) {
                 editor.on('change', function() {
                     tinymce.triggerSave();
                 });
-                // Remove inline styles on content retrieval
-                editor.on('GetContent', function(e) {
-                    e.content = e.content.replace(/style="[^"]*"/g, '');
-                });
             },
-            height: 800
         };
 
-        tinymce.init({ ...defaultOptions, ...additionalOptions, selector });
+        tinymce.init({ ...defaultOptions, ...additionalOptions });
     }
 
-    // Expose initTinyMCE to the global scope if needed
     window.initTinyMCE = initTinyMCE;
 
-    // Initialize TinyMCE on DOMContentLoaded if required
-    document.addEventListener('DOMContentLoaded', () => {
-        // Example initialization (adjust selector as needed)
-        // initTinyMCE('.my-textarea');
-    });
 })();

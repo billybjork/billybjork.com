@@ -578,10 +578,44 @@ footer {
 }
 
 .project-content pre {
-    white-space: pre-wrap; /* Wrap long lines */
+    white-space: pre-wrap;
     word-wrap: break-word;
-    overflow-x: auto; /* Add horizontal scrollbar if necessary */
     max-width: 100%;
+}
+
+/* =========================
+   Override Prism.js Styles
+   ========================= */
+
+.project-item {
+    overflow-x: hidden;
+}
+
+.project-item .project-content pre[class*="language-"],
+.project-item .project-content code[class*="language-"] {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-x: auto !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 1em !important;
+}
+
+.project-item .project-content pre[class*="language-"] {
+    width: 100% !important;
+    font-size: 0.9em;
+    line-height: 1.5;
+    background: #2d2d2d !important;
+    border-radius: 5px;
+}
+
+.project-item .project-content pre[class*="language-"] code {
+    display: block;
+    padding: 0;
+    margin: 0;
+    background: none;
 }
 
 /* =========================
