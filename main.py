@@ -105,9 +105,9 @@ class LogTrafficMiddleware(BaseHTTPMiddleware):
             visitor_id = str(uuid.uuid4())
             response.set_cookie(key='visitor_id', value=visitor_id)
 
-        # Check for 'close=true' in query parameters
+        # Replace the check with:
         if request.query_params.get('close') == 'true':
-            endpoint = '/'
+
             return response
 
         # Get request info
@@ -131,6 +131,7 @@ class LogTrafficMiddleware(BaseHTTPMiddleware):
 
         return response
 
+app.add_middleware(LogTrafficMiddleware)
 
 # Dependency to get the database session
 def get_db():

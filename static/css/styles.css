@@ -191,29 +191,6 @@ footer {
 }
 
 /* =========================
-   Pins
-   ========================= */
-
-.pinned-icon {
-    position: absolute;
-    top: var(--spacing-medium);
-    right: var(--spacing-small);
-    font-size: var(--font-size-medium);
-    color: var(--highlight-color);
-    opacity: 1;
-    transition: opacity 0.1s var(--transition-ease);
-}
-
-.project-item.active .pinned-icon {
-    opacity: 0;
-}
-
-.project-item.active .video-container {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-/* =========================
    Fade-In/Out Animations for Project Items
    ========================= */
 
@@ -273,10 +250,33 @@ footer {
 }
 
 /* =========================
+   Pins
+   ========================= */
+
+   .pinned-icon {
+    position: absolute;
+    top: var(--spacing-medium);
+    right: var(--spacing-small);
+    font-size: var(--font-size-medium);
+    color: var(--highlight-color);
+    opacity: 1;
+    transition: opacity 0.1s var(--transition-ease);
+}
+
+.project-item.active .pinned-icon {
+    opacity: 0;
+}
+
+.project-item.active .video-container {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* =========================
    Projects list and items
    ========================= */
 
-#project-list {
+   #project-list {
     display: flex;
     flex-direction: column;
     align-items: center;
