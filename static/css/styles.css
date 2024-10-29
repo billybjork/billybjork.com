@@ -435,7 +435,7 @@ footer {
    Thumbnails
    ========================= */
 
-   .thumbnail {
+.thumbnail {
     display: block;
     position: relative;
     overflow: hidden;
@@ -488,7 +488,6 @@ footer {
 .video-container video {
     width: 100%;
     height: auto;
-    max-height: 90vh;
     object-fit: contain; /* Maintain aspect ratio without cropping */
     background-color: #000;
     display: block;

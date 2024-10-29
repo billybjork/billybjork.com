@@ -6,7 +6,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_401_UNAUTHORIZED, HTTP_500_INTERNAL_SERVER_ERROR
-from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Date, Text, Boolean, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.sql import func
@@ -16,6 +16,7 @@ from markupsafe import Markup
 from dotenv import load_dotenv
 from datetime import datetime
 import secrets
+import uuid
 import re
 import os
 
@@ -24,17 +25,6 @@ load_dotenv()
 security = HTTPBasic()
 
 app = FastAPI()
-
-# Custom middleware to handle 'X-Forwarded-Proto' header
-class ForwardedProtoMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        x_forwarded_proto = request.headers.get('x-forwarded-proto')
-        if x_forwarded_proto:
-            request.scope['scheme'] = x_forwarded_proto
-        response = await call_next(request)
-        return response
-    
-app.add_middleware(ForwardedProtoMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -77,8 +67,66 @@ class General(Base):
     linkedin_link = Column(String)
     about_photo_link = Column(String)
 
+class PageViewLog(Base):
+    __tablename__ = 'page_view_logs'
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    endpoint = Column(String)
+    ip_address = Column(String)
+    user_agent = Column(String)
+    visitor_id = Column(String)
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Custom middleware to handle 'X-Forwarded-Proto' header
+class ForwardedProtoMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        x_forwarded_proto = request.headers.get('x-forwarded-proto')
+        if x_forwarded_proto:
+            request.scope['scheme'] = x_forwarded_proto
+        response = await call_next(request)
+        return response
+    
+app.add_middleware(ForwardedProtoMiddleware)
+
+class LogTrafficMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Skip logging for static files or specific paths if needed
+        if request.url.path.startswith('/static'):
+            return await call_next(request)
+
+        # Process the request and get the response early
+        response = await call_next(request)
+
+        # Get or set visitor_id
+        visitor_id = request.cookies.get('visitor_id')
+        if not visitor_id:
+            visitor_id = str(uuid.uuid4())
+            response.set_cookie(key='visitor_id', value=visitor_id)
+
+        # Get request info
+        endpoint = request.url.path
+        ip_address = request.client.host
+        user_agent = request.headers.get('User-Agent')
+
+        # Log to database
+        db = SessionLocal()
+        try:
+            page_view = PageViewLog(
+                endpoint=endpoint,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                visitor_id=visitor_id
+            )
+            db.add(page_view)
+            db.commit()
+        finally:
+            db.close()
+
+        return response
+
+app.add_middleware(LogTrafficMiddleware)
 
 # Dependency to get the database session
 def get_db():
