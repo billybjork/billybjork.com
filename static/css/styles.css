@@ -250,29 +250,6 @@ footer {
 }
 
 /* =========================
-   Pins
-   ========================= */
-
-   .pinned-icon {
-    position: absolute;
-    top: var(--spacing-medium);
-    right: var(--spacing-small);
-    font-size: var(--font-size-medium);
-    color: var(--highlight-color);
-    opacity: 1;
-    transition: opacity 0.1s var(--transition-ease);
-}
-
-.project-item.active .pinned-icon {
-    opacity: 0;
-}
-
-.project-item.active .video-container {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-/* =========================
    Projects list and items
    ========================= */
 
@@ -290,15 +267,14 @@ footer {
     transform: translateY(20px);
     position: relative;
     width: 100%;
-    max-width: 70vw;
     display: flex;
     flex-direction: column;
-    align-items: center;
     margin-bottom: var(--spacing-large);
     border-radius: 8px;
     padding: 1rem;
     background-color: transparent;
     overflow: hidden;
+    max-width: 70vw;
     transition: 
         background-color 0.3s var(--transition-ease), 
         border-radius 0.3s var(--transition-ease), 
@@ -306,8 +282,8 @@ footer {
         transform 0.3s var(--transition-ease),
         opacity 0.3s var(--transition-ease);
     @media (max-width: 768px) {
-        max-width: 100vw;
-    }
+            max-width: 100vw;
+        }
 }
 
 .project-item.active {
@@ -327,7 +303,6 @@ footer {
     position: relative;
     align-items: stretch;
     width: 100%;
-    max-width: 320px; /* Align with thumbnail width */
     background-color: transparent;
     color: var(--primary-color);
     padding: 0 0 var(--spacing-medium) 0;
@@ -336,14 +311,21 @@ footer {
     cursor: pointer;
     transition: 
         color 0.3s ease,
-        max-width 0.3s ease,
         transform 0.3s ease;
 }
 
-.project-item.active .project-header {
+.project-header-content {
+    position: relative;
+    max-width: 320px; /* Depends on thumbnail width */
+    width: 100%;
+    margin: 0 auto;
+    transition: max-width 0.3s ease;
+}
+
+.project-item.active .project-header-content {
     max-width: 95%;
     @media (max-width: 768px) {
-        max-width: 90%;
+            max-width: 90%;
     }
 }
 
@@ -369,6 +351,19 @@ footer {
     transform: translateZ(0) scale(0.7) translateY(10px); /* Slightly slide down */
     transform-origin: left center;
     backface-visibility: hidden;
+}
+
+.pinned-icon {
+    position: absolute;
+    top: var(--spacing-medium);
+    right: 0;
+    color: var(--highlight-color);
+    opacity: 1;
+    transition: opacity 0.1s var(--transition-ease);
+}
+
+.project-item.active .pinned-icon {
+    opacity: 0;
 }
 
 /* =========================
