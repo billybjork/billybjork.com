@@ -306,7 +306,6 @@ footer {
     width: 100%;
     background-color: transparent;
     color: var(--primary-color);
-    padding: 0 0 var(--spacing-medium) 0;
     transform: translateX(-10px);
     scroll-margin-top: 40px;
     cursor: pointer;
@@ -423,7 +422,6 @@ footer {
 }
 
 .project-content {
-    padding-top: var(--spacing-medium);
     overflow: hidden;
 }
 
@@ -487,6 +485,7 @@ footer {
     height: auto;
     max-height: 90vh;
     object-fit: contain;
+    padding: var(--spacing-medium) 0 var(--spacing-medium) 0
 }
 
 /* =========================

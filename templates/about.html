@@ -40,6 +40,9 @@
                 {% if general_info.linkedin_link %}
                 <li><a href="{{ general_info.linkedin_link }}" target="_blank" aria-label="LinkedIn"><i class="fab fa-linkedin"></i></a></li>
                 {% endif %}
+                {% if general_info.github_link %}
+                <li><a href="{{ general_info.github_link }}" target="_blank" aria-label="GitHub"><i class="fab fa-github"></i></a></li>
+                {% endif %}
             {% endif %}
         </ul>
     </nav>

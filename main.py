@@ -65,6 +65,7 @@ class General(Base):
     vimeo_link = Column(String)
     instagram_link = Column(String)
     linkedin_link = Column(String)
+    github_link = Column(String)
     about_photo_link = Column(String)
 
 class PageViewLog(Base):
