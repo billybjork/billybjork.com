@@ -159,7 +159,7 @@ def format_date(date):
 # Escape Jinja2 code
 @pass_context
 def escape_jinja2_in_code_snippets(context, content):
-    # Define a regex pattern to find code snippets
+    # Find code snippets
     pattern = r'(<pre.*?>.*?</pre>)'
 
     def replace_jinja2_in_snippet(match):
@@ -387,7 +387,7 @@ async def read_project(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        # Fetch general information (e.g., reel video link)
+        # Fetch general information
         general_info = db.query(General).first()
         
         # Format the project creation date
@@ -418,7 +418,7 @@ async def read_project(
         # For direct navigation, render the page with only the project
         # Set a flag to indicate that we're in isolation mode
         projects = [project]
-        isolation_mode = True  # New flag
+        isolation_mode = True
         
         # Dynamic title and description
         page_title = project.name
@@ -431,9 +431,9 @@ async def read_project(
             "current_year": datetime.now().year,
             "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info,
-            "isolation_mode": isolation_mode,  # Pass the flag to the template
-            "page_title": page_title,            # New context variable
-            "page_meta_description": page_meta_description  # New context variable
+            "isolation_mode": isolation_mode,
+            "page_title": page_title,
+            "page_meta_description": page_meta_description
         })
     except HTTPException as http_exc:
         raise http_exc  # Let FastAPI handle HTTP exceptions
