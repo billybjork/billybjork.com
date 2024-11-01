@@ -739,6 +739,12 @@ dt {
     font-weight: bold;
 }
 
+hr {
+    margin-top: var(--spacing-large);
+    margin-bottom: var(--spacing-large);
+    max-width: 50vw;
+}
+
 #infinite-scroll-sentinel {
     height: 100px;
     text-align: center;

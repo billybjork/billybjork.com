@@ -405,12 +405,12 @@ async def read_project(
     
         if is_htmx:
             if is_open:
-                # Return the project details for opening
+                # Return the project details
                 return templates.TemplateResponse("project_details.html", {
                     "request": request, 
                     "project": project,
                     "is_open": is_open,
-                    "meta_description": meta_description  # Pass meta_description if needed
+                    "meta_description": meta_description
                 })
             else:
                 # Return empty content for closing to prevent thumbnail duplication
