@@ -346,6 +346,9 @@ footer {
 
 .project-item.active .project-name {
     transform: scale(1.25); /* Creates text pixellation; find a different approach that works for Safari */
+    @media (max-width: 768px) {
+        max-width: 75%;
+    }
 }
 
 .project-date {
