@@ -399,6 +399,15 @@
             const frameY = Math.floor(frameIndex / columns) * frameHeight;
 
             thumbnail.style.backgroundPosition = `-${frameX}px -${frameY}px`;
+            // Update the background-position display span
+            const bgPositionSpanId = `bg-position-display-${thumbnail.id}`;
+            const bgPositionSpan = document.getElementById(bgPositionSpanId);
+            if (bgPositionSpan) {
+                bgPositionSpan.textContent = `-${frameX}px -${frameY}px`;
+                console.log(`Updated span ${bgPositionSpanId} with position: -${frameX}px -${frameY}px`);
+            } else {
+                console.warn(`No span found for thumbnail ID: ${thumbnail.id}`);
+            }
         });
     };
 

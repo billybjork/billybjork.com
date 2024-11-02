@@ -60,7 +60,6 @@ class General(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     about_content = Column(Text)
-    reel_link = Column(String)
     youtube_link = Column(String)
     vimeo_link = Column(String)
     instagram_link = Column(String)
@@ -248,7 +247,6 @@ async def read_root(
             "request": request,
             "projects": formatted_projects,
             "current_year": datetime.now().year,
-            "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info,
             "page": page,
             "has_more": has_more,
@@ -430,7 +428,6 @@ async def read_project(
             "projects": projects,
             "open_project": project if is_open else None,
             "current_year": datetime.now().year,
-            "reel_video_link": general_info.reel_link if general_info else None,
             "general_info": general_info,
             "isolation_mode": isolation_mode,
             "page_title": page_title,
