@@ -48,7 +48,7 @@ class Project(Base):
     name = Column(Text)
     slug = Column(String, unique=True, index=True)
     html_content = Column(Text)
-    thumbnail_link = Column(Text)
+    sprite_sheet_link = Column(Text)
     # CDN base URL: https://d17y8p6t5eu2ht.cloudfront.net/videos/
     video_link = Column(Text)
     show_project = Column(Boolean)
@@ -217,7 +217,7 @@ async def read_root(
                 "id": project.id,
                 "name": project.name,
                 "slug": project.slug,
-                "thumbnail_link": project.thumbnail_link,
+                "sprite_sheet_link": project.sprite_sheet_link,
                 "video_link": project.video_link,
                 "youtube_link": project.youtube_link,
                 "formatted_date": format_date(project.creation_date),
@@ -334,7 +334,7 @@ async def create_project(request: Request, db: Session = Depends(get_db), userna
         name=form_data.get("name"),
         slug=form_data.get("slug"),
         html_content=form_data.get("html_content"),
-        thumbnail_link=form_data.get("thumbnail_link"),
+        sprite_sheet_link=form_data.get("sprite_sheet_link"),
         video_link=form_data.get("video_link"),
         show_project="show_project" in form_data,
         youtube_link=form_data.get("youtube_link"),
@@ -498,7 +498,7 @@ async def get_projects(db: Session = Depends(get_db), skip: int = 0, limit: int 
             "name": project.name,
             "slug": project.slug,
             "creation_date": format_date(project.creation_date),
-            "thumbnail_link": project.thumbnail_link,
+            "sprite_sheet_link": project.sprite_sheet_link,
             "youtube_link": project.youtube_link
         }
         for project in projects

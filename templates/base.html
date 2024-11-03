@@ -16,7 +16,7 @@
         <meta property="og:description" content="{{ page_meta_description if page_meta_description else 'big idea guy' }}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="{{ request.url }}">
-        <meta property="og:image" content="{{ projects[0].thumbnail_link if projects else 'default_image_url' }}">
+        <meta property="og:image" content="{{ projects[0].sprite_sheet_link if projects else 'default_image_url' }}">
 
     <!-- Defer loading for HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js" defer></script>
