@@ -99,7 +99,6 @@ a:hover {
    Site header
    ========================= */
 
-/* Specific styles for #main-header */
 #main-header {
     display: flex;
     justify-content: space-between;
