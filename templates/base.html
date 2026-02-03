@@ -18,24 +18,26 @@
         <meta property="og:url" content="{{ request.url }}">
         <meta property="og:image" content="{{ projects[0].sprite_sheet_link if projects else 'default_image_url' }}">
 
-    <!-- Defer loading for HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js" defer></script>
+    <!-- Prevent FOUT: hide page until font is ready -->
+    <style>.no-fouc body{opacity:0}.fouc-ready body{opacity:1;transition:opacity .1s}</style>
+    <script>document.documentElement.classList.add('no-fouc')</script>
 
-    <!-- Preload resources -->
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" rel="stylesheet">
-    </noscript>
-        <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    </noscript>
-
-    <!-- Preconnect to required origins -->
+    <!-- Preconnect to required origins (must precede preloads) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <!-- Defer loading for HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.8/dist/htmx.min.js" defer></script>
+
+    <!-- Async font loading with FOUT prevention -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet';var h=document.documentElement;document.fonts.ready.then(function(){h.classList.remove('no-fouc');h.classList.add('fouc-ready')})">
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=swap" rel="stylesheet">
+        <style>.no-fouc{opacity:1}</style>
+    </noscript>
+    <!-- Safety timeout: always show content even if font is slow -->
+    <script>setTimeout(function(){var h=document.documentElement;h.classList.remove('no-fouc');h.classList.add('fouc-ready')},400)</script>
 
     <!-- Main stylesheet -->
     <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
@@ -43,16 +45,20 @@
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ request.url_for('static', path='assets/favicon.ico') }}">
 
+    <!-- RSS Feed -->
+    <link rel="alternate" type="application/rss+xml" title="Billy Bjork RSS Feed" href="/feed.xml">
+
     {% block additional_head %}{% endblock %}
 </head>
-<body data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}">
+<body data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}"
+      data-hls-js-src="https://cdn.jsdelivr.net/npm/hls.js@1.5.12">
     <header id="main-header">
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>
-            <a href="/about">About</a>
-            <a href="https://www.vujade.world/" class="vu-ja-de-btn" target="_blank" rel="noopener">
-                <img src="{{ request.url_for('static', path='assets/cube.gif') }}" alt="Cube icon" class="vu-ja-de-icon" loading="lazy">
-                VU JA DE
+            <a href="/me">Me</a>
+            <a href="https://www.magicbutton.studio/" class="magic-button-btn" target="_blank" rel="noopener">
+                <img src="{{ request.url_for('static', path='assets/magic-button.webp') }}" alt="Magic Button icon" class="magic-button-icon" loading="lazy">
+                Magic Button
             </a>
         </nav>
     </header>
@@ -60,10 +66,14 @@
         {% block content %}{% endblock %}
     </main>
 
+    {% include "footer.html" %}
+
     <!-- Deferred scripts -->
     <script src="{{ request.url_for('static', path='js/code-highlighting.js') }}" defer></script>
     <script src="{{ request.url_for('static', path='js/project-interactions.js') }}" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest" defer></script>
+    {% if is_dev_mode %}
+    <script src="{{ request.url_for('static', path='js/edit-bootstrap.js') }}" defer></script>
+    {% endif %}
 
     {% block additional_scripts %}{% endblock %}
 </body>

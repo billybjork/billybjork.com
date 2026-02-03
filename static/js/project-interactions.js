@@ -74,6 +74,41 @@
     window.copyToClipboard = copyToClipboard;
 
     /**
+     * Opens external links in new tabs.
+     * Excludes anchor links, relative links, and same-domain links.
+     * @param {HTMLElement} root - The root element to search for links.
+     */
+    const openExternalLinksInNewTab = (root = document) => {
+        const links = root.querySelectorAll('a[href]');
+        const currentHost = window.location.host;
+
+        links.forEach(link => {
+            const href = link.getAttribute('href');
+            if (!href) return;
+
+            // Skip anchor links, relative links, mailto, tel, etc.
+            if (href.startsWith('#') ||
+                href.startsWith('/') ||
+                href.startsWith('../') ||
+                href.startsWith('mailto:') ||
+                href.startsWith('tel:')) {
+                return;
+            }
+
+            // Check if it's an external URL
+            try {
+                const url = new URL(href, window.location.origin);
+                if (url.host !== currentHost) {
+                    link.setAttribute('target', '_blank');
+                    link.setAttribute('rel', 'noopener noreferrer');
+                }
+            } catch (e) {
+                // Invalid URL, skip
+            }
+        });
+    };
+
+    /**
      * ============================
      * Intersection Observer for Project Items
      * ============================
@@ -141,8 +176,15 @@
                 const thumbnail = entry.target;
                 const bgImage = thumbnail.getAttribute('data-bg');
                 if (bgImage) {
-                    thumbnail.style.backgroundImage = `url('${bgImage}')`;
-                    thumbnail.removeAttribute('data-bg');
+                    const img = new Image();
+                    img.onload = () => {
+                        thumbnail.style.backgroundImage = `url('${bgImage}')`;
+                        thumbnail.removeAttribute('data-bg');
+                        requestAnimationFrame(() => {
+                            thumbnail.classList.remove('lazy-thumbnail');
+                        });
+                    };
+                    img.src = bgImage;
                 }
                 observer.unobserve(thumbnail);
             }
@@ -176,6 +218,33 @@
      * ============================
      */
 
+    const HLS_JS_SRC = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
+    let hlsScriptPromise = null;
+
+    /**
+     * Lazy-load HLS.js only when needed.
+     * @returns {Promise<void>}
+     */
+    const loadHlsScript = () => {
+        if (window.Hls) {
+            return Promise.resolve();
+        }
+        if (hlsScriptPromise) {
+            return hlsScriptPromise;
+        }
+
+        hlsScriptPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = HLS_JS_SRC;
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load HLS.js'));
+            document.head.appendChild(script);
+        });
+
+        return hlsScriptPromise;
+    };
+
     /**
      * Sets up HLS video player for a given video element.
      * @param {HTMLVideoElement} videoElement - The video element to initialize.
@@ -190,12 +259,13 @@
                 reject('No HLS URL provided');
                 return;
             }
-    
+
             // Add 'hls-video' class to identify HLS-initialized videos
             videoElement.classList.add('hls-video');
-    
+
             const initializeVideo = () => {
-                if (autoplay) {
+                // Don't autoplay if edit mode is active
+                if (autoplay && !document.body.classList.contains('editing')) {
                     videoElement.play().catch(e => {
                         if (e.name !== 'AbortError') {
                             console.error("Autoplay failed:", e);
@@ -204,14 +274,27 @@
                 }
                 resolve();
             };
-    
-            if (Hls.isSupported()) {
+
+            const canPlayNative = videoElement.canPlayType('application/vnd.apple.mpegurl');
+
+            const initializeHls = () => {
+                if (!window.Hls || !Hls.isSupported()) {
+                    if (canPlayNative) {
+                        videoElement.src = streamUrl;
+                        videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
+                        return;
+                    }
+                    console.error('HLS is not supported in this browser');
+                    reject('HLS is not supported');
+                    return;
+                }
+
                 // Prevent multiple HLS instances on the same video
                 if (videoElement.hlsInstance) {
                     console.warn('HLS instance already exists for this video element. Destroying existing instance.');
                     videoElement.hlsInstance.destroy();
                 }
-    
+
                 const hls = new Hls();
                 videoElement.hlsInstance = hls;  // Store instance for cleanup
                 hls.loadSource(streamUrl);
@@ -250,22 +333,32 @@
                         }
                     }
                 });
-            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-                videoElement.src = streamUrl;
-                videoElement.addEventListener('loadedmetadata', initializeVideo);
-            } else {
-                console.error('HLS is not supported in this browser');
-                reject('HLS is not supported');
-            }
-    
-            // Cleanup function to remove resize listener
-            videoElement.cleanup = () => {
-                if (resizeListener) {
-                    window.removeEventListener('resize', resizeListener);
-                }
             };
+
+            if (window.Hls && Hls.isSupported()) {
+                initializeHls();
+                return;
+            }
+
+            if (!window.Hls && canPlayNative) {
+                videoElement.src = streamUrl;
+                videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
+                return;
+            }
+
+            loadHlsScript()
+                .then(initializeHls)
+                .catch(err => {
+                    if (canPlayNative) {
+                        videoElement.src = streamUrl;
+                        videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
+                        return;
+                    }
+                    console.error('Failed to load HLS.js:', err);
+                    reject(err);
+                });
         });
-    };    
+    };
 
     /**
      * Destroys the HLS player instance and revokes the blob URL.
@@ -280,12 +373,6 @@
             const blobUrl = videoElement.src; // Store the Blob URL
             URL.revokeObjectURL(blobUrl); // Revoke the Blob URL first
             videoElement.src = ''; // Then clear the src attribute
-        }
-
-        // Remove resize event listener if it was added
-        if (typeof videoElement.cleanup === 'function') {
-            videoElement.cleanup();
-            delete videoElement.cleanup;
         }
     };
 
@@ -381,6 +468,10 @@
     const updateThumbnails = () => {
         const thumbnails = document.querySelectorAll('.thumbnail');
 
+        if (!thumbnails.length) {
+            return;
+        }
+
         thumbnails.forEach(thumbnail => {
             const totalFrames = parseInt(thumbnail.dataset.frames, 10);
             const frameWidth = parseInt(thumbnail.dataset.frameWidth, 10);
@@ -410,6 +501,20 @@
     let lastScrollEventTime = Date.now();
     let animationSpeed = 0; // frames per second
     let lastAnimationFrameTime = Date.now();
+    let animationFrameId = null;
+
+    const startAnimationLoop = () => {
+        if (animationFrameId !== null || document.hidden) return;
+        lastAnimationFrameTime = Date.now();
+        animationFrameId = requestAnimationFrame(animationLoop);
+    };
+
+    const stopAnimationLoop = () => {
+        if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    };
 
     const handleScroll = () => {
         const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
@@ -431,9 +536,18 @@
 
         lastScrollTop = currentScrollTop;
         lastScrollEventTime = now;
+
+        if (Math.abs(animationSpeed) > 0.01) {
+            startAnimationLoop();
+        }
     };
 
     const animationLoop = () => {
+        if (document.hidden) {
+            stopAnimationLoop();
+            return;
+        }
+
         const now = Date.now();
         const deltaTime = (now - lastAnimationFrameTime) / 1000; // in seconds
         lastAnimationFrameTime = now;
@@ -452,22 +566,29 @@
         // Update animation progress based on animation speed
         animationProgress += animationSpeed * deltaTime;
 
-        // Ensure animationProgress wraps around within totalFrames (assuming 60 total frames)
-        animationProgress = animationProgress % 60;
-        if (animationProgress < 0) {
-            animationProgress += 60;
-        }
+        // Keep animationProgress from growing unbounded (per-thumbnail wrapping
+        // is handled in updateThumbnails via % totalFrames)
+        if (animationProgress > 1e6) animationProgress -= 1e6;
+        if (animationProgress < -1e6) animationProgress += 1e6;
 
         // Update the thumbnails
         updateThumbnails();
 
-        // Continue the animation loop
-        requestAnimationFrame(animationLoop);
+        if (Math.abs(animationSpeed) > 0.01) {
+            animationFrameId = requestAnimationFrame(animationLoop);
+        } else {
+            animationSpeed = 0;
+            stopAnimationLoop();
+        }
     };
 
-    // Initialize the animation loop
-    lastAnimationFrameTime = Date.now();
-    requestAnimationFrame(animationLoop);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopAnimationLoop();
+        } else if (Math.abs(animationSpeed) > 0.01) {
+            startAnimationLoop();
+        }
+    });
 
     /**
      * ============================
@@ -495,6 +616,7 @@
 
         // Initialize lazy loading for thumbnails
         initializeLazyThumbnails();
+        updateThumbnails();
 
         // Attach scroll event listener
         window.addEventListener('scroll', handleScroll);
@@ -568,7 +690,7 @@
      */
     const handleHTMXAfterSwap = (event) => {
         const { elt } = event.detail;
-    
+
         // Check if the swapped element is an infinite scroll sentinel
         if (elt.id && elt.id.startsWith('infinite-scroll-sentinel')) {
             // Select all new project items that do not have 'fade-in' or 'no-fade' classes
@@ -616,6 +738,10 @@
         // Initialize lazy loading for newly inserted thumbnails and videos
         initializeLazyThumbnails(elt);
         initializeLazyVideos(elt);
+        updateThumbnails();
+
+        // Open external links in new tabs
+        openExternalLinksInNewTab(elt);
     };
 
     /**
@@ -713,8 +839,7 @@
         initializeThumbnails();
         initializeProjects();
         initializeProjectObserver();
-        initializeLazyVideos();
-        initializeLazyThumbnails();
+        openExternalLinksInNewTab();
 
         // Attach the window unload event listener to clean up HLS players
         window.addEventListener('beforeunload', cleanupActiveHLSPlayers);
@@ -729,6 +854,12 @@
         document.body.addEventListener('htmx:beforeRequest', handleHTMXBeforeRequest);
         document.body.addEventListener('htmx:load', handleHTMXLoad);
         document.body.addEventListener('htmx:beforeSwap', handleHTMXBeforeSwap);
+        document.body.addEventListener('htmx:responseError', () => {
+            showNotification('Failed to load content. Please try again.', true);
+        });
+        document.body.addEventListener('htmx:sendError', () => {
+            showNotification('Network error. Please check your connection.', true);
+        });
 
         // Event delegation for elements with class 'copy-text-link'
         document.body.addEventListener('click', (event) => {
@@ -760,6 +891,73 @@
                 // Else, let HTMX handle the click
             }
         });
+
+        // Image lightbox: click to enlarge images in project content
+        document.body.addEventListener('click', function(event) {
+            const img = event.target.closest('.project-content img');
+            if (!img) return;
+
+            const overlay = document.createElement('div');
+            overlay.className = 'image-lightbox';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'image-lightbox-close';
+            closeBtn.innerHTML = '&times;';
+
+            const enlargedImg = document.createElement('img');
+            enlargedImg.src = img.src;
+            enlargedImg.alt = img.alt || '';
+
+            overlay.appendChild(closeBtn);
+            overlay.appendChild(enlargedImg);
+            document.body.appendChild(overlay);
+
+            // Trigger fade-in
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+
+            const closeLightbox = () => {
+                overlay.classList.remove('visible');
+                overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+            };
+
+            closeBtn.addEventListener('click', closeLightbox);
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) closeLightbox();
+            });
+        });
+
+        // Escape key closes lightbox first, then open project (same as clicking X)
+        // Skip if edit mode is active - edit mode handles its own Escape
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                // Don't close project if edit mode is active
+                if (document.body.classList.contains('editing')) {
+                    return;
+                }
+
+                // Close lightbox first if one is open
+                const lightbox = document.querySelector('.image-lightbox');
+                if (lightbox) {
+                    lightbox.classList.remove('visible');
+                    lightbox.addEventListener('transitionend', () => lightbox.remove(), { once: true });
+                    return;
+                }
+
+                const activeProject = document.querySelector('.project-item.active');
+                if (activeProject) {
+                    const closeBtn = activeProject.querySelector('.close-project');
+                    if (closeBtn) {
+                        const isIsolationMode = document.body.dataset.isolationMode === 'true';
+                        if (isIsolationMode) {
+                            closeProject(closeBtn);
+                        } else {
+                            // Trigger HTMX click for non-isolation mode
+                            closeBtn.click();
+                        }
+                    }
+                }
+            }
+        });
     };
 
     /**
@@ -773,16 +971,23 @@
     // Initialize on DOMContentLoaded
     document.addEventListener('DOMContentLoaded', initialize);
 
-    /**
-     * ============================
-     * Additional Functions
-     * ============================
-     */
+    // Handle hash scrolling (native scrollIntoView)
+    const scrollToHashTarget = () => {
+        if (window.location.hash) {
+            // Use getElementById instead of querySelector to handle IDs starting with numbers
+            const target = document.getElementById(window.location.hash.slice(1));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    };
+
+    window.addEventListener('load', scrollToHashTarget);
+    window.addEventListener('hashchange', scrollToHashTarget);
 
     /**
      * Closes a specific project item smoothly.
      * @param {HTMLElement} button - The close button element.
-     * @returns {Promise} Resolves when the close transition is complete.
      */
     function closeProject(button) {
         const projectItem = button.closest('.project-item');
@@ -824,13 +1029,7 @@
         }
     }
 
-    /**
-     * ============================
-     * HTMX and Project Initialization
-     * ============================
-     */
-
-    // Expose necessary functions to the global scope if needed elsewhere
+    // Expose necessary functions to the global scope
     window.handleProjectContent = handleProjectContent;
     window.closeAllOpenProjects = closeAllOpenProjects;
     window.cleanupActiveHLSPlayers = cleanupActiveHLSPlayers;

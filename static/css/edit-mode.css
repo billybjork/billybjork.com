@@ -1,0 +1,1088 @@
+/**
+ * Edit Mode Styles
+ * Styles for the block editor
+ */
+
+/* ========================================
+   Edit Mode Container
+   ======================================== */
+
+.edit-mode-active {
+    min-height: 400px;
+    overflow: visible !important;
+}
+
+/* Override parent container overflow when editing */
+.project-item.active .project-details:has(.edit-mode-active) {
+    overflow: visible;
+}
+
+.edit-mode-container {
+    width: 100%;
+}
+
+body.editing {
+    overflow-x: hidden;
+}
+
+/* ========================================
+   Toolbar
+   ======================================== */
+
+.edit-mode-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #1a1a1a;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    position: sticky;
+    top: 60px;
+    z-index: 100;
+}
+
+.edit-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.edit-project-name {
+    font-weight: 500;
+    color: #fff;
+}
+
+.edit-status {
+    font-size: 13px;
+    transition: color 0.2s ease;
+}
+
+.edit-toolbar-right {
+    display: flex;
+    gap: 8px;
+}
+
+.edit-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.edit-btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.edit-btn-primary:hover {
+    background: #2563eb;
+}
+
+.edit-btn-primary.has-changes {
+    background: #22c55e;
+}
+
+.edit-btn-primary.is-saving {
+    background: #3b82f6;
+    animation: pulse-save 1.5s ease-in-out infinite;
+}
+
+.edit-btn-primary.has-error {
+    background: #ef4444;
+}
+
+.edit-btn-primary.has-error:hover {
+    background: #dc2626;
+}
+
+.edit-btn-secondary {
+    background: #333;
+    color: #ccc;
+}
+
+.edit-btn-secondary:hover {
+    background: #444;
+}
+
+/* ========================================
+   Blocks Container
+   ======================================== */
+
+.edit-blocks-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* ========================================
+   Block Wrapper
+   ======================================== */
+
+.block-wrapper {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 12px;
+    padding-right: 40px;
+    padding-bottom: 48px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.block-wrapper:hover {
+    border-color: #333;
+}
+
+.block-wrapper:focus-within {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.block-wrapper.dragging {
+    opacity: 0.5;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.block-wrapper.drag-over-top {
+    border-top: 2px solid #3b82f6;
+}
+
+.block-wrapper.drag-over-bottom {
+    border-bottom: 2px solid #3b82f6;
+}
+
+.block-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ========================================
+   Block Handle
+   ======================================== */
+
+.block-handle {
+    cursor: grab;
+    color: #444;
+    padding: 4px 2px;
+    font-size: 14px;
+    line-height: 1;
+    user-select: none;
+    transition: color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.block-handle:hover {
+    color: #888;
+}
+
+.block-handle:active {
+    cursor: grabbing;
+}
+
+/* ========================================
+   Block Delete Button
+   ======================================== */
+
+.block-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #555;
+    cursor: pointer;
+    font-size: 20px;
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.block-wrapper:hover .block-delete-btn {
+    opacity: 1;
+}
+
+.block-delete-btn:hover {
+    background: #ef4444;
+    color: #fff;
+}
+
+/* ========================================
+   Block Alignment Toolbar
+   ======================================== */
+
+.block-align-toolbar {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.block-wrapper:hover .block-align-toolbar,
+.block-wrapper:focus-within .block-align-toolbar {
+    opacity: 1;
+}
+
+.block-align-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: #666;
+    cursor: pointer;
+    padding: 4px;
+    transition: all 0.15s ease;
+}
+
+.block-align-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.block-align-btn:hover {
+    background: #333;
+    color: #ccc;
+}
+
+.block-align-btn.active {
+    background: #3b82f6;
+    color: #fff;
+}
+
+.block-align-btn.active:hover {
+    background: #2563eb;
+}
+
+/* ========================================
+   Merge Divider
+   ======================================== */
+
+.merge-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 24px;
+    margin: 4px 0;
+}
+
+.merge-add-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 50%;
+    color: #666;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s ease;
+}
+
+.merge-add-btn:hover {
+    background: #22c55e;
+    border-color: #22c55e;
+    color: #fff;
+}
+
+/* ========================================
+   Add Block Button (at end)
+   ======================================== */
+
+.add-block-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    padding: 16px;
+}
+
+/* ========================================
+   Text Block Textarea
+   ======================================== */
+
+.text-block-wrapper {
+    width: 100%;
+}
+
+.block-textarea {
+    width: 100%;
+    min-height: 40px;
+    max-height: 60vh;
+    padding: 8px 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e0e0e0;
+    line-height: 1.7;
+    font-size: 16px;
+    font-family: inherit;
+    resize: none;
+    overflow-y: auto;
+}
+
+.block-textarea::placeholder {
+    color: #555;
+}
+
+/* ========================================
+   Code Block
+   ======================================== */
+
+.code-block-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.code-language-select {
+    width: fit-content;
+    padding: 6px 12px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.code-language-select:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.code-textarea {
+    width: 100%;
+    min-height: 120px;
+    max-height: 60vh;
+    padding: 12px;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+    overflow-y: auto;
+    tab-size: 4;
+}
+
+.code-textarea:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+/* ========================================
+   Callout Block
+   ======================================== */
+
+.callout-block-wrapper {
+    width: 100%;
+    padding: 16px;
+    background: rgba(59, 130, 246, 0.1);
+    border-left: 4px solid #3b82f6;
+    border-radius: 0 8px 8px 0;
+}
+
+.callout-textarea {
+    width: 100%;
+    min-height: 40px;
+    max-height: 60vh;
+    padding: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e0e0e0;
+    line-height: 1.6;
+    font-size: 15px;
+    font-family: inherit;
+    resize: none;
+    overflow-y: auto;
+}
+
+.callout-textarea::placeholder {
+    color: #555;
+}
+
+/* ========================================
+   Row Block
+   ======================================== */
+
+.row-block-wrapper {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+}
+
+.row-column {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ========================================
+   Divider Block
+   ======================================== */
+
+.block-wrapper[data-block-type="divider"] {
+    align-items: center;
+    padding-bottom: 12px;
+}
+
+.block-wrapper[data-block-type="divider"] .block-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.block-divider {
+    width: 100%;
+    border: none;
+    margin: 0;
+    text-align: center;
+}
+
+.block-divider::after {
+    content: '⁂';
+    font-size: 1.4rem;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* ========================================
+   Image Block
+   ======================================== */
+
+.image-block-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.block-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.block-image:hover {
+    opacity: 0.9;
+}
+
+.image-alt-input {
+    padding: 8px 12px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 14px;
+}
+
+.image-alt-input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+/* ========================================
+   Video Block
+   ======================================== */
+
+.video-block-wrapper {
+    width: 100%;
+}
+
+.block-video {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+/* ========================================
+   Upload Zone
+   ======================================== */
+
+.upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    border: 2px dashed #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.upload-zone:hover,
+.upload-zone.drag-over {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.upload-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+}
+
+.upload-text {
+    color: #666;
+    font-size: 14px;
+}
+
+.upload-input {
+    display: none;
+}
+
+/* ========================================
+   Slash Command Menu
+   ======================================== */
+
+.slash-command-menu {
+    position: fixed;
+    z-index: 10000;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    overflow-y: auto;
+}
+
+.slash-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+}
+
+.slash-menu-item:hover,
+.slash-menu-item.selected {
+    background: #252525;
+}
+
+.slash-menu-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2a2a2a;
+    border-radius: 6px;
+    font-size: 14px;
+    color: #888;
+    flex-shrink: 0;
+}
+
+.slash-menu-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.slash-menu-label {
+    font-weight: 500;
+    color: #e0e0e0;
+}
+
+.slash-menu-description {
+    font-size: 12px;
+    color: #666;
+}
+
+/* ========================================
+   Notifications
+   ======================================== */
+
+.edit-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+    z-index: 2000;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+}
+
+.edit-notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.edit-notification-success {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.edit-notification-error {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.edit-notification-warning {
+    border-color: #eab308;
+    background: rgba(234, 179, 8, 0.1);
+}
+
+.edit-notification-info {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* ========================================
+   Edit Buttons (positioned near close button)
+   Only visible when project is active
+   ======================================== */
+
+/* Container for Edit and Settings buttons - positioned to left of close button */
+.edit-buttons {
+    position: absolute;
+    top: var(--spacing-medium, 1rem);
+    right: calc(var(--spacing-medium, 1rem) + 50px); /* Space for close button (2em + padding) */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 20;
+}
+
+/* Adjust for mobile */
+@media (max-width: 768px) {
+    .edit-buttons {
+        top: calc(var(--spacing-medium, 1rem) - 4px);
+        right: calc(var(--spacing-medium, 1rem) + 35px);
+        gap: 4px;
+    }
+
+    .edit-btn-action {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+
+    .edit-buttons .edit-status {
+        display: none;
+    }
+}
+
+/* Show edit buttons when project is active */
+.project-item.active .edit-buttons {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Edit and Settings button styling */
+.edit-btn-action {
+    padding: 6px 12px;
+    background: rgba(59, 130, 246, 0.9);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.edit-btn-action:hover {
+    background: #2563eb;
+}
+
+.edit-btn-settings {
+    padding: 6px 10px;
+    background: rgba(100, 100, 100, 0.8);
+    font-size: 14px;
+}
+
+.edit-btn-settings:hover {
+    background: rgba(120, 120, 120, 0.9);
+}
+
+/* Save/Cancel buttons in edit mode (replaces Edit/Settings) */
+.edit-buttons .edit-btn-cancel {
+    background: rgba(100, 100, 100, 0.8);
+}
+
+.edit-buttons .edit-btn-cancel:hover {
+    background: rgba(120, 120, 120, 0.9);
+}
+
+.edit-buttons .edit-btn-save {
+    background: rgba(59, 130, 246, 0.9);
+}
+
+.edit-buttons .edit-btn-save:hover {
+    background: #2563eb;
+}
+
+.edit-buttons .edit-btn-save.has-changes {
+    background: #22c55e;
+}
+
+.edit-buttons .edit-btn-save.has-changes:hover {
+    background: #16a34a;
+}
+
+/* Saving state - subtle pulse animation */
+.edit-buttons .edit-btn-save.is-saving {
+    background: #3b82f6;
+    animation: pulse-save 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-save {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Error state */
+.edit-buttons .edit-btn-save.has-error {
+    background: #ef4444;
+}
+
+.edit-buttons .edit-btn-save.has-error:hover {
+    background: #dc2626;
+}
+
+/* Status indicator in edit-buttons container */
+.edit-buttons .edit-status {
+    font-size: 12px;
+    color: #888;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+
+/* ========================================
+   Create/Settings Modal Base
+   ======================================== */
+
+.edit-create-modal,
+.edit-settings-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.edit-create-overlay,
+.edit-settings-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+}
+
+.edit-create-content,
+.edit-settings-content {
+    position: relative;
+    width: 90%;
+    max-width: 480px;
+    background: #1a1a1a;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.edit-create-header,
+.edit-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #333;
+}
+
+.edit-create-header h2,
+.edit-settings-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.edit-create-close,
+.edit-settings-close {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+
+.edit-create-close:hover,
+.edit-settings-close:hover {
+    color: #fff;
+}
+
+/* ========================================
+   Form Styles
+   ======================================== */
+
+.edit-create-form,
+.edit-settings-form {
+    padding: 20px;
+}
+
+.edit-form-group {
+    margin-bottom: 16px;
+}
+
+.edit-form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #ccc;
+}
+
+.edit-form-group input[type="text"],
+.edit-form-group input[type="url"],
+.edit-form-group input[type="date"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.edit-form-group input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.edit-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #666;
+}
+
+.edit-form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.edit-form-checkbox {
+    margin-bottom: 0;
+}
+
+.edit-form-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.edit-form-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
+}
+
+.edit-form-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+.edit-form-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.edit-video-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: #111;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #888;
+}
+
+.edit-btn-small {
+    padding: 6px 12px;
+    background: #333;
+    border: none;
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.edit-btn-small:hover {
+    background: #444;
+}
+
+/* ========================================
+   Modal Actions
+   ======================================== */
+
+.edit-create-actions,
+.edit-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+.edit-settings-actions {
+    justify-content: space-between;
+}
+
+.edit-settings-actions-right {
+    display: flex;
+    gap: 12px;
+}
+
+.edit-btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.edit-btn-danger:hover {
+    background: #b91c1c;
+}
+
+/* ========================================
+   HTML Block
+   ======================================== */
+
+.html-block-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.html-block-preview {
+    padding: 16px;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 6px;
+    min-height: 60px;
+}
+
+.html-block-preview:empty::before {
+    content: 'Empty HTML block';
+    color: #666;
+    font-style: italic;
+}
+
+.html-toggle-btn {
+    width: fit-content;
+    padding: 6px 12px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.html-toggle-btn:hover {
+    background: #252525;
+    border-color: #3b82f6;
+}
+
+.html-textarea {
+    width: 100%;
+    min-height: 200px;
+    max-height: 60vh;
+    padding: 12px;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    overflow-y: auto;
+    tab-size: 4;
+}
+
+.html-textarea:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+
+/* ========================================
+   Responsive
+   ======================================== */
+
+@media (max-width: 768px) {
+    .edit-mode-toolbar {
+        flex-direction: column;
+        gap: 12px;
+        top: 0;
+    }
+
+    .edit-toolbar-left,
+    .edit-toolbar-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .slash-command-menu {
+        position: fixed;
+        left: 10px !important;
+        right: 10px;
+        bottom: 10px;
+        top: auto !important;
+        width: auto;
+        min-width: auto;
+        max-height: 50vh;
+    }
+}

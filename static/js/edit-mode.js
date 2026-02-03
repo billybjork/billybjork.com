@@ -1,0 +1,1704 @@
+/**
+ * Edit Mode - Main Block Editor
+ * Full block editor with drag-drop and slash commands
+ * Supports both project pages and the about page
+ */
+window.EditMode = (function() {
+    'use strict';
+
+    // ========== STATE ==========
+
+    let blocks = [];
+    let projectSlug = null;
+    let projectData = null;
+    let isDirty = false;
+    let isActive = false;
+    let container = null;
+    let toolbar = null;
+    let editMode = null; // 'project' or 'about'
+
+    // Auto-save state
+    const SaveState = {
+        UNCHANGED: 'unchanged',
+        PENDING: 'pending',
+        SAVING: 'saving',
+        SAVED: 'saved',
+        ERROR: 'error'
+    };
+    let saveState = SaveState.UNCHANGED;
+    let autoSaveTimer = null;
+    let savedFadeTimer = null;
+    let retryTimer = null;
+    let abortController = null;
+    const AUTO_SAVE_DELAY = 2000;
+    const RETRY_DELAY = 5000;
+    const SAVED_FADE_DELAY = 3000;
+
+    // Drag & Drop state
+    let dragState = {
+        sourceIndex: null,
+        currentDropIndex: null,
+        isDragging: false
+    };
+
+    // ========== INITIALIZATION ==========
+
+    /**
+     * Initialize edit mode for a project
+     * @param {string} slug - Project slug
+     */
+    async function init(slug) {
+        if (!EditUtils.isDevMode()) {
+            console.log('Edit mode only available on localhost');
+            return;
+        }
+
+        projectSlug = slug;
+        editMode = 'project';
+        isActive = true;
+
+        try {
+            projectData = await EditUtils.fetchJSON(`/api/project/${slug}`);
+            setupEditor(projectData);
+
+            const url = new URL(window.location);
+            url.searchParams.set('edit', '');
+            window.history.replaceState({}, '', url);
+        } catch (error) {
+            console.error('Failed to load project:', error);
+            EditUtils.showNotification('Failed to load project', 'error');
+        }
+    }
+
+    /**
+     * Initialize edit mode for the about page
+     */
+    async function initAbout() {
+        if (!EditUtils.isDevMode()) {
+            console.log('Edit mode only available on localhost');
+            return;
+        }
+
+        editMode = 'about';
+        projectSlug = null;
+        isActive = true;
+
+        try {
+            projectData = await EditUtils.fetchJSON('/api/about');
+            setupEditor(projectData);
+
+            const url = new URL(window.location);
+            url.searchParams.set('edit', '');
+            window.history.replaceState({}, '', url);
+        } catch (error) {
+            console.error('Failed to load about content:', error);
+            EditUtils.showNotification('Failed to load about content', 'error');
+        }
+    }
+
+    /**
+     * Setup the editor UI
+     */
+    function setupEditor(data) {
+        // Find the content container based on edit mode
+        const contentContainer = editMode === 'about'
+            ? document.querySelector('.about-content')
+            : document.querySelector('.project-content');
+
+        if (!contentContainer) {
+            console.error('Content container not found');
+            return;
+        }
+
+        // For project mode, pause any playing videos
+        if (editMode === 'project') {
+            const projectItem = contentContainer.closest('.project-item');
+            if (projectItem) {
+                projectItem.querySelectorAll('video').forEach(video => {
+                    video.pause();
+                });
+            }
+
+            // Replace the Edit/Settings buttons with Save/Cancel buttons
+            const editButtons = projectItem?.querySelector('.edit-buttons');
+            if (editButtons) {
+                editButtons.dataset.originalHtml = editButtons.innerHTML;
+                editButtons.innerHTML = `
+                    <span class="edit-status"></span>
+                    <button class="edit-btn-action edit-btn-cancel" data-action="cancel">Cancel</button>
+                    <button class="edit-btn-action edit-btn-save" data-action="save">Save</button>
+                `;
+                toolbar = editButtons;
+                toolbar.querySelector('[data-action="cancel"]').addEventListener('click', handleCancel);
+                toolbar.querySelector('[data-action="save"]').addEventListener('click', handleSave);
+            }
+        }
+
+        // Parse markdown into blocks
+        blocks = EditBlocks.parseIntoBlocks(data.markdown || '');
+
+        // Create editor wrapper
+        const editorWrapper = document.createElement('div');
+        editorWrapper.className = 'edit-mode-container';
+
+        // For about page, include a toolbar since there's no edit-buttons container
+        if (editMode === 'about') {
+            editorWrapper.innerHTML = `
+                <div class="edit-mode-toolbar">
+                    <div class="edit-toolbar-left">
+                        <span class="edit-project-name">About Page</span>
+                        <span class="edit-status"></span>
+                    </div>
+                    <div class="edit-toolbar-right">
+                        <button class="edit-btn edit-btn-secondary" data-action="cancel">Cancel</button>
+                        <button class="edit-btn edit-btn-primary" data-action="save">Save</button>
+                    </div>
+                </div>
+                <div class="edit-blocks-container"></div>
+            `;
+            toolbar = editorWrapper.querySelector('.edit-mode-toolbar');
+            toolbar.querySelector('[data-action="cancel"]').addEventListener('click', handleCancel);
+            toolbar.querySelector('[data-action="save"]').addEventListener('click', handleSave);
+        } else {
+            editorWrapper.innerHTML = `
+                <div class="edit-blocks-container"></div>
+            `;
+        }
+
+        // Replace content with editor
+        contentContainer.innerHTML = '';
+        contentContainer.appendChild(editorWrapper);
+        contentContainer.classList.add('edit-mode-active');
+
+        // Get reference to blocks container
+        container = editorWrapper.querySelector('.edit-blocks-container');
+
+        // Initialize slash commands
+        EditSlash.init(handleSlashCommand);
+
+        // Add keyboard listener
+        document.addEventListener('keydown', handleGlobalKeydown);
+
+        // Render blocks
+        renderBlocks();
+
+        // Add editing class to body
+        document.body.classList.add('editing');
+
+        // Warn before leaving with unsaved changes
+        window.addEventListener('beforeunload', handleBeforeUnload);
+    }
+
+    /**
+     * Cleanup and exit edit mode
+     */
+    function cleanup() {
+        isActive = false;
+
+        // Clear auto-save timers
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = null;
+        }
+        if (savedFadeTimer) {
+            clearTimeout(savedFadeTimer);
+            savedFadeTimer = null;
+        }
+        if (retryTimer) {
+            clearTimeout(retryTimer);
+            retryTimer = null;
+        }
+        if (abortController) {
+            abortController.abort();
+            abortController = null;
+        }
+
+        // Reset save state
+        saveState = SaveState.UNCHANGED;
+
+        document.removeEventListener('keydown', handleGlobalKeydown);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        EditSlash.cleanup();
+        document.body.classList.remove('editing');
+
+        // Remove edit-mode-active class from the appropriate container
+        const contentContainer = editMode === 'about'
+            ? document.querySelector('.about-content')
+            : document.querySelector('.project-content');
+        if (contentContainer) {
+            contentContainer.classList.remove('edit-mode-active');
+        }
+
+        // Restore original Edit/Settings buttons (project mode only)
+        if (editMode === 'project' && toolbar && toolbar.dataset.originalHtml) {
+            toolbar.innerHTML = toolbar.dataset.originalHtml;
+            delete toolbar.dataset.originalHtml;
+        }
+
+        // Remove edit param from URL
+        const url = new URL(window.location);
+        url.searchParams.delete('edit');
+        window.history.replaceState({}, '', url);
+
+        // Reset state
+        editMode = null;
+    }
+
+    /**
+     * Handle beforeunload event
+     */
+    function handleBeforeUnload(e) {
+        if (isDirty) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    }
+
+    // ========== TOOLBAR ==========
+
+    /**
+     * Update toolbar status indicator based on save state
+     */
+    function updateToolbarStatus() {
+        if (!toolbar) return;
+        const status = toolbar.querySelector('.edit-status');
+        const saveBtn = toolbar.querySelector('[data-action="save"]');
+
+        // Remove all state classes
+        saveBtn.classList.remove('has-changes', 'is-saving', 'has-error');
+
+        switch (saveState) {
+            case SaveState.UNCHANGED:
+                status.textContent = '';
+                status.style.color = '';
+                break;
+            case SaveState.PENDING:
+                status.textContent = '(unsaved)';
+                status.style.color = '#eab308';
+                saveBtn.classList.add('has-changes');
+                break;
+            case SaveState.SAVING:
+                status.textContent = 'Saving...';
+                status.style.color = '#3b82f6';
+                saveBtn.classList.add('is-saving');
+                break;
+            case SaveState.SAVED:
+                status.textContent = 'Saved';
+                status.style.color = '#22c55e';
+                break;
+            case SaveState.ERROR:
+                status.textContent = 'Save failed';
+                status.style.color = '#ef4444';
+                saveBtn.classList.add('has-error');
+                break;
+        }
+    }
+
+    /**
+     * Set the save state and update UI
+     */
+    function setSaveState(state) {
+        saveState = state;
+        updateToolbarStatus();
+
+        // Clear fade timer if not in SAVED state
+        if (state !== SaveState.SAVED && savedFadeTimer) {
+            clearTimeout(savedFadeTimer);
+            savedFadeTimer = null;
+        }
+
+        // Schedule fade for SAVED state
+        if (state === SaveState.SAVED) {
+            savedFadeTimer = setTimeout(() => {
+                if (saveState === SaveState.SAVED) {
+                    setSaveState(SaveState.UNCHANGED);
+                }
+            }, SAVED_FADE_DELAY);
+        }
+    }
+
+    /**
+     * Schedule auto-save with debounce
+     */
+    function scheduleAutoSave() {
+        // Clear any existing timer
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+        }
+
+        // Clear retry timer if user is typing
+        if (retryTimer) {
+            clearTimeout(retryTimer);
+            retryTimer = null;
+        }
+
+        // Schedule new auto-save
+        autoSaveTimer = setTimeout(() => {
+            performAutoSave();
+        }, AUTO_SAVE_DELAY);
+    }
+
+    /**
+     * Perform auto-save (silent, no toast)
+     */
+    async function performAutoSave() {
+        if (!isDirty || saveState === SaveState.SAVING) return;
+
+        // Cancel any in-flight request
+        if (abortController) {
+            abortController.abort();
+        }
+        abortController = new AbortController();
+
+        setSaveState(SaveState.SAVING);
+
+        try {
+            const markdown = EditBlocks.blocksToMarkdown(blocks);
+
+            let response;
+            if (editMode === 'about') {
+                response = await fetch('/api/save-about', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ markdown }),
+                    signal: abortController.signal
+                });
+            } else {
+                const saveData = {
+                    slug: projectSlug,
+                    name: projectData.name,
+                    date: projectData.date,
+                    pinned: projectData.pinned,
+                    draft: projectData.draft,
+                    youtube: projectData.youtube,
+                    video: projectData.video,
+                    markdown: markdown
+                };
+
+                response = await fetch('/api/save-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(saveData),
+                    signal: abortController.signal
+                });
+            }
+
+            if (!response.ok) {
+                throw new Error(`Save failed: ${response.status}`);
+            }
+
+            isDirty = false;
+            setSaveState(SaveState.SAVED);
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                // Request was cancelled, don't show error
+                return;
+            }
+            console.error('Auto-save error:', error);
+            setSaveState(SaveState.ERROR);
+
+            // Schedule retry
+            retryTimer = setTimeout(() => {
+                if (saveState === SaveState.ERROR && isDirty) {
+                    performAutoSave();
+                }
+            }, RETRY_DELAY);
+        }
+    }
+
+    // ========== BLOCK RENDERING ==========
+
+    /**
+     * Render all blocks to the container
+     */
+    function renderBlocks() {
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        blocks.forEach((block, index) => {
+            // Create merge divider before each block (except first)
+            if (index > 0) {
+                container.appendChild(createMergeDivider(index));
+            }
+
+            // Create block wrapper
+            container.appendChild(createBlockWrapper(block, index));
+        });
+
+        // Add final "Add Block" button
+        container.appendChild(createAddBlockButton(blocks.length));
+    }
+
+    /**
+     * Create a block wrapper element with all controls
+     * @param {object} block - Block data
+     * @param {number} index - Block index
+     * @returns {HTMLElement}
+     */
+    function createBlockWrapper(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'block-wrapper';
+        wrapper.dataset.blockIndex = index;
+        wrapper.dataset.blockId = block.id;
+        wrapper.dataset.blockType = block.type;
+
+        // Drag handle
+        const handle = document.createElement('div');
+        handle.className = 'block-handle';
+        handle.innerHTML = '⋮⋮';
+        handle.draggable = true;
+        handle.addEventListener('dragstart', (e) => handleDragStart(e, index));
+        handle.addEventListener('dragend', handleDragEnd);
+        wrapper.appendChild(handle);
+
+        // Block content
+        const content = document.createElement('div');
+        content.className = 'block-content';
+        content.appendChild(renderBlockContent(block, index));
+        wrapper.appendChild(content);
+
+        // Alignment toolbar (for most block types, except divider and code)
+        if (block.type !== 'divider' && block.type !== 'code') {
+            wrapper.appendChild(createAlignmentToolbar(block, index));
+        }
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'block-delete-btn';
+        deleteBtn.innerHTML = '×';
+        deleteBtn.title = 'Delete block';
+        deleteBtn.addEventListener('click', () => deleteBlock(index));
+        wrapper.appendChild(deleteBtn);
+
+        // Drag over handling
+        wrapper.addEventListener('dragover', (e) => handleDragOver(e, index));
+        wrapper.addEventListener('dragleave', handleDragLeave);
+        wrapper.addEventListener('drop', (e) => handleDrop(e, index));
+
+        return wrapper;
+    }
+
+    /**
+     * Create alignment toolbar with left/center/right buttons
+     * @param {object} block - Block data
+     * @param {number} index - Block index
+     * @returns {HTMLElement}
+     */
+    function createAlignmentToolbar(block, index) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'block-align-toolbar';
+
+        const currentAlign = block.align || 'left';
+
+        const alignments = [
+            { value: 'left', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>', title: 'Align left' },
+            { value: 'center', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>', title: 'Align center' },
+            { value: 'right', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>', title: 'Align right' }
+        ];
+
+        alignments.forEach(({ value, icon, title }) => {
+            const btn = document.createElement('button');
+            btn.className = 'block-align-btn' + (currentAlign === value ? ' active' : '');
+            btn.innerHTML = icon;
+            btn.title = title;
+            btn.type = 'button';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setBlockAlignment(index, value);
+            });
+            toolbar.appendChild(btn);
+        });
+
+        return toolbar;
+    }
+
+    /**
+     * Set alignment for a block
+     * @param {number} index - Block index
+     * @param {string} align - 'left', 'center', or 'right'
+     */
+    function setBlockAlignment(index, align) {
+        if (blocks[index]) {
+            blocks[index].align = align;
+            markDirty();
+            renderBlocks();
+        }
+    }
+
+    /**
+     * Render block content based on type
+     * @param {object} block - Block data
+     * @param {number} index - Block index
+     * @returns {HTMLElement}
+     */
+    function renderBlockContent(block, index) {
+        switch (block.type) {
+            case 'text':
+                return renderTextBlock(block, index);
+            case 'image':
+                return renderImageBlock(block, index);
+            case 'video':
+                return renderVideoBlock(block, index);
+            case 'code':
+                return renderCodeBlock(block, index);
+            case 'html':
+                return renderHtmlBlock(block, index);
+            case 'callout':
+                return renderCalloutBlock(block, index);
+            case 'row':
+                return renderRowBlock(block, index);
+            case 'divider':
+                return renderDividerBlock(block, index);
+            default:
+                return renderTextBlock(block, index);
+        }
+    }
+
+    /**
+     * Render text block as auto-resizing textarea
+     */
+    function renderTextBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'text-block-wrapper';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'block-textarea';
+        textarea.value = block.content || '';
+        textarea.placeholder = 'Type something... (type / for commands)';
+
+        // Apply text alignment
+        if (block.align) {
+            textarea.style.textAlign = block.align;
+        }
+
+        // Auto-resize
+        EditUtils.setupAutoResizeTextarea(textarea, (value) => {
+            blocks[index].content = value;
+            markDirty();
+        });
+
+        // Slash commands
+        textarea.addEventListener('input', () => {
+            EditSlash.handleTextareaInput(textarea, index);
+        });
+
+        // Keyboard shortcuts
+        textarea.addEventListener('keydown', (e) => {
+            // Slash command navigation
+            if (EditSlash.isActive()) {
+                if (EditSlash.handleKeydown(e)) return;
+            }
+
+            // Formatting shortcuts
+            if (EditUtils.handleFormattingShortcuts(e, textarea, markDirty)) return;
+
+            // List shortcuts
+            if (EditUtils.handleListShortcuts(e, textarea, markDirty)) return;
+        });
+
+        wrapper.appendChild(textarea);
+        return wrapper;
+    }
+
+    /**
+     * Render image block
+     */
+    function renderImageBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'image-block-wrapper';
+
+        if (block.src) {
+            const img = EditUtils.createImageElement(block);
+            img.className = 'block-image';
+            wrapper.appendChild(img);
+
+            // Alt text input
+            const altInput = document.createElement('input');
+            altInput.type = 'text';
+            altInput.className = 'image-alt-input';
+            altInput.placeholder = 'Image description...';
+            altInput.value = block.alt || '';
+            altInput.addEventListener('input', () => {
+                blocks[index].alt = altInput.value;
+                markDirty();
+            });
+            wrapper.appendChild(altInput);
+        } else {
+            // Upload zone
+            wrapper.appendChild(createUploadZone(index, 'image'));
+        }
+
+        return wrapper;
+    }
+
+    /**
+     * Render video block
+     */
+    function renderVideoBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'video-block-wrapper';
+
+        if (block.src) {
+            const video = EditUtils.createVideoElement(block);
+            video.className = 'block-video';
+            wrapper.appendChild(video);
+        } else {
+            // Upload zone
+            wrapper.appendChild(createUploadZone(index, 'video'));
+        }
+
+        return wrapper;
+    }
+
+    /**
+     * Render code block
+     */
+    function renderCodeBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+
+        // Apply alignment to wrapper
+        if (block.align) {
+            EditUtils.applyAlignment(wrapper, block.align);
+        }
+
+        // Language selector
+        const langSelect = document.createElement('select');
+        langSelect.className = 'code-language-select';
+        const languages = ['javascript', 'python', 'html', 'css', 'bash', 'json', 'sql', 'go', 'rust', 'text'];
+        languages.forEach(lang => {
+            const option = document.createElement('option');
+            option.value = lang;
+            option.textContent = lang;
+            if (lang === (block.language || 'javascript')) option.selected = true;
+            langSelect.appendChild(option);
+        });
+        langSelect.addEventListener('change', () => {
+            blocks[index].language = langSelect.value;
+            markDirty();
+        });
+        wrapper.appendChild(langSelect);
+
+        // Code textarea
+        const textarea = document.createElement('textarea');
+        textarea.className = 'code-textarea';
+        textarea.value = block.code || '';
+        textarea.placeholder = 'Enter code...';
+        textarea.spellcheck = false;
+
+        EditUtils.setupAutoResizeTextarea(textarea, (value) => {
+            blocks[index].code = value;
+            markDirty();
+        });
+
+        // Tab handling for code
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                EditUtils.insertTextWithUndo(textarea, '    ');
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        });
+
+        wrapper.appendChild(textarea);
+        return wrapper;
+    }
+
+    /**
+     * Render callout block
+     */
+    function renderCalloutBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'callout-block-wrapper';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'callout-textarea';
+        textarea.value = block.content || '';
+        textarea.placeholder = 'Callout content...';
+
+        // Apply text alignment
+        if (block.align) {
+            textarea.style.textAlign = block.align;
+        }
+
+        EditUtils.setupAutoResizeTextarea(textarea, (value) => {
+            blocks[index].content = value;
+            markDirty();
+        });
+
+        wrapper.appendChild(textarea);
+        return wrapper;
+    }
+
+    /**
+     * Render row block (two columns)
+     */
+    function renderRowBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'row-block-wrapper';
+
+        const leftCol = document.createElement('div');
+        leftCol.className = 'row-column row-column-left';
+        leftCol.appendChild(renderBlockContent(block.left, `${index}-left`));
+
+        const rightCol = document.createElement('div');
+        rightCol.className = 'row-column row-column-right';
+        rightCol.appendChild(renderBlockContent(block.right, `${index}-right`));
+
+        wrapper.appendChild(leftCol);
+        wrapper.appendChild(rightCol);
+
+        return wrapper;
+    }
+
+    /**
+     * Render divider block
+     */
+    function renderDividerBlock(block, index) {
+        const hr = document.createElement('hr');
+        hr.className = 'block-divider';
+        return hr;
+    }
+
+    /**
+     * Render HTML block (raw HTML content)
+     */
+    function renderHtmlBlock(block, index) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'html-block-wrapper';
+
+        // Apply alignment
+        if (block.align) {
+            wrapper.style.textAlign = block.align;
+        }
+
+        // Preview area (shows rendered HTML)
+        const preview = document.createElement('div');
+        preview.className = 'html-block-preview';
+        preview.innerHTML = block.html || '<p style="color: #666;">Empty HTML block</p>';
+        wrapper.appendChild(preview);
+
+        // Toggle button to show/hide source
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'html-toggle-btn';
+        toggleBtn.textContent = 'Edit HTML';
+        toggleBtn.type = 'button';
+        wrapper.appendChild(toggleBtn);
+
+        // Textarea for editing HTML (hidden by default)
+        const textarea = document.createElement('textarea');
+        textarea.className = 'html-textarea';
+        textarea.value = block.html || '';
+        textarea.placeholder = 'Enter raw HTML...';
+        textarea.style.display = 'none';
+        wrapper.appendChild(textarea);
+
+        // Toggle between preview and edit
+        let isEditing = false;
+        toggleBtn.addEventListener('click', () => {
+            isEditing = !isEditing;
+            if (isEditing) {
+                preview.style.display = 'none';
+                textarea.style.display = 'block';
+                toggleBtn.textContent = 'Preview';
+                textarea.focus();
+            } else {
+                preview.style.display = 'block';
+                textarea.style.display = 'none';
+                toggleBtn.textContent = 'Edit HTML';
+                preview.innerHTML = textarea.value || '<p style="color: #666;">Empty HTML block</p>';
+            }
+        });
+
+        // Auto-resize and update
+        EditUtils.setupAutoResizeTextarea(textarea, (value) => {
+            blocks[index].html = value;
+            markDirty();
+        });
+
+        return wrapper;
+    }
+
+    // ========== MERGE DIVIDER & ADD BLOCK ==========
+
+    /**
+     * Create divider between blocks with add button
+     * @param {number} afterIndex - Index of block after which this divider appears
+     * @returns {HTMLElement}
+     */
+    function createMergeDivider(afterIndex) {
+        const divider = document.createElement('div');
+        divider.className = 'merge-divider';
+        divider.dataset.afterIndex = afterIndex;
+
+        // Add block button (centered)
+        const addBtn = document.createElement('button');
+        addBtn.className = 'merge-add-btn';
+        addBtn.innerHTML = '+';
+        addBtn.title = 'Add block';
+        addBtn.addEventListener('click', (e) => {
+            const rect = addBtn.getBoundingClientRect();
+            EditSlash.showFromButton(rect, afterIndex, addBtn);
+        });
+        divider.appendChild(addBtn);
+
+        return divider;
+    }
+
+    /**
+     * Create final "+" button to add a block at the end
+     * @param {number} insertIndex - Index where new block will be inserted
+     * @returns {HTMLElement}
+     */
+    function createAddBlockButton(insertIndex) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'add-block-wrapper';
+
+        const btn = document.createElement('button');
+        btn.className = 'merge-add-btn';
+        btn.innerHTML = '+';
+        btn.title = 'Add block';
+        btn.addEventListener('click', (e) => {
+            const rect = btn.getBoundingClientRect();
+            EditSlash.showFromButton(rect, insertIndex, btn);
+        });
+        wrapper.appendChild(btn);
+
+        return wrapper;
+    }
+
+    /**
+     * Create upload zone for image/video blocks
+     * @param {number} index - Block index
+     * @param {string} type - 'image' or 'video'
+     * @returns {HTMLElement}
+     */
+    function createUploadZone(index, type) {
+        const zone = document.createElement('div');
+        zone.className = 'upload-zone';
+        zone.innerHTML = `
+            <div class="upload-icon">${type === 'image' ? '🖼' : '🎬'}</div>
+            <div class="upload-text">Drop ${type} here or click to upload</div>
+            <input type="file" class="upload-input" accept="${type === 'image' ? 'image/*' : 'video/*'}">
+        `;
+
+        const input = zone.querySelector('.upload-input');
+        input.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                if (type === 'image') {
+                    await EditMedia.handleImageUploadForBlock(file, index);
+                } else {
+                    await EditMedia.handleVideoUploadForBlock(file, index);
+                }
+            }
+        });
+
+        zone.addEventListener('click', (e) => {
+            if (e.target !== input) input.click();
+        });
+
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('drag-over');
+        });
+
+        zone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                if (type === 'image') {
+                    await EditMedia.handleImageUploadForBlock(file, index);
+                } else {
+                    await EditMedia.handleVideoUploadForBlock(file, index);
+                }
+            }
+        });
+
+        return zone;
+    }
+
+    // ========== DRAG & DROP ==========
+
+    /**
+     * Handle drag start
+     */
+    function handleDragStart(e, index) {
+        dragState.sourceIndex = index;
+        dragState.isDragging = true;
+
+        const wrapper = container.querySelector(`[data-block-index="${index}"]`);
+        if (wrapper) {
+            wrapper.classList.add('dragging');
+        }
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', index.toString());
+    }
+
+    /**
+     * Handle drag end
+     */
+    function handleDragEnd(e) {
+        dragState.isDragging = false;
+        dragState.sourceIndex = null;
+        dragState.currentDropIndex = null;
+
+        // Remove all drag classes
+        container.querySelectorAll('.dragging, .drag-over-top, .drag-over-bottom').forEach(el => {
+            el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+        });
+    }
+
+    /**
+     * Handle drag over
+     */
+    function handleDragOver(e, index) {
+        e.preventDefault();
+        if (!dragState.isDragging) return;
+
+        const wrapper = e.currentTarget;
+        const rect = wrapper.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+
+        // Remove previous drag-over classes
+        container.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+            el.classList.remove('drag-over-top', 'drag-over-bottom');
+        });
+
+        // Add appropriate class based on mouse position
+        if (e.clientY < midpoint) {
+            wrapper.classList.add('drag-over-top');
+            dragState.currentDropIndex = index;
+        } else {
+            wrapper.classList.add('drag-over-bottom');
+            dragState.currentDropIndex = index + 1;
+        }
+    }
+
+    /**
+     * Handle drag leave
+     */
+    function handleDragLeave(e) {
+        e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom');
+    }
+
+    /**
+     * Handle drop
+     */
+    function handleDrop(e, index) {
+        e.preventDefault();
+        if (!dragState.isDragging || dragState.sourceIndex === null) return;
+
+        const fromIndex = dragState.sourceIndex;
+        let toIndex = dragState.currentDropIndex;
+
+        if (toIndex === null) return;
+
+        // Adjust for moving down
+        if (fromIndex < toIndex) {
+            toIndex--;
+        }
+
+        if (fromIndex !== toIndex) {
+            // Move block
+            const [movedBlock] = blocks.splice(fromIndex, 1);
+            blocks.splice(toIndex, 0, movedBlock);
+            markDirty();
+            renderBlocks();
+        }
+
+        handleDragEnd(e);
+    }
+
+    // ========== BLOCK OPERATIONS ==========
+
+    /**
+     * Insert a new block at the specified index
+     * @param {number} index - Where to insert
+     * @param {string} type - Block type
+     */
+    function insertBlock(index, type) {
+        const newBlock = EditBlocks.createBlock(type);
+
+        blocks.splice(index, 0, newBlock);
+        markDirty();
+        renderBlocks();
+
+        // Focus the new block if it's a text block
+        if (type === 'text' || type === 'callout') {
+            setTimeout(() => {
+                const textarea = container.querySelector(`[data-block-index="${index}"] .block-textarea, [data-block-index="${index}"] .callout-textarea`);
+                if (textarea) textarea.focus();
+            }, 50);
+        }
+    }
+
+    /**
+     * Insert block after the specified index
+     * @param {string} blockId - Block ID to insert after
+     * @param {string} type - Block type
+     */
+    function insertBlockAfter(blockId, type) {
+        const index = blocks.findIndex(b => b.id === blockId);
+        if (index !== -1) {
+            insertBlock(index + 1, type);
+        }
+    }
+
+    /**
+     * Delete a block
+     * @param {number} index - Block index
+     */
+    function deleteBlock(index) {
+        if (blocks.length <= 1) {
+            // Don't delete the last block, just clear it
+            blocks[0] = EditBlocks.createBlock('text');
+        } else {
+            blocks.splice(index, 1);
+        }
+        markDirty();
+        renderBlocks();
+    }
+
+    // ========== SLASH COMMAND HANDLER ==========
+
+    /**
+     * Handle slash command execution
+     * @param {string} action - 'execute' or 'updateContent'
+     * @param {object} data - Command data
+     */
+    function handleSlashCommand(action, data) {
+        if (action === 'execute') {
+            if (data.replaceBlockIndex != null) {
+                // Source text block became empty after removing "/"—replace it
+                const focusIndex = data.replaceBlockIndex;
+                blocks[focusIndex] = EditBlocks.createBlock(data.commandId);
+                markDirty();
+                renderBlocks();
+                // Focus the replacement block if applicable
+                if (data.commandId === 'text' || data.commandId === 'callout') {
+                    setTimeout(() => {
+                        const textarea = container.querySelector(
+                            `[data-block-index="${focusIndex}"] .block-textarea, [data-block-index="${focusIndex}"] .callout-textarea`
+                        );
+                        if (textarea) textarea.focus();
+                    }, 50);
+                }
+            } else {
+                insertBlock(data.insertIndex, data.commandId);
+            }
+        } else if (action === 'updateContent') {
+            blocks[data.index].content = data.content;
+            // Don't re-render for content updates during slash command
+        }
+    }
+
+    // ========== KEYBOARD HANDLER ==========
+
+    /**
+     * Global keyboard handler
+     */
+    function handleGlobalKeydown(e) {
+        if (!isActive) return;
+
+        // Forward to slash menu if active (handles Esc, arrows, Enter)
+        if (EditSlash.isActive()) {
+            if (EditSlash.handleKeydown(e)) return;
+        }
+
+        // Cmd/Ctrl + S - Save
+        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+            e.preventDefault();
+            handleSave();
+        }
+
+        // Escape - Cancel edit mode
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            handleCancel();
+        }
+    }
+
+    // ========== SAVE/CANCEL ==========
+
+    /**
+     * Mark content as dirty (unsaved changes) and schedule auto-save
+     */
+    function markDirty() {
+        isDirty = true;
+        setSaveState(SaveState.PENDING);
+        scheduleAutoSave();
+    }
+
+    /**
+     * Handle manual save (Cmd+S or button click)
+     */
+    async function handleSave() {
+        // If no changes, just exit edit mode
+        if (!isDirty && saveState !== SaveState.ERROR) {
+            cleanup();
+            window.location.reload();
+            return;
+        }
+
+        // Cancel pending auto-save timer
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = null;
+        }
+
+        // Cancel retry timer
+        if (retryTimer) {
+            clearTimeout(retryTimer);
+            retryTimer = null;
+        }
+
+        // Cancel in-flight request
+        if (abortController) {
+            abortController.abort();
+        }
+
+        setSaveState(SaveState.SAVING);
+
+        try {
+            const markdown = EditBlocks.blocksToMarkdown(blocks);
+
+            let response;
+            if (editMode === 'about') {
+                // Save about page
+                response = await fetch('/api/save-about', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ markdown })
+                });
+            } else {
+                // Save project - preserve all existing metadata
+                const saveData = {
+                    slug: projectSlug,
+                    name: projectData.name,
+                    date: projectData.date,
+                    pinned: projectData.pinned,
+                    draft: projectData.draft,
+                    youtube: projectData.youtube,
+                    video: projectData.video,
+                    markdown: markdown
+                };
+
+                response = await fetch('/api/save-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(saveData)
+                });
+            }
+
+            if (!response.ok) {
+                throw new Error(`Save failed: ${response.status}`);
+            }
+
+            isDirty = false;
+            setSaveState(SaveState.SAVED);
+
+            // Exit edit mode and reload after manual save
+            cleanup();
+            window.location.reload();
+
+        } catch (error) {
+            console.error('Save error:', error);
+            setSaveState(SaveState.ERROR);
+            EditUtils.showNotification('Failed to save', 'error');
+        }
+    }
+
+    /**
+     * Handle cancel
+     */
+    function handleCancel() {
+        if (isDirty) {
+            if (!confirm('You have unsaved changes. Discard them?')) {
+                return;
+            }
+        }
+        cleanup();
+        // Reload the page to exit edit mode
+        window.location.reload();
+    }
+
+    // ========== UPDATE BLOCK ==========
+
+    /**
+     * Update a block's data (used by EditMedia)
+     * @param {number} index - Block index
+     * @param {object} updates - Properties to update
+     */
+    function updateBlock(index, updates) {
+        if (blocks[index]) {
+            Object.assign(blocks[index], updates);
+            markDirty();
+            renderBlocks();
+        }
+    }
+
+    // ========== PUBLIC API ==========
+
+    return {
+        // Initialization
+        init,
+        initAbout,
+        cleanup,
+
+        // State
+        get blocks() { return blocks; },
+        get isActive() { return isActive; },
+        get isDirty() { return isDirty; },
+        get projectSlug() { return projectSlug; },
+        get editMode() { return editMode; },
+
+        // Block operations
+        insertBlock,
+        insertBlockAfter,
+        deleteBlock,
+        updateBlock,
+        renderBlocks,
+        markDirty,
+
+        // Save/Cancel
+        save: handleSave,
+        cancel: handleCancel
+    };
+})();
+
+
+/**
+ * Project Creation Modal
+ */
+window.ProjectCreate = {
+    modal: null,
+
+    /**
+     * Show create project modal
+     */
+    show() {
+        this.modal = document.createElement('div');
+        this.modal.className = 'edit-create-modal';
+        this.modal.innerHTML = `
+            <div class="edit-create-overlay"></div>
+            <div class="edit-create-content">
+                <div class="edit-create-header">
+                    <h2>Create New Project</h2>
+                    <button class="edit-create-close">&times;</button>
+                </div>
+                <form class="edit-create-form" id="create-project-form">
+                    <div class="edit-form-group">
+                        <label for="project-name">Project Name</label>
+                        <input type="text" id="project-name" name="name" required placeholder="My New Project">
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="project-slug">URL Slug</label>
+                        <input type="text" id="project-slug" name="slug" required placeholder="my-new-project" pattern="[a-z0-9-]+">
+                        <span class="edit-form-hint">Lowercase letters, numbers, and hyphens only</span>
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="project-date">Date</label>
+                        <input type="date" id="project-date" name="date" required value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="edit-form-row">
+                        <div class="edit-form-group edit-form-checkbox">
+                            <label>
+                                <input type="checkbox" id="project-draft" name="draft" checked>
+                                Draft
+                            </label>
+                        </div>
+                        <div class="edit-form-group edit-form-checkbox">
+                            <label>
+                                <input type="checkbox" id="project-pinned" name="pinned">
+                                Pinned
+                            </label>
+                        </div>
+                    </div>
+                    <div class="edit-create-actions">
+                        <button type="button" class="edit-btn edit-btn-secondary" id="create-cancel">Cancel</button>
+                        <button type="submit" class="edit-btn edit-btn-primary">Create Project</button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        document.body.appendChild(this.modal);
+        document.body.classList.add('modal-open');
+
+        this.setupEventListeners();
+
+        // Auto-generate slug from name
+        const nameInput = this.modal.querySelector('#project-name');
+        const slugInput = this.modal.querySelector('#project-slug');
+        nameInput.addEventListener('input', () => {
+            slugInput.value = this.generateSlug(nameInput.value);
+        });
+
+        // Focus name input
+        nameInput.focus();
+    },
+
+    /**
+     * Generate slug from name
+     */
+    generateSlug(name) {
+        return name
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .trim();
+    },
+
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        // Close button
+        this.modal.querySelector('.edit-create-close').addEventListener('click', () => {
+            this.hide();
+        });
+
+        // Overlay click
+        this.modal.querySelector('.edit-create-overlay').addEventListener('click', () => {
+            this.hide();
+        });
+
+        // Cancel button
+        this.modal.querySelector('#create-cancel').addEventListener('click', () => {
+            this.hide();
+        });
+
+        // Form submit
+        this.modal.querySelector('#create-project-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.createProject();
+        });
+
+        // Escape key
+        const escHandler = (e) => {
+            if (e.key === 'Escape' && this.modal) {
+                this.hide();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+    },
+
+    /**
+     * Create the project
+     */
+    async createProject() {
+        const form = this.modal.querySelector('#create-project-form');
+        const formData = new FormData(form);
+
+        const data = {
+            name: formData.get('name'),
+            slug: formData.get('slug'),
+            date: formData.get('date'),
+            draft: formData.get('draft') === 'on',
+            pinned: formData.get('pinned') === 'on',
+            markdown: '',
+        };
+
+        try {
+            const response = await EditUtils.fetchJSON('/api/create-project', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+
+            EditUtils.showNotification('Project created!', 'success');
+            this.hide();
+
+            // Navigate to the new project
+            window.location.href = `/${data.slug}`;
+        } catch (error) {
+            console.error('Create project error:', error);
+            EditUtils.showNotification('Failed to create project', 'error');
+        }
+    },
+
+    /**
+     * Hide modal
+     */
+    hide() {
+        if (this.modal) {
+            this.modal.remove();
+            this.modal = null;
+        }
+        document.body.classList.remove('modal-open');
+    },
+};
+
+
+/**
+ * Project Settings Modal
+ */
+window.ProjectSettings = {
+    modal: null,
+    projectSlug: null,
+    projectData: null,
+
+    /**
+     * Show settings modal for a project
+     */
+    async show(slug) {
+        this.projectSlug = slug;
+
+        try {
+            this.projectData = await EditUtils.fetchJSON(`/api/project/${slug}`);
+            this.createModal();
+        } catch (error) {
+            console.error('Failed to load project:', error);
+            EditUtils.showNotification('Failed to load project settings', 'error');
+        }
+    },
+
+    /**
+     * Create the modal
+     */
+    createModal() {
+        const data = this.projectData;
+
+        this.modal = document.createElement('div');
+        this.modal.className = 'edit-settings-modal';
+        this.modal.innerHTML = `
+            <div class="edit-settings-overlay"></div>
+            <div class="edit-settings-content">
+                <div class="edit-settings-header">
+                    <h2>Project Settings</h2>
+                    <button class="edit-settings-close">&times;</button>
+                </div>
+                <form class="edit-settings-form" id="settings-form">
+                    <div class="edit-form-group">
+                        <label for="settings-name">Project Name</label>
+                        <input type="text" id="settings-name" name="name" value="${data.name || ''}" required>
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="settings-slug">URL Slug</label>
+                        <input type="text" id="settings-slug" name="slug" value="${data.slug || ''}" required pattern="[a-z0-9-]+">
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="settings-date">Date</label>
+                        <input type="date" id="settings-date" name="date" value="${data.date || ''}" required>
+                    </div>
+                    <div class="edit-form-group">
+                        <label for="settings-youtube">YouTube Link</label>
+                        <input type="url" id="settings-youtube" name="youtube" value="${data.youtube || ''}" placeholder="https://youtube.com/watch?v=...">
+                    </div>
+                    <div class="edit-form-row">
+                        <div class="edit-form-group edit-form-checkbox">
+                            <label>
+                                <input type="checkbox" id="settings-draft" name="draft" ${data.draft ? 'checked' : ''}>
+                                Draft
+                            </label>
+                        </div>
+                        <div class="edit-form-group edit-form-checkbox">
+                            <label>
+                                <input type="checkbox" id="settings-pinned" name="pinned" ${data.pinned ? 'checked' : ''}>
+                                Pinned
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="edit-form-section">
+                        <h3>Hero Video</h3>
+                        <div class="edit-form-group">
+                            <label>Current Video</label>
+                            ${data.video?.hls
+                                ? `<div class="edit-video-info">
+                                    <span>HLS: ${data.video.hls.split('/').pop()}</span>
+                                    <button type="button" class="edit-btn-small" id="upload-hero-video">Replace</button>
+                                   </div>`
+                                : `<button type="button" class="edit-btn edit-btn-secondary" id="upload-hero-video">Upload Hero Video</button>`
+                            }
+                            <input type="file" id="hero-video-input" accept="video/*" style="display: none;">
+                        </div>
+                    </div>
+
+                    <div class="edit-settings-actions">
+                        <button type="button" class="edit-btn edit-btn-danger" id="delete-project">Delete Project</button>
+                        <div class="edit-settings-actions-right">
+                            <button type="button" class="edit-btn edit-btn-secondary" id="settings-cancel">Cancel</button>
+                            <button type="submit" class="edit-btn edit-btn-primary">Save Settings</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        document.body.appendChild(this.modal);
+        document.body.classList.add('modal-open');
+
+        this.setupEventListeners();
+    },
+
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        // Close button
+        this.modal.querySelector('.edit-settings-close').addEventListener('click', () => {
+            this.hide();
+        });
+
+        // Overlay click
+        this.modal.querySelector('.edit-settings-overlay').addEventListener('click', () => {
+            this.hide();
+        });
+
+        // Cancel button
+        this.modal.querySelector('#settings-cancel').addEventListener('click', () => {
+            this.hide();
+        });
+
+        // Form submit
+        this.modal.querySelector('#settings-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.saveSettings();
+        });
+
+        // Delete button
+        this.modal.querySelector('#delete-project').addEventListener('click', async () => {
+            if (confirm(`Are you sure you want to delete "${this.projectData.name}"? This cannot be undone.`)) {
+                await this.deleteProject();
+            }
+        });
+
+        // Hero video upload
+        const uploadBtn = this.modal.querySelector('#upload-hero-video');
+        const fileInput = this.modal.querySelector('#hero-video-input');
+
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.hide();
+                if (window.EditVideo) {
+                    EditVideo.open(file, this.projectSlug, async (result) => {
+                        // Update project video data
+                        this.projectData.video = result.video;
+                        await this.saveVideoData(result.video);
+                        EditUtils.showNotification('Video updated!', 'success');
+                    });
+                }
+            }
+        });
+
+        // Escape key - close modal and stop propagation to prevent project close
+        this.escHandler = (e) => {
+            if (e.key === 'Escape' && this.modal) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.hide();
+            }
+        };
+        document.addEventListener('keydown', this.escHandler, true); // Use capture phase
+    },
+
+    /**
+     * Save settings
+     */
+    async saveSettings() {
+        const form = this.modal.querySelector('#settings-form');
+        const formData = new FormData(form);
+
+        const data = {
+            name: formData.get('name'),
+            slug: formData.get('slug'),
+            date: formData.get('date'),
+            youtube: formData.get('youtube') || null,
+            draft: formData.get('draft') === 'on',
+            pinned: formData.get('pinned') === 'on',
+            video: this.projectData.video,
+            markdown: this.projectData.markdown,
+        };
+
+        try {
+            await EditUtils.fetchJSON('/api/save-project', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+
+            EditUtils.showNotification('Settings saved!', 'success');
+
+            // If slug changed, redirect
+            if (data.slug !== this.projectSlug) {
+                window.location.href = `/${data.slug}`;
+            } else {
+                this.hide();
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error('Save settings error:', error);
+            EditUtils.showNotification('Failed to save settings', 'error');
+        }
+    },
+
+    /**
+     * Save video data only
+     */
+    async saveVideoData(videoData) {
+        const data = {
+            ...this.projectData,
+            video: videoData,
+        };
+
+        try {
+            await EditUtils.fetchJSON('/api/save-project', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+        } catch (error) {
+            console.error('Save video data error:', error);
+        }
+    },
+
+    /**
+     * Delete project
+     */
+    async deleteProject() {
+        try {
+            await EditUtils.fetchJSON(`/api/project/${this.projectSlug}`, {
+                method: 'DELETE',
+            });
+
+            EditUtils.showNotification('Project deleted', 'success');
+            this.hide();
+            window.location.href = '/';
+        } catch (error) {
+            console.error('Delete project error:', error);
+            EditUtils.showNotification('Failed to delete project', 'error');
+        }
+    },
+
+    /**
+     * Hide modal
+     */
+    hide() {
+        if (this.escHandler) {
+            document.removeEventListener('keydown', this.escHandler, true);
+            this.escHandler = null;
+        }
+        if (this.modal) {
+            this.modal.remove();
+            this.modal = null;
+        }
+        document.body.classList.remove('modal-open');
+    },
+};
