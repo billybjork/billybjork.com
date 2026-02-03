@@ -24,7 +24,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CacheControlMiddleware,
-    static_cache_control="public, max-age=604800",
+    static_cache_control="public, max-age=31536000, immutable",
     page_cache_control="public, max-age=300, stale-while-revalidate=60",
 )
 app.mount("/static", StaticFiles(directory="static"), name="static")

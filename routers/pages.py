@@ -64,8 +64,15 @@ async def read_root(
 ):
     try:
         is_dev_mode = _is_localhost(request)
-        include_drafts = show_drafts and is_dev_mode
-        all_projects = load_all_projects(include_drafts=include_drafts)
+        show_drafts_only = show_drafts and is_dev_mode
+        if show_drafts_only:
+            all_projects = [
+                project
+                for project in load_all_projects(include_drafts=True)
+                if project.get("is_draft", False)
+            ]
+        else:
+            all_projects = load_all_projects(include_drafts=False)
 
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
@@ -87,7 +94,7 @@ async def read_root(
                     "projects": formatted_projects,
                     "page": page,
                     "has_more": has_more,
-                    "show_drafts": include_drafts,
+                    "show_drafts": show_drafts_only,
                 },
             )
 
@@ -102,7 +109,7 @@ async def read_root(
                 "page": page,
                 "has_more": has_more,
                 "limit": limit,
-                "show_drafts": include_drafts,
+                "show_drafts": show_drafts_only,
             },
         )
     except Exception as e:
@@ -147,6 +154,7 @@ async def read_project(
     background_tasks: BackgroundTasks,
     project_slug: str,
     close: bool = False,
+    show_drafts: bool = Query(False),
 ):
     try:
         project_data = load_project(project_slug)
@@ -158,6 +166,7 @@ async def read_project(
         is_open = not close
         is_dev_mode = _is_localhost(request)
         meta_description = extract_meta_description(project.html_content)
+        show_drafts_only = show_drafts and is_dev_mode
         is_htmx = request.headers.get("HX-Request") == "true"
 
         if is_htmx and not is_open:
@@ -210,6 +219,7 @@ async def read_project(
                 "page_title": project.name,
                 "page_meta_description": meta_description,
                 "analytics": analytics,
+                "show_drafts": show_drafts_only,
             },
         )
     except HTTPException:

@@ -328,6 +328,155 @@ body.editing {
     width: 100%;
 }
 
+.text-block-lines {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 0;
+    font-weight: inherit;
+}
+
+.text-block-line {
+    position: relative;
+    min-height: 27px;
+    font-weight: inherit;
+}
+
+.text-block-line-preview {
+    color: #e0e0e0;
+    line-height: 1.7;
+    font-size: 16px;
+    font-family: inherit;
+    font-weight: inherit;
+    font-synthesis: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: text;
+}
+
+.text-block-line-preview h1,
+.text-block-line-preview h2,
+.text-block-line-preview h3,
+.text-block-line-preview h4,
+.text-block-line-preview h5,
+.text-block-line-preview h6 {
+    margin: 0;
+    font-weight: inherit;
+}
+
+.text-block-line-preview blockquote {
+    margin: 0;
+    padding-left: 12px;
+    border-left: 2px solid #333;
+    color: #cfcfcf;
+}
+
+.text-block-line-preview a {
+    color: #60a5fa;
+    text-decoration: underline;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.text-line-divider {
+    border: none;
+    border-top: 1px solid #333;
+    margin: 6px 0;
+}
+
+.text-line-list {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.text-line-list-marker {
+    min-width: 20px;
+    text-align: right;
+    color: #888;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.text-line-list-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.text-line-list-content.checked {
+    color: #777;
+    text-decoration: line-through;
+}
+
+.text-line-list-ordered .text-line-list-marker {
+    color: #aaa;
+}
+
+.text-line-task-box {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #666;
+    border-radius: 3px;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.text-line-task-box.checked {
+    border-color: #60a5fa;
+    background: #60a5fa;
+    position: relative;
+}
+
+.text-line-task-box.checked::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 1px;
+    width: 4px;
+    height: 7px;
+    border: solid #111;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.text-block-line-placeholder {
+    color: #555;
+}
+
+.text-line-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: none;
+    outline: none;
+    padding: 0;
+    background: transparent;
+    color: #e0e0e0;
+    line-height: 1.7;
+    font-size: 16px;
+    font-family: inherit;
+    font-weight: inherit;
+    font-synthesis: none;
+    resize: none;
+    overflow: hidden;
+    display: none;
+    text-align: inherit;
+}
+
+.text-block-line.is-editing .text-line-input {
+    display: block;
+}
+
+.text-block-line.is-editing .text-block-line-preview {
+    visibility: hidden;
+}
+
+.text-line-input::placeholder {
+    color: #555;
+}
+
 .block-textarea {
     width: 100%;
     min-height: 40px;
@@ -488,11 +637,51 @@ body.editing {
     height: auto;
     border-radius: 8px;
     cursor: pointer;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s ease, width 0.1s ease, height 0.1s ease;
 }
 
 .block-image:hover {
     opacity: 0.9;
+}
+
+.block-image.media-selected {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.35);
+}
+
+.block-image.media-resizing {
+    transition: none;
+}
+
+.resize-handle {
+    position: fixed;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border: 2px solid #3b82f6;
+    border-radius: 50%;
+    z-index: 1002;
+    cursor: nwse-resize;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.resize-handle:hover {
+    transform: scale(1.2);
+    box-shadow: 0 3px 10px rgba(59, 130, 246, 0.4);
+}
+
+.resize-handle.nw { cursor: nwse-resize; }
+.resize-handle.ne { cursor: nesw-resize; }
+.resize-handle.sw { cursor: nesw-resize; }
+.resize-handle.se { cursor: nwse-resize; }
+
+@media (max-width: 768px) {
+    .resize-handle {
+        width: 16px;
+        height: 16px;
+    }
 }
 
 .image-alt-input {

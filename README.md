@@ -29,13 +29,27 @@ AWS_SECRET_ACCESS_KEY=
 AWS_REGION=us-west-1
 S3_BUCKET=billybjork.com
 CLOUDFRONT_DOMAIN=d17y8p6t5eu2ht.cloudfront.net
+STATIC_VERSION=
 ```
+
+### Static Asset Caching
+
+Static assets served from `/static/*` now include a version query (`?v=`) for cache busting. In production, set `STATIC_VERSION` (e.g., git SHA or deploy timestamp) to invalidate cached assets on deploy. If `STATIC_VERSION` is unset, the app uses file mtimes for local development.
+
+The app sends long-lived cache headers for `/static/*`:
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+For CloudFront/S3 assets (sprite sheets, etc.), ensure the CDN/origin sets the same long-lived `Cache-Control` and invalidate on updates. Use a CloudFront Response Headers Policy or object metadata.
 
 ## Content Structure
 
 ```
 content/
 ├── about.md           # About page (markdown + frontmatter)
+├── assets.json        # Asset registry (hashes, sizes)
 ├── settings.json      # Site settings (social links, etc.)
 └── projects/          # Project pages
     └── {slug}.md      # Each project as markdown + YAML frontmatter
@@ -48,7 +62,7 @@ content/
 name: Project Title
 slug: project-slug
 date: 2024-01-15
-visible: true
+draft: false
 pinned: false
 video:
   hls: https://cdn.example.com/videos/slug/master.m3u8
@@ -79,6 +93,17 @@ All media is processed server-side and uploaded to S3/CloudFront.
 | Content videos | Compress | MP4 @ 720p, crf 28 |
 | Hero videos | Full pipeline | HLS adaptive + sprite sheet + thumbnail |
 
+### Media Storage Paths
+
+Canonical S3 prefixes used by edit mode and ingestion:
+
+- `images/project-content/` for inline content images (default for `/api/upload-media`)
+- `images/misc/` for site-level assets (optional `scope=misc` to `/api/upload-media`)
+- `images/sprite-sheets/` for hero video sprite sheets
+- `images/thumbnails/` for hero video thumbnails
+- `videos/{slug}/` for HLS assets (`master.m3u8`, segments)
+- `videos_mp4/` for inline MP4 uploads (`/api/process-content-video`)
+
 ### Hero Video Pipeline
 
 When uploading a hero video, the system generates:
@@ -88,13 +113,3 @@ When uploading a hero video, the system generates:
 3. **Thumbnail** - WebP poster image
 
 See `utils/video.py` for processing details.
-
-## API Endpoints (localhost only)
-
-| Endpoint | Purpose |
-|----------|---------|
-| `POST /api/upload-media` | Upload and process images |
-| `POST /api/process-content-video` | Compress and upload content videos |
-| `POST /api/process-hero-video` | Full hero video processing |
-| `POST /api/save-project` | Save project content and settings |
-| `GET /api/settings` | Get site settings |

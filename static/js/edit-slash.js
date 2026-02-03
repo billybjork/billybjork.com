@@ -255,9 +255,11 @@ window.EditSlash = (function() {
 
         // Clean up "/" from textarea if triggered from typing
         if (triggeredFromTextarea && activeTextareaIndex !== null) {
-            const textarea = document.querySelector(
-                `.block-wrapper[data-block-index="${activeTextareaIndex}"] .block-textarea`
-            );
+            const textarea = (anchorElement && anchorElement.tagName === 'TEXTAREA')
+                ? anchorElement
+                : document.querySelector(
+                    `.block-wrapper[data-block-index="${activeTextareaIndex}"] .block-textarea`
+                );
             if (textarea) {
                 const cursorPos = textarea.selectionStart;
                 const text = textarea.value;
@@ -273,13 +275,27 @@ window.EditSlash = (function() {
                     const slashIndex = lineStart;
                     const newText = (text.substring(0, slashIndex) + text.substring(cursorPos)).replace(/\n+$/, '');
                     textarea.value = newText;
-                    blockBecameEmpty = !newText.trim();
-                    // Notify callback to update block content
-                    if (onExecuteCallback) {
-                        onExecuteCallback('updateContent', {
-                            index: activeTextareaIndex,
-                            content: newText
-                        });
+
+                    const isLineInput = textarea.classList.contains('text-line-input');
+                    if (isLineInput) {
+                        const blockWrapper = textarea.closest('.block-wrapper');
+                        if (blockWrapper) {
+                            const lineInputs = blockWrapper.querySelectorAll('.text-line-input');
+                            blockBecameEmpty = Array.from(lineInputs).every(input => !input.value.trim());
+                        } else {
+                            blockBecameEmpty = !newText.trim();
+                        }
+
+                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    } else {
+                        blockBecameEmpty = !newText.trim();
+                        // Notify callback to update block content
+                        if (onExecuteCallback) {
+                            onExecuteCallback('updateContent', {
+                                index: activeTextareaIndex,
+                                content: newText
+                            });
+                        }
                     }
                 }
             }

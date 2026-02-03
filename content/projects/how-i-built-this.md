@@ -5,10 +5,12 @@ date: '2024-10-15'
 pinned: true
 draft: false
 video:
+  hls: null
+  thumbnail: null
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/billy-bjork_site-scroll-grid_sprite_sheet.jpg
 ---
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/scroll-demo.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/scroll-demo.gif)
 
 <!-- block -->
 
@@ -44,7 +46,7 @@ The lightbulb moment: _Why not have the thumbnails react to the visitor's scroll
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/scroll-demo-1.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/scroll-demo-1.gif)
 
 <!-- block -->
 
@@ -58,7 +60,7 @@ These benefits have made sprite sheets a popular approach for character animatio
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/sprite-example.webp)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/sprite-example.webp)
 
 <!-- block -->
 
@@ -102,7 +104,7 @@ With that magical command, I turned my folder of trimmed videos into 50+ sprite 
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/sprite-sheets-all.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/sprite-sheets-all.gif)
 
 <!-- block -->
 
@@ -229,7 +231,7 @@ Another central design goal was to make opening and closing projects seamless. V
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/peek-in-out.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/peek-in-out.gif)
 
 <!-- block -->
 
@@ -241,7 +243,7 @@ That's how I arrived at [**htmx**](https://htmx.org/), a library to help build d
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/bellcurve2.png)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/bellcurve2.png)
 
 <!-- block -->
 
@@ -281,7 +283,7 @@ With that, project headers now serve as buttons to open projects in place, right
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/header-button-htmx.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/header-button-htmx.gif)
 
 <!-- block -->
 
@@ -348,7 +350,7 @@ Here's an early version, showing the 'hello world' moment for partial rendering 
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/bb-early.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/bb-early.gif)
 
 <!-- block -->
 
@@ -362,7 +364,7 @@ Before we move on, I'll share one more functionality that htmx helped me achieve
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/site-scroll-grid.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/site-scroll-grid.gif)
 
 <!-- block -->
 
@@ -433,7 +435,7 @@ With that, additional projects are loaded whenever the viewport reaches the bott
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/infinite-scroll-1.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/infinite-scroll-1.gif)
 
 <!-- block -->
 
@@ -447,7 +449,7 @@ As a website consisting mostly of video projects, I knew it needed an exceptiona
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/video-player-wix.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/video-player-wix.gif)
 
 <!-- block -->
 
@@ -455,7 +457,7 @@ _Video player in my previous Wix site_
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/video-player-new.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/video-player-new.gif)
 
 <!-- block -->
 
@@ -507,7 +509,7 @@ Here's what video streaming using HLS looks like, in network requests:
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/hls-in-action.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/hls-in-action.gif)
 
 <!-- block -->
 
@@ -521,7 +523,7 @@ As a replacement of my previous website on Wix, this project involved not only t
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/cms-previous.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/cms-previous.gif)
 
 <!-- block -->
 
@@ -535,7 +537,7 @@ Not that hard, as it turns out. I've implemented some of this already, which is 
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/CMS-demo-2.gif)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/CMS-demo-2.gif)
 
 <!-- block -->
 
@@ -578,7 +580,7 @@ _More validation:_ the [PageSpeed Insights](https://pagespeed.web.dev/analysis/h
 
 <!-- block -->
 
-![](https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/billybjork.com/PagespeedInsights-1_desktop.webp)
+![](https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/PagespeedInsights-1_desktop.webp)
 
 <!-- block -->
 

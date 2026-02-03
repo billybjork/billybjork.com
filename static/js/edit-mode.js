@@ -219,6 +219,9 @@ window.EditMode = (function() {
         document.removeEventListener('keydown', handleGlobalKeydown);
         window.removeEventListener('beforeunload', handleBeforeUnload);
         EditSlash.cleanup();
+        if (window.EditMedia && EditMedia.deselect) {
+            EditMedia.deselect();
+        }
         document.body.classList.remove('editing');
 
         // Remove edit-mode-active class from the appropriate container
@@ -415,6 +418,10 @@ window.EditMode = (function() {
     function renderBlocks() {
         if (!container) return;
 
+        if (window.EditMedia && EditMedia.deselect) {
+            EditMedia.deselect();
+        }
+
         container.innerHTML = '';
 
         blocks.forEach((block, index) => {
@@ -557,49 +564,683 @@ window.EditMode = (function() {
     }
 
     /**
-     * Render text block as auto-resizing textarea
+     * Render text block as line-aware markdown preview + inline editor
      */
     function renderTextBlock(block, index) {
         const wrapper = document.createElement('div');
         wrapper.className = 'text-block-wrapper';
+        wrapper.appendChild(createLineEditor(block, index));
+        return wrapper;
+    }
 
-        const textarea = document.createElement('textarea');
-        textarea.className = 'block-textarea';
-        textarea.value = block.content || '';
-        textarea.placeholder = 'Type something... (type / for commands)';
+    /**
+     * Create a line-based editor for a text block with inline markdown preview
+     * @param {object} block - Block data
+     * @param {number|string} index - Block index
+     * @returns {HTMLElement}
+     */
+    function createLineEditor(block, index) {
+        const container = document.createElement('div');
+        container.className = 'text-block-lines';
 
-        // Apply text alignment
         if (block.align) {
-            textarea.style.textAlign = block.align;
+            container.style.textAlign = block.align;
         }
 
-        // Auto-resize
-        EditUtils.setupAutoResizeTextarea(textarea, (value) => {
-            blocks[index].content = value;
+        let lines = (block.content || '').split('\n');
+        if (!lines.length) lines = [''];
+
+        let activeLineIndex = null;
+
+        const updateBlockContent = () => {
+            block.content = lines.join('\n');
             markDirty();
-        });
+        };
 
-        // Slash commands
-        textarea.addEventListener('input', () => {
-            EditSlash.handleTextareaInput(textarea, index);
-        });
+        const renderLines = (focusLineIndex = null, focusCaret = null) => {
+            container.innerHTML = '';
+            lines.forEach((lineText, lineIndex) => {
+                const row = buildLineRow(lineText, lineIndex);
+                container.appendChild(row);
+            });
 
-        // Keyboard shortcuts
-        textarea.addEventListener('keydown', (e) => {
-            // Slash command navigation
-            if (EditSlash.isActive()) {
-                if (EditSlash.handleKeydown(e)) return;
+            requestAnimationFrame(() => {
+                container.querySelectorAll('.text-block-line').forEach((row) => {
+                    syncLineHeight(row);
+                });
+            });
+
+            if (focusLineIndex != null) {
+                const row = container.querySelector(`.text-block-line[data-line-index="${focusLineIndex}"]`);
+                if (row) {
+                    activateLine(row, focusCaret);
+                }
+            }
+        };
+
+        const attachLinkPreviewHandlers = (preview, row) => {
+            preview.querySelectorAll('a[data-link-url-start]').forEach((linkEl) => {
+                linkEl.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const start = parseInt(linkEl.dataset.linkUrlStart, 10);
+                    const end = parseInt(linkEl.dataset.linkUrlEnd, 10);
+                    if (!Number.isNaN(start) && !Number.isNaN(end)) {
+                        activateLine(row, { start, end });
+                    } else {
+                        activateLine(row);
+                    }
+                });
+            });
+        };
+
+        const buildLineRow = (lineText, lineIndex) => {
+            const row = document.createElement('div');
+            row.className = 'text-block-line';
+            row.dataset.lineIndex = lineIndex;
+
+            const preview = document.createElement('div');
+            preview.className = 'text-block-line-preview';
+
+            const isSingleEmptyLine = lines.length === 1 && !lines[0].trim();
+            if (isSingleEmptyLine) {
+                preview.classList.add('text-block-line-placeholder');
+                preview.textContent = 'Type something... (type / for commands)';
+            } else {
+                preview.appendChild(renderLinePreview(lineText));
             }
 
-            // Formatting shortcuts
-            if (EditUtils.handleFormattingShortcuts(e, textarea, markDirty)) return;
+            attachLinkPreviewHandlers(preview, row);
 
-            // List shortcuts
-            if (EditUtils.handleListShortcuts(e, textarea, markDirty)) return;
+            const textarea = document.createElement('textarea');
+            textarea.className = 'text-line-input';
+            textarea.value = lineText;
+            textarea.rows = 1;
+            textarea.placeholder = 'Type something... (type / for commands)';
+
+            preview.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                activateLine(row);
+            });
+
+            row.addEventListener('click', (e) => {
+                if (!row.classList.contains('is-editing')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activateLine(row);
+                }
+            });
+
+            textarea.addEventListener('input', () => {
+                const newValue = textarea.value;
+
+                EditSlash.handleTextareaInput(textarea, index);
+
+                if (newValue.includes('\n')) {
+                    const splitLines = newValue.split('\n');
+                    lines.splice(lineIndex, 1, ...splitLines);
+                    updateBlockContent();
+                    renderLines(lineIndex + splitLines.length - 1, splitLines[splitLines.length - 1].length);
+                    return;
+                }
+
+                lines[lineIndex] = newValue;
+                updateBlockContent();
+                syncLineHeight(row);
+            });
+
+            textarea.addEventListener('keydown', (e) => {
+                // Slash command navigation
+                if (EditSlash.isActive()) {
+                    if (EditSlash.handleKeydown(e)) return;
+                }
+
+                // Formatting shortcuts
+                if (EditUtils.handleFormattingShortcuts(e, textarea, markDirty)) {
+                    lines[lineIndex] = textarea.value;
+                    updateBlockContent();
+                    syncLineHeight(row);
+                    return;
+                }
+
+                // List indentation shortcuts
+                if (EditUtils.handleListShortcuts(e, textarea, markDirty)) return;
+
+                if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                    e.preventDefault();
+                    handleLineSplit(textarea, lineIndex);
+                    return;
+                }
+
+                if (e.key === 'Backspace' && textarea.selectionStart === 0 && textarea.selectionEnd === 0) {
+                    if (lineIndex > 0) {
+                        e.preventDefault();
+                        mergeWithPreviousLine(lineIndex);
+                    }
+                    return;
+                }
+
+                if (e.key === 'Delete' && textarea.selectionStart === textarea.value.length && textarea.selectionEnd === textarea.value.length) {
+                    if (lineIndex < lines.length - 1) {
+                        e.preventDefault();
+                        mergeWithNextLine(lineIndex);
+                    }
+                    return;
+                }
+
+                if (e.key === 'ArrowUp' && textarea.selectionStart === 0 && textarea.selectionEnd === 0) {
+                    if (lineIndex > 0) {
+                        e.preventDefault();
+                        renderLines(lineIndex - 1, lines[lineIndex - 1].length);
+                    }
+                    return;
+                }
+
+                if (e.key === 'ArrowDown' && textarea.selectionStart === textarea.value.length && textarea.selectionEnd === textarea.value.length) {
+                    if (lineIndex < lines.length - 1) {
+                        e.preventDefault();
+                        renderLines(lineIndex + 1, 0);
+                    }
+                }
+            });
+
+            textarea.addEventListener('blur', () => {
+                if (activeLineIndex !== lineIndex) return;
+                deactivateLine(row);
+            });
+
+            row.appendChild(preview);
+            row.appendChild(textarea);
+            return row;
+        };
+
+        const activateLine = (row, selection = null) => {
+            const lineIndex = Number(row.dataset.lineIndex);
+
+            if (activeLineIndex !== null && activeLineIndex !== lineIndex) {
+                const previousRow = container.querySelector(`.text-block-line[data-line-index="${activeLineIndex}"]`);
+                if (previousRow) deactivateLine(previousRow);
+            }
+
+            activeLineIndex = lineIndex;
+            row.classList.add('is-editing');
+
+            const textarea = row.querySelector('.text-line-input');
+            textarea.focus();
+            if (selection && typeof selection === 'object') {
+                textarea.selectionStart = selection.start;
+                textarea.selectionEnd = selection.end ?? selection.start;
+            } else if (typeof selection === 'number') {
+                textarea.selectionStart = selection;
+                textarea.selectionEnd = selection;
+            } else {
+                textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+            }
+
+            syncLineHeight(row);
+        };
+
+        const deactivateLine = (row) => {
+            const lineIndex = Number(row.dataset.lineIndex);
+            const textarea = row.querySelector('.text-line-input');
+            const preview = row.querySelector('.text-block-line-preview');
+
+            row.classList.remove('is-editing');
+
+            const currentText = textarea.value;
+            preview.classList.remove('text-block-line-placeholder');
+            preview.innerHTML = '';
+
+            const isSingleEmptyLine = lines.length === 1 && !lines[0].trim();
+            if (isSingleEmptyLine && !currentText.trim()) {
+                preview.classList.add('text-block-line-placeholder');
+                preview.textContent = 'Type something... (type / for commands)';
+            } else {
+                preview.appendChild(renderLinePreview(currentText));
+                attachLinkPreviewHandlers(preview, row);
+            }
+
+            activeLineIndex = null;
+            syncLineHeight(row);
+        };
+
+        const handleLineSplit = (textarea, lineIndex) => {
+            const value = textarea.value;
+            const cursor = textarea.selectionStart;
+            const before = value.slice(0, cursor);
+            const after = value.slice(cursor);
+
+            const listContinuation = getListContinuation(before);
+
+            lines[lineIndex] = before;
+            const nextLine = listContinuation ? listContinuation + after.replace(/^\s+/, '') : after;
+            lines.splice(lineIndex + 1, 0, nextLine);
+            updateBlockContent();
+
+            const caret = listContinuation ? listContinuation.length : 0;
+            renderLines(lineIndex + 1, caret);
+        };
+
+        const mergeWithPreviousLine = (lineIndex) => {
+            if (lineIndex <= 0) return;
+            const previous = lines[lineIndex - 1];
+            const current = lines[lineIndex];
+            const merged = previous + current;
+            lines.splice(lineIndex - 1, 2, merged);
+            updateBlockContent();
+            renderLines(lineIndex - 1, previous.length);
+        };
+
+        const mergeWithNextLine = (lineIndex) => {
+            if (lineIndex >= lines.length - 1) return;
+            const current = lines[lineIndex];
+            const next = lines[lineIndex + 1];
+            const merged = current + next;
+            lines.splice(lineIndex, 2, merged);
+            updateBlockContent();
+            renderLines(lineIndex, current.length);
+        };
+
+        const syncLineHeight = (row) => {
+            const preview = row.querySelector('.text-block-line-preview');
+            const textarea = row.querySelector('.text-line-input');
+
+            requestAnimationFrame(() => {
+                const previewHeight = preview ? preview.offsetHeight : 0;
+                const inputHeight = textarea ? textarea.scrollHeight : 0;
+                const minHeight = Math.max(27, previewHeight);
+                row.style.minHeight = `${minHeight}px`;
+                if (row.classList.contains('is-editing')) {
+                    row.style.height = `${Math.max(minHeight, inputHeight)}px`;
+                } else {
+                    row.style.height = '';
+                }
+            });
+        };
+
+        const getListContinuation = (lineText) => {
+            const unorderedMatch = lineText.match(/^(\s*)([-*+])\s+/);
+            if (unorderedMatch) {
+                return `${unorderedMatch[1]}${unorderedMatch[2]} `;
+            }
+            const orderedMatch = lineText.match(/^(\s*)(\d+)\.\s+/);
+            if (orderedMatch) {
+                const nextNum = parseInt(orderedMatch[2], 10) + 1;
+                return `${orderedMatch[1]}${nextNum}. `;
+            }
+            return null;
+        };
+
+        renderLines();
+        return container;
+    }
+
+    /**
+     * Render a single line of markdown into preview HTML
+     * @param {string} lineText
+     * @returns {HTMLElement}
+     */
+    function renderLinePreview(lineText) {
+        const trimmed = lineText.trim();
+
+        if (!trimmed) {
+            const empty = document.createElement('span');
+            empty.innerHTML = '&nbsp;';
+            return empty;
+        }
+
+        if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) {
+            const hr = document.createElement('hr');
+            hr.className = 'text-line-divider';
+            return hr;
+        }
+
+        const headingMatch = lineText.match(/^(\s*)(#{1,6})\s+(.*)$/);
+        if (headingMatch) {
+            const level = headingMatch[2].length;
+            const contentStart = lineText.indexOf(headingMatch[3]);
+            const heading = document.createElement(`h${level}`);
+            heading.appendChild(renderInlineMarkdown(headingMatch[3], contentStart));
+            return heading;
+        }
+
+        const quoteMatch = lineText.match(/^(\s*)>\s+(.*)$/);
+        if (quoteMatch) {
+            const contentStart = lineText.indexOf(quoteMatch[2]);
+            const quote = document.createElement('blockquote');
+            quote.appendChild(renderInlineMarkdown(quoteMatch[2], contentStart));
+            return quote;
+        }
+
+        const listMatch = lineText.match(/^(\s*)([-*+])\s+(.*)$/);
+        if (listMatch) {
+            return renderListLine({
+                indent: listMatch[1],
+                marker: listMatch[2],
+                content: listMatch[3],
+                ordered: false,
+                baseOffset: lineText.indexOf(listMatch[3])
+            });
+        }
+
+        const orderedMatch = lineText.match(/^(\s*)(\d+)\.\s+(.*)$/);
+        if (orderedMatch) {
+            return renderListLine({
+                indent: orderedMatch[1],
+                marker: orderedMatch[2],
+                content: orderedMatch[3],
+                ordered: true,
+                baseOffset: lineText.indexOf(orderedMatch[3])
+            });
+        }
+
+        const span = document.createElement('span');
+        span.appendChild(renderInlineMarkdown(lineText, 0));
+        return span;
+    }
+
+    /**
+     * Render a list-like preview line
+     * @param {object} params
+     * @returns {HTMLElement}
+     */
+    function renderListLine(params) {
+        const listLine = document.createElement('div');
+        listLine.className = 'text-line-list' + (params.ordered ? ' text-line-list-ordered' : ' text-line-list-unordered');
+
+        const indentLevel = getIndentLevel(params.indent);
+        if (indentLevel > 0) {
+            listLine.style.marginLeft = `${indentLevel * 18}px`;
+        }
+
+        let contentText = params.content || '';
+        let contentOffset = params.baseOffset || 0;
+        let isTask = false;
+        let isChecked = false;
+
+        const taskMatch = contentText.match(/^\[( |x|X)\]\s*(.*)$/);
+        if (taskMatch) {
+            isTask = true;
+            isChecked = taskMatch[1].toLowerCase() === 'x';
+            const prefixLength = taskMatch[0].length - taskMatch[2].length;
+            contentOffset += prefixLength;
+            contentText = taskMatch[2];
+        }
+
+        const marker = document.createElement('span');
+        marker.className = 'text-line-list-marker';
+        marker.textContent = params.ordered ? `${params.marker}.` : (isTask ? '' : '•');
+
+        if (isTask) {
+            const taskBox = document.createElement('span');
+            taskBox.className = 'text-line-task-box' + (isChecked ? ' checked' : '');
+            taskBox.setAttribute('aria-hidden', 'true');
+            marker.appendChild(taskBox);
+        }
+
+        const content = document.createElement('div');
+        content.className = 'text-line-list-content' + (isChecked ? ' checked' : '');
+        const leadingSpaces = (contentText.match(/^\s*/) || [''])[0].length;
+        if (leadingSpaces) {
+            contentOffset += leadingSpaces;
+            contentText = contentText.slice(leadingSpaces);
+        }
+        const trimmedContent = contentText.trimEnd();
+        if (trimmedContent.trim()) {
+            content.appendChild(renderInlineMarkdown(trimmedContent, contentOffset));
+        } else {
+            const empty = document.createElement('span');
+            empty.innerHTML = '&nbsp;';
+            content.appendChild(empty);
+        }
+
+        listLine.appendChild(marker);
+        listLine.appendChild(content);
+        return listLine;
+    }
+
+    /**
+     * Convert indentation whitespace into a list indent level
+     * @param {string} indent
+     * @returns {number}
+     */
+    function getIndentLevel(indent) {
+        if (!indent) return 0;
+        const normalized = indent.replace(/\t/g, '   ');
+        return Math.floor(normalized.length / 3);
+    }
+
+    /**
+     * Render inline markdown into a fragment (links + basic formatting)
+     * @param {string} text
+     * @param {number} baseOffset
+     * @returns {DocumentFragment}
+     */
+    function renderInlineMarkdown(text, baseOffset = 0) {
+        const fragment = document.createDocumentFragment();
+        const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+        let lastIndex = 0;
+        let match;
+
+        while ((match = linkRegex.exec(text)) !== null) {
+            const [fullMatch, label, url] = match;
+            const offset = match.index;
+
+            if (offset > lastIndex) {
+                appendInlineFormatted(fragment, text.slice(lastIndex, offset));
+            }
+
+            const safeUrl = sanitizeUrl(url);
+            if (safeUrl) {
+                const link = document.createElement('a');
+                link.href = safeUrl;
+                link.rel = 'noopener';
+                link.target = '_blank';
+                const linkStart = offset + baseOffset;
+                const urlStart = linkStart + 1 + label.length + 2;
+                link.dataset.linkUrlStart = String(urlStart);
+                link.dataset.linkUrlEnd = String(urlStart + url.length);
+                appendInlineFormatted(link, label);
+                fragment.appendChild(link);
+            } else {
+                fragment.appendChild(document.createTextNode(fullMatch));
+            }
+
+            lastIndex = offset + fullMatch.length;
+        }
+
+        if (lastIndex < text.length) {
+            appendInlineFormatted(fragment, text.slice(lastIndex));
+        }
+
+        return fragment;
+    }
+
+    /**
+     * Append formatted inline content into a container
+     * @param {HTMLElement|DocumentFragment} container
+     * @param {string} text
+     */
+    function appendInlineFormatted(container, text) {
+        container.appendChild(parseInlineTokens(text));
+    }
+
+    /**
+     * Parse inline markdown tokens (bold, italic, underline, code, strikethrough)
+     * @param {string} text
+     * @returns {DocumentFragment}
+     */
+    function parseInlineTokens(text) {
+        const fragment = document.createDocumentFragment();
+        let index = 0;
+
+        while (index < text.length) {
+            const token = findNextInlineToken(text, index);
+            if (!token) {
+                fragment.appendChild(document.createTextNode(text.slice(index)));
+                break;
+            }
+
+            if (token.index > index) {
+                fragment.appendChild(document.createTextNode(text.slice(index, token.index)));
+            }
+
+            index = token.index;
+
+            if (token.type === 'code') {
+                const closeIndex = findTokenIndex(text, token.delimiter, index + token.length);
+                if (closeIndex === -1) {
+                    fragment.appendChild(document.createTextNode(token.delimiter));
+                    index += token.length;
+                    continue;
+                }
+                const codeText = text.slice(index + token.length, closeIndex);
+                if (!codeText) {
+                    fragment.appendChild(document.createTextNode(token.delimiter));
+                    index += token.length;
+                    continue;
+                }
+                const code = document.createElement('code');
+                code.textContent = codeText;
+                fragment.appendChild(code);
+                index = closeIndex + token.length;
+                continue;
+            }
+
+            if (token.type === 'underline') {
+                const closeIndex = text.indexOf('</u>', index + token.length);
+                if (closeIndex === -1) {
+                    fragment.appendChild(document.createTextNode(token.delimiter));
+                    index += token.length;
+                    continue;
+                }
+                const inner = text.slice(index + token.length, closeIndex);
+                if (!inner.trim()) {
+                    fragment.appendChild(document.createTextNode(token.delimiter));
+                    index += token.length;
+                    continue;
+                }
+                const underline = document.createElement('u');
+                underline.appendChild(parseInlineTokens(inner));
+                fragment.appendChild(underline);
+                index = closeIndex + 4;
+                continue;
+            }
+
+            const closeIndex = findTokenIndex(text, token.delimiter, index + token.length);
+            if (closeIndex === -1) {
+                fragment.appendChild(document.createTextNode(token.delimiter));
+                index += token.length;
+                continue;
+            }
+
+            const inner = text.slice(index + token.length, closeIndex);
+            if (!inner.trim()) {
+                fragment.appendChild(document.createTextNode(token.delimiter));
+                index += token.length;
+                continue;
+            }
+
+            let element = null;
+            if (token.type === 'bold') {
+                element = document.createElement('strong');
+            } else if (token.type === 'italic') {
+                element = document.createElement('em');
+            } else if (token.type === 'strikethrough') {
+                element = document.createElement('s');
+            }
+
+            if (!element) {
+                fragment.appendChild(document.createTextNode(token.delimiter));
+                index += token.length;
+                continue;
+            }
+
+            element.appendChild(parseInlineTokens(inner));
+            fragment.appendChild(element);
+            index = closeIndex + token.length;
+        }
+
+        return fragment;
+    }
+
+    /**
+     * Find the next inline token candidate
+     * @param {string} text
+     * @param {number} startIndex
+     * @returns {Object|null}
+     */
+    function findNextInlineToken(text, startIndex) {
+        const tokens = [
+            { type: 'code', delimiter: '`' },
+            { type: 'underline', delimiter: '<u>' },
+            { type: 'bold', delimiter: '**' },
+            { type: 'bold', delimiter: '__' },
+            { type: 'strikethrough', delimiter: '~~' },
+            { type: 'italic', delimiter: '*' },
+            { type: 'italic', delimiter: '_' }
+        ];
+
+        let best = null;
+
+        tokens.forEach((token) => {
+            const idx = findTokenIndex(text, token.delimiter, startIndex);
+            if (idx === -1) return;
+            const length = token.delimiter.length;
+            if (!best || idx < best.index || (idx === best.index && length > best.length)) {
+                best = {
+                    ...token,
+                    index: idx,
+                    length
+                };
+            }
         });
 
-        wrapper.appendChild(textarea);
-        return wrapper;
+        return best;
+    }
+
+    /**
+     * Find token index, skipping escaped delimiters
+     * @param {string} text
+     * @param {string} delimiter
+     * @param {number} startIndex
+     * @returns {number}
+     */
+    function findTokenIndex(text, delimiter, startIndex) {
+        let idx = text.indexOf(delimiter, startIndex);
+        while (idx !== -1) {
+            if (idx > 0 && text[idx - 1] === '\\') {
+                idx = text.indexOf(delimiter, idx + delimiter.length);
+                continue;
+            }
+            return idx;
+        }
+        return -1;
+    }
+
+    /**
+     * Basic URL sanitizer for preview links
+     * @param {string} url
+     * @returns {string|null}
+     */
+    function sanitizeUrl(url) {
+        const trimmed = (url || '').trim();
+        if (!trimmed) return null;
+        if (trimmed.startsWith('#') || trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
+            return trimmed;
+        }
+
+        try {
+            const parsed = new URL(trimmed, window.location.origin);
+            if (['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)) {
+                return parsed.href;
+            }
+        } catch (err) {
+            return null;
+        }
+
+        return null;
     }
 
     /**
@@ -610,7 +1251,11 @@ window.EditMode = (function() {
         wrapper.className = 'image-block-wrapper';
 
         if (block.src) {
-            const img = EditUtils.createImageElement(block);
+            const img = EditUtils.createImageElement(block, (element) => {
+                if (window.EditMedia && EditMedia.select) {
+                    EditMedia.select(element, block);
+                }
+            });
             img.className = 'block-image';
             wrapper.appendChild(img);
 
@@ -1035,7 +1680,11 @@ window.EditMode = (function() {
         // Focus the new block if it's a text block
         if (type === 'text' || type === 'callout') {
             setTimeout(() => {
-                const textarea = container.querySelector(`[data-block-index="${index}"] .block-textarea, [data-block-index="${index}"] .callout-textarea`);
+                const textarea = container.querySelector(
+                    `[data-block-index="${index}"] .text-line-input, ` +
+                    `[data-block-index="${index}"] .block-textarea, ` +
+                    `[data-block-index="${index}"] .callout-textarea`
+                );
                 if (textarea) textarea.focus();
             }, 50);
         }
@@ -1087,7 +1736,9 @@ window.EditMode = (function() {
                 if (data.commandId === 'text' || data.commandId === 'callout') {
                     setTimeout(() => {
                         const textarea = container.querySelector(
-                            `[data-block-index="${focusIndex}"] .block-textarea, [data-block-index="${focusIndex}"] .callout-textarea`
+                            `[data-block-index="${focusIndex}"] .text-line-input, ` +
+                            `[data-block-index="${focusIndex}"] .block-textarea, ` +
+                            `[data-block-index="${focusIndex}"] .callout-textarea`
                         );
                         if (textarea) textarea.focus();
                     }, 50);
@@ -1421,7 +2072,7 @@ window.ProjectCreate = {
             this.hide();
 
             // Navigate to the new project
-            window.location.href = `/${data.slug}`;
+            window.location.href = EditUtils.withShowDrafts(`/${data.slug}`);
         } catch (error) {
             console.error('Create project error:', error);
             EditUtils.showNotification('Failed to create project', 'error');
@@ -1639,7 +2290,7 @@ window.ProjectSettings = {
 
             // If slug changed, redirect
             if (data.slug !== this.projectSlug) {
-                window.location.href = `/${data.slug}`;
+                window.location.href = EditUtils.withShowDrafts(`/${data.slug}`);
             } else {
                 this.hide();
                 window.location.reload();
@@ -1680,7 +2331,7 @@ window.ProjectSettings = {
 
             EditUtils.showNotification('Project deleted', 'success');
             this.hide();
-            window.location.href = '/';
+            window.location.href = EditUtils.withShowDrafts('/');
         } catch (error) {
             console.error('Delete project error:', error);
             EditUtils.showNotification('Failed to delete project', 'error');

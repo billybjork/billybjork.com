@@ -1002,8 +1002,15 @@
                 projectItem.addEventListener('animationend', function handler() {
                     // Remove the event listener to avoid multiple triggers
                     projectItem.removeEventListener('animationend', handler);
-                    // Navigate back to the root URL
-                    window.location.href = '/';
+                    // Navigate back to the root URL (preserve show_drafts if active)
+                    const url = new URL('/', window.location.origin);
+                    const params = new URLSearchParams(window.location.search);
+                    const hasShowDrafts = params.get('show_drafts') === 'true'
+                        || sessionStorage.getItem('bb_show_drafts') === 'true';
+                    if (hasShowDrafts) {
+                        url.searchParams.set('show_drafts', 'true');
+                    }
+                    window.location.href = url.toString();
                 });
             } else {
                 // Existing behavior for normal mode

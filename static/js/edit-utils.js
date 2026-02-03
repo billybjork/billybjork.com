@@ -20,6 +20,42 @@ window.EditUtils = {
     },
 
     /**
+     * Check if show drafts is active in the current URL
+     * @returns {boolean}
+     */
+    isShowDraftsActive() {
+        const storageKey = 'bb_show_drafts';
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('show_drafts')) {
+            const isActive = params.get('show_drafts') === 'true';
+            if (isActive) {
+                sessionStorage.setItem(storageKey, 'true');
+            } else {
+                sessionStorage.removeItem(storageKey);
+            }
+            return isActive;
+        }
+        return sessionStorage.getItem(storageKey) === 'true';
+    },
+
+    /**
+     * Add show_drafts=true to a URL if currently active
+     * @param {string} url
+     * @returns {string}
+     */
+    withShowDrafts(url) {
+        try {
+            const next = new URL(url, window.location.origin);
+            if (this.isShowDraftsActive()) {
+                next.searchParams.set('show_drafts', 'true');
+            }
+            return next.toString();
+        } catch (error) {
+            return url;
+        }
+    },
+
+    /**
      * Setup auto-resizing textarea
      * @param {HTMLTextAreaElement} textarea
      * @param {Function} onUpdate - Called when content changes with new value

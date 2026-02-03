@@ -18,6 +18,39 @@
         return document.body.dataset.isolationMode === 'true';
     };
 
+    const SHOW_DRAFTS_KEY = 'bb_show_drafts';
+
+    const syncShowDraftsFromUrl = () => {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has('show_drafts')) return;
+
+        if (params.get('show_drafts') === 'true') {
+            sessionStorage.setItem(SHOW_DRAFTS_KEY, 'true');
+        } else {
+            sessionStorage.removeItem(SHOW_DRAFTS_KEY);
+        }
+    };
+
+    const isShowDraftsActive = () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('show_drafts')) {
+            return params.get('show_drafts') === 'true';
+        }
+        return sessionStorage.getItem(SHOW_DRAFTS_KEY) === 'true';
+    };
+
+    const buildUrlWithShowDrafts = (pathname, params = {}) => {
+        const url = new URL(pathname, window.location.origin);
+        Object.entries(params).forEach(([key, value]) => {
+            if (value === null || value === undefined) return;
+            url.searchParams.set(key, value);
+        });
+        if (isShowDraftsActive()) {
+            url.searchParams.set('show_drafts', 'true');
+        }
+        return url.toString();
+    };
+
     /**
      * Load edit mode CSS immediately (for button styling)
      */
@@ -89,7 +122,7 @@
             e.stopPropagation();
 
             if (!isIsolationMode()) {
-                window.location.href = `/${slug}?edit`;
+                window.location.href = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
                 return;
             }
 
@@ -167,7 +200,7 @@
         if (!header || header.querySelector('.show-drafts-toggle')) return;
 
         const params = new URLSearchParams(window.location.search);
-        const isActive = params.get('show_drafts') === 'true';
+        const isActive = isShowDraftsActive();
 
         const btn = document.createElement('button');
         btn.className = 'show-drafts-toggle' + (isActive ? ' active' : '');
@@ -177,8 +210,10 @@
             const url = new URL(window.location);
             if (isActive) {
                 url.searchParams.delete('show_drafts');
+                sessionStorage.removeItem(SHOW_DRAFTS_KEY);
             } else {
                 url.searchParams.set('show_drafts', 'true');
+                sessionStorage.setItem(SHOW_DRAFTS_KEY, 'true');
             }
             window.location.href = url.toString();
         });
@@ -227,7 +262,7 @@
                     const slug = projectItem.dataset.slug;
                     if (slug) {
                         if (!isIsolationMode()) {
-                            window.location.href = `/${slug}?edit`;
+                            window.location.href = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
                             return;
                         }
 
@@ -245,6 +280,18 @@
      * Initialize edit mode UI and event handlers
      */
     const initializeEditMode = () => {
+        syncShowDraftsFromUrl();
+
+        if (window.location.pathname === '/') {
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('show_drafts') && isShowDraftsActive()) {
+                const url = new URL(window.location);
+                url.searchParams.set('show_drafts', 'true');
+                window.location.replace(url.toString());
+                return;
+            }
+        }
+
         loadEditModeCSS();
 
         addNewProjectButton();
@@ -281,7 +328,7 @@
                         window.EditMode.init(slug);
                     }, 100);
                 } else if (urlParams.has('settings')) {
-                    window.history.replaceState({}, '', `/${slug}`);
+                    window.history.replaceState({}, '', buildUrlWithShowDrafts(`/${slug}`));
                     setTimeout(async () => {
                         if (!window.ProjectSettings) {
                             await loadEditModeScripts();

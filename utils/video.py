@@ -10,6 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 
+from .media_paths import (
+    content_video_key,
+    hero_hls_prefix,
+    hero_sprite_key,
+    hero_thumbnail_key,
+)
 from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, get_s3_client
 
 __all__ = [
@@ -365,10 +371,11 @@ def process_hero_video(
 
         # Upload HLS files to S3
         s3 = get_s3_client()
+        hls_prefix = hero_hls_prefix(project_slug)
         for file_path in Path(hls_dir).rglob('*'):
             if file_path.is_file():
                 relative_path = file_path.relative_to(hls_dir)
-                s3_key = f'videos/{project_slug}/{relative_path}'
+                s3_key = f'{hls_prefix}/{relative_path}'
 
                 content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
 
@@ -383,7 +390,7 @@ def process_hero_video(
                         }
                     )
 
-        results['hls'] = f'https://{CLOUDFRONT_DOMAIN}/videos/{project_slug}/master.m3u8'
+        results['hls'] = f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
 
         # Generate sprite sheet
         sprite_path = os.path.join(temp_dir, 'sprite.jpg')
@@ -394,18 +401,19 @@ def process_hero_video(
             duration=sprite_duration
         )
 
+        sprite_key = hero_sprite_key(project_slug)
         with open(sprite_path, 'rb') as f:
             s3.upload_fileobj(
                 f,
                 S3_BUCKET,
-                f'videos/{project_slug}/sprite.jpg',
+                sprite_key,
                 ExtraArgs={
                     'ContentType': 'image/jpeg',
                     'CacheControl': 'max-age=31536000',
                 }
             )
 
-        results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/videos/{project_slug}/sprite.jpg'
+        results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
         results['spriteMeta'] = sprite_meta
 
         # Generate thumbnail
@@ -416,18 +424,19 @@ def process_hero_video(
             time=trim_start + sprite_start
         )
 
+        thumbnail_key = hero_thumbnail_key(project_slug)
         with open(thumb_path, 'rb') as f:
             s3.upload_fileobj(
                 f,
                 S3_BUCKET,
-                f'videos/{project_slug}/thumb.webp',
+                thumbnail_key,
                 ExtraArgs={
                     'ContentType': 'image/webp',
                     'CacheControl': 'max-age=31536000',
                 }
             )
 
-        results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/videos/{project_slug}/thumb.webp'
+        results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
 
     return results
 
@@ -452,7 +461,7 @@ def process_content_video(video_path: str) -> str:
 
         # Generate unique filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        s3_key = f'videos/content/{timestamp}.mp4'
+        s3_key = content_video_key(f"{timestamp}.mp4")
 
         # Upload to S3
         s3 = get_s3_client()

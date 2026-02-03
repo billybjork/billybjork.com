@@ -18,6 +18,7 @@ from utils.assets import (
     find_by_hash,
     register_asset,
 )
+from utils.media_paths import content_image_key, misc_image_key
 from utils.content import (
     delete_project,
     load_about,
@@ -231,6 +232,7 @@ async def upload_media(request: Request):
     form = await request.form()
     file = form.get("file")
     media_type = form.get("type", "image")
+    scope = form.get("scope", "project")
 
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -242,6 +244,8 @@ async def upload_media(request: Request):
 
     if media_type != "image":
         raise HTTPException(status_code=400, detail="Invalid media type")
+    if scope not in {"project", "misc"}:
+        raise HTTPException(status_code=400, detail="Invalid media scope")
 
     try:
         from utils.image import process_image
@@ -265,7 +269,11 @@ async def upload_media(request: Request):
 
         # Upload new asset
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        key = f"images/{timestamp}.webp"
+        filename = f"{timestamp}.webp"
+        if scope == "misc":
+            key = misc_image_key(filename)
+        else:
+            key = content_image_key(filename)
 
         # Reset buffer position for upload
         processed_data.seek(0)

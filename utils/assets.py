@@ -11,6 +11,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from .media_paths import hero_hls_prefix
 from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, delete_file, get_s3_client
 
 __all__ = [
@@ -230,7 +231,7 @@ def delete_video_prefix(project_slug: str) -> list[str]:
 
     if not validate_slug(project_slug):
         raise ValueError(f"Invalid slug: {project_slug}")
-    prefix = f"videos/{project_slug}/"
+    prefix = f"{hero_hls_prefix(project_slug)}/"
 
     try:
         s3 = get_s3_client()

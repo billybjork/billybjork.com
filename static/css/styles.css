@@ -808,6 +808,7 @@ footer {
 .project-content .project-links ul {
     list-style-type: none;
     margin: 0;
+    margin-left: auto;
     padding: 0;
 }
 

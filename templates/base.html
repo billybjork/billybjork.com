@@ -40,10 +40,10 @@
     <script>setTimeout(function(){var h=document.documentElement;h.classList.remove('no-fouc');h.classList.add('fouc-ready')},400)</script>
 
     <!-- Main stylesheet -->
-    <link rel="stylesheet" href="{{ request.url_for('static', path='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ static_url(request, 'css/styles.css') }}">
 
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{{ request.url_for('static', path='assets/favicon.ico') }}">
+    <link rel="icon" type="image/x-icon" href="{{ static_url(request, 'assets/favicon.ico') }}">
 
     <!-- RSS Feed -->
     <link rel="alternate" type="application/rss+xml" title="Billy Bjork RSS Feed" href="/feed.xml">
@@ -55,11 +55,11 @@
     <header id="main-header">
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>
-            <a href="/me">Me</a>
             <a href="https://www.magicbutton.studio/" class="magic-button-btn" target="_blank" rel="noopener">
-                <img src="{{ request.url_for('static', path='assets/magic-button.webp') }}" alt="Magic Button icon" class="magic-button-icon" loading="lazy">
+                <img src="{{ static_url(request, 'assets/magic-button.webp') }}" alt="Magic Button icon" class="magic-button-icon" fetchpriority="high">
                 Magic Button
             </a>
+            <a href="/me">Me</a>
         </nav>
     </header>
     <main class="{% block main_class %}{% endblock %}">
@@ -69,10 +69,10 @@
     {% include "footer.html" %}
 
     <!-- Deferred scripts -->
-    <script src="{{ request.url_for('static', path='js/code-highlighting.js') }}" defer></script>
-    <script src="{{ request.url_for('static', path='js/project-interactions.js') }}" defer></script>
+    <script src="{{ static_url(request, 'js/code-highlighting.js') }}" defer></script>
+    <script src="{{ static_url(request, 'js/project-interactions.js') }}" defer></script>
     {% if is_dev_mode %}
-    <script src="{{ request.url_for('static', path='js/edit-bootstrap.js') }}" defer></script>
+    <script src="{{ static_url(request, 'js/edit-bootstrap.js') }}" defer></script>
     {% endif %}
 
     {% block additional_scripts %}{% endblock %}
