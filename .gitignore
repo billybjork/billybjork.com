@@ -134,7 +134,10 @@ dmypy.json
 .pytest_cache/
 
 # Project specific
+data/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 
 # OS specific
