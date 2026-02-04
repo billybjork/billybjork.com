@@ -5,8 +5,7 @@ import tempfile
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-
-logger = logging.getLogger(__name__)
+from fastapi.responses import JSONResponse
 
 from dependencies import require_dev_mode
 from utils.assets import (
@@ -30,6 +29,11 @@ from utils.content import (
     validate_slug,
 )
 from utils.s3 import CLOUDFRONT_DOMAIN
+
+logger = logging.getLogger(__name__)
+
+# Processing progress tracker: { slug: { status, stage, progress, video, error } }
+_processing_progress = {}
 
 router = APIRouter(
     prefix="/api",
@@ -292,7 +296,13 @@ async def upload_media(request: Request):
 
 @router.post("/process-hero-video")
 async def process_hero_video(request: Request):
-    """Process a hero video: generate HLS, sprite sheet, and thumbnail."""
+    """Process a hero video: generate HLS, sprite sheet, and thumbnail.
+
+    Streams the upload in 1 MB chunks to avoid loading the entire file into RAM.
+    Processing runs in a background thread with progress tracking.
+    """
+    import threading
+
     form = await request.form()
     file = form.get("file")
     project_slug = form.get("project_slug")
@@ -305,43 +315,109 @@ async def process_hero_video(request: Request):
         raise HTTPException(status_code=400, detail="Invalid slug format")
 
     try:
+        # Stream upload to temp file in 1 MB chunks
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                temp_file.write(chunk)
+            temp_path = temp_file.name
+    except Exception as e:
+        logger.exception("Hero video upload failed")
+        raise HTTPException(status_code=500, detail="Video upload failed")
+
+    # Initialize progress tracking
+    _processing_progress[project_slug] = {
+        "status": "processing",
+        "stage": "Starting...",
+        "progress": 0,
+        "video": None,
+        "error": None,
+    }
+
+    def progress_callback(stage: str, progress: float):
+        _processing_progress[project_slug]["stage"] = stage
+        _processing_progress[project_slug]["progress"] = progress
+
+    def run_processing():
         from utils.video import process_hero_video as process_video
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_path = temp_file.name
-
         try:
+            # Delete old HLS segments before generating new ones.
+            # The HLS prefix is based on slug, so old .ts/.m3u8 files
+            # would otherwise accumulate across replacements.
+            progress_callback("Cleaning up old video files...", 2)
+            delete_video_prefix(project_slug)
+
             result = process_video(
                 temp_path,
                 project_slug,
                 trim_start=0,
                 sprite_start=sprite_start,
                 sprite_duration=sprite_duration,
+                progress_callback=progress_callback,
             )
 
-            return {
-                "success": True,
+            _processing_progress[project_slug].update({
+                "status": "complete",
+                "stage": "Complete!",
+                "progress": 100,
                 "video": {
                     "hls": result["hls"],
                     "thumbnail": result["thumbnail"],
                     "spriteSheet": result["spriteSheet"],
                 },
-                "spriteMeta": result.get("spriteMeta", {}),
-            }
+            })
+        except Exception as e:
+            logger.exception("Hero video processing failed")
+            _processing_progress[project_slug].update({
+                "status": "error",
+                "stage": "Failed",
+                "error": str(e),
+            })
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-    except Exception as e:
-        logger.exception("Hero video processing failed")
-        raise HTTPException(status_code=500, detail="Video processing failed")
+    # Start processing in background thread
+    thread = threading.Thread(target=run_processing, daemon=True)
+    thread.start()
+
+    return {"success": True, "message": "Upload received, processing started"}
+
+
+@router.get("/process-hero-video/progress/{slug}")
+async def get_hero_video_progress(slug: str):
+    """Get processing progress for a hero video."""
+    progress = _processing_progress.get(slug)
+    if not progress:
+        return JSONResponse({"status": "unknown", "stage": "No processing in progress", "progress": 0})
+
+    response = {
+        "status": progress["status"],
+        "stage": progress["stage"],
+        "progress": progress["progress"],
+    }
+
+    if progress["status"] == "complete" and progress.get("video"):
+        response["video"] = progress["video"]
+        # Clean up progress entry after delivering result
+        del _processing_progress[slug]
+
+    if progress["status"] == "error":
+        response["error"] = progress.get("error", "Unknown error")
+        del _processing_progress[slug]
+
+    return response
 
 
 @router.post("/process-content-video")
 async def process_content_video(request: Request):
-    """Process a content video: compress and upload."""
+    """Process a content video: compress and upload.
+
+    Streams the upload in 1 MB chunks to avoid loading the entire file into RAM.
+    """
     form = await request.form()
     file = form.get("file")
 
@@ -352,8 +428,11 @@ async def process_content_video(request: Request):
         from utils.video import process_content_video as process_video
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            content = await file.read()
-            temp_file.write(content)
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                temp_file.write(chunk)
             temp_path = temp_file.name
 
         try:

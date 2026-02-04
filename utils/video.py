@@ -344,10 +344,13 @@ def process_hero_video(
     project_slug: str,
     trim_start: float = 0,
     sprite_start: float = 0,
-    sprite_duration: float = 3
+    sprite_duration: float = 3,
+    progress_callback=None,
 ) -> dict:
     """
     Process a hero video: generate HLS, sprite sheet, and thumbnail.
+
+    HLS generation and sprite sheet generation run in parallel using threads.
 
     Args:
         video_path: Path to source video
@@ -355,52 +358,85 @@ def process_hero_video(
         trim_start: Start time for video trim
         sprite_start: Start time for sprite sheet (relative to trim_start)
         sprite_duration: Duration for sprite sheet
+        progress_callback: Optional callable(stage: str, progress: float) for progress updates
 
     Returns:
         Dict with URLs for HLS, sprite sheet, and thumbnail
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     if not check_ffmpeg():
         raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
+
+    def _report(stage, progress):
+        if progress_callback:
+            progress_callback(stage, progress)
 
     results = {}
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Generate HLS
         hls_dir = os.path.join(temp_dir, 'hls')
-        generate_hls(video_path, hls_dir, start_time=trim_start)
+        sprite_path = os.path.join(temp_dir, 'sprite.jpg')
+
+        # Run HLS and sprite sheet generation in parallel
+        _report('Generating HLS and sprite sheet...', 10)
+
+        def _generate_hls_task():
+            generate_hls(video_path, hls_dir, start_time=trim_start)
+            return 'hls'
+
+        def _generate_sprite_task():
+            _, meta = generate_sprite_sheet(
+                video_path,
+                sprite_path,
+                start_time=trim_start + sprite_start,
+                duration=sprite_duration,
+            )
+            return ('sprite', meta)
+
+        sprite_meta = None
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {
+                executor.submit(_generate_hls_task): 'hls',
+                executor.submit(_generate_sprite_task): 'sprite',
+            }
+            completed = 0
+            for future in as_completed(futures):
+                result = future.result()
+                completed += 1
+                if isinstance(result, tuple) and result[0] == 'sprite':
+                    sprite_meta = result[1]
+                    _report('Sprite sheet ready, waiting for HLS...' if completed < 2 else 'Encoding complete!', 10 + completed * 20)
+                else:
+                    _report('HLS ready, waiting for sprite sheet...' if completed < 2 else 'Encoding complete!', 10 + completed * 20)
 
         # Upload HLS files to S3
         s3 = get_s3_client()
         hls_prefix = hero_hls_prefix(project_slug)
-        for file_path in Path(hls_dir).rglob('*'):
-            if file_path.is_file():
-                relative_path = file_path.relative_to(hls_dir)
-                s3_key = f'{hls_prefix}/{relative_path}'
+        hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
+        total_hls = len(hls_files)
+        for i, file_path in enumerate(hls_files):
+            _report(f'Uploading HLS to S3... ({i + 1}/{total_hls})', 50 + (i / max(total_hls, 1)) * 25)
+            relative_path = file_path.relative_to(hls_dir)
+            s3_key = f'{hls_prefix}/{relative_path}'
 
-                content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
+            content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
 
-                with open(file_path, 'rb') as f:
-                    s3.upload_fileobj(
-                        f,
-                        S3_BUCKET,
-                        s3_key,
-                        ExtraArgs={
-                            'ContentType': content_type,
-                            'CacheControl': 'max-age=31536000',
-                        }
-                    )
+            with open(file_path, 'rb') as f:
+                s3.upload_fileobj(
+                    f,
+                    S3_BUCKET,
+                    s3_key,
+                    ExtraArgs={
+                        'ContentType': content_type,
+                        'CacheControl': 'max-age=31536000',
+                    }
+                )
 
         results['hls'] = f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
 
-        # Generate sprite sheet
-        sprite_path = os.path.join(temp_dir, 'sprite.jpg')
-        _, sprite_meta = generate_sprite_sheet(
-            video_path,
-            sprite_path,
-            start_time=trim_start + sprite_start,
-            duration=sprite_duration
-        )
-
+        # Upload sprite sheet to S3
+        _report('Uploading sprite sheet...', 78)
         sprite_key = hero_sprite_key(project_slug)
         with open(sprite_path, 'rb') as f:
             s3.upload_fileobj(
@@ -416,7 +452,8 @@ def process_hero_video(
         results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
         results['spriteMeta'] = sprite_meta
 
-        # Generate thumbnail
+        # Generate and upload thumbnail
+        _report('Generating thumbnail...', 85)
         thumb_path = os.path.join(temp_dir, 'thumb.webp')
         generate_thumbnail(
             video_path,
@@ -437,6 +474,7 @@ def process_hero_video(
             )
 
         results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
+        _report('Complete!', 100)
 
     return results
 
