@@ -26,14 +26,20 @@ S3_BUCKET = os.getenv('S3_BUCKET', 'billybjork.com')
 CLOUDFRONT_DOMAIN = os.getenv('CLOUDFRONT_DOMAIN', 'd17y8p6t5eu2ht.cloudfront.net')
 
 
+_s3_client = None
+
+
 def get_s3_client():
-    """Get configured S3 client."""
-    return boto3.client(
-        's3',
-        aws_access_key_id=AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        region_name=AWS_REGION
-    )
+    """Get configured S3 client (lazy singleton)."""
+    global _s3_client
+    if _s3_client is None:
+        _s3_client = boto3.client(
+            's3',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            region_name=AWS_REGION
+        )
+    return _s3_client
 
 
 def upload_file(

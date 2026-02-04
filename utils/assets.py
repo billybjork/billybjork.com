@@ -221,6 +221,9 @@ def delete_video_prefix(project_slug: str) -> list[str]:
     """
     Delete all files under a project's video prefix.
 
+    Paginates through list_objects_v2 to handle prefixes with >1000 keys
+    (common for long videos with multiple HLS resolution variants).
+
     Args:
         project_slug: Project slug
 
@@ -235,14 +238,25 @@ def delete_video_prefix(project_slug: str) -> list[str]:
 
     try:
         s3 = get_s3_client()
-        response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
-
         deleted = []
-        for obj in response.get("Contents", []):
-            key = obj["Key"]
-            if delete_file(key):
-                deleted.append(key)
-                logger.info("Deleted video file: %s", key)
+        continuation_token = None
+
+        while True:
+            kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+
+            response = s3.list_objects_v2(**kwargs)
+
+            for obj in response.get("Contents", []):
+                key = obj["Key"]
+                if delete_file(key):
+                    deleted.append(key)
+                    logger.info("Deleted video file: %s", key)
+
+            if not response.get("IsTruncated"):
+                break
+            continuation_token = response.get("NextContinuationToken")
 
         return deleted
     except Exception as e:
