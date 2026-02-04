@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block main_class %}test-page{% endblock %}
+
+{% block additional_head %}
+<link rel="stylesheet" href="{{ static_url(request, 'css/depth-test.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="test-container">
+    <h1>Depth-Layered Sprite Sheets</h1>
+    <p class="intro">
+        Stacked sprite sheets with one per depth layer (from SharpML Gaussian splats).
+        Scroll advances frames on all layers simultaneously. Mouse/tilt controls parallax between layers.
+    </p>
+
+    <!-- Main Experiment -->
+    <section class="experiment" id="exp-stacked">
+        <h2>Stacked Depth Layers</h2>
+        <p>
+            Each depth layer has its own sprite sheet. Scroll velocity drives frame advance with momentum.
+            Mouse/tilt controls parallax offset &mdash; far layers move less, near layers move more.
+        </p>
+
+        <div class="experiment-viewport" id="viewport-stacked">
+            <div class="stacked-container" id="stacked-layers">
+                <div class="stacked-layer" data-layer="0"></div>
+                <div class="stacked-layer" data-layer="1"></div>
+                <div class="stacked-layer" data-layer="2"></div>
+                <div class="stacked-layer" data-layer="3"></div>
+                <div class="stacked-layer" data-layer="4"></div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span>Frame: <strong id="frame-display">0</strong>/<span id="frame-total">-</span></span>
+            <span>Parallax X: <strong id="parallax-x">0</strong>px</span>
+            <span>Parallax Y: <strong id="parallax-y">0</strong>px</span>
+            <div class="resolution-picker" id="resolution-picker">
+                <span class="label">Res:</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>
+                    Parallax Intensity
+                    <input type="range" id="parallax-intensity" min="0" max="100" value="30">
+                    <span id="parallax-val">30</span>px
+                </label>
+            </div>
+            <div class="control-group">
+                <label>
+                    Temporal Speed
+                    <input type="range" id="temporal-speed" min="0" max="30" step="1" value="10">
+                    <span id="temporal-val">1.00</span>x
+                </label>
+            </div>
+            <div class="control-group">
+                <label>
+                    Layer Spread (Z)
+                    <input type="range" id="layer-spread" min="0" max="100" value="20">
+                    <span id="spread-val">20</span>px
+                </label>
+            </div>
+            <div class="control-group">
+                <label>
+                    Perspective
+                    <input type="range" id="perspective" min="200" max="2000" value="800">
+                    <span id="perspective-val">800</span>px
+                </label>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>
+                    DOF Blur
+                    <input type="range" id="dof-blur" min="0" max="10" step="0.5" value="0">
+                    <span id="dof-val">0</span>px
+                </label>
+            </div>
+            <div class="control-group">
+                <label>
+                    Focal Layer
+                    <input type="range" id="focal-layer" min="0" max="4" step="1" value="2">
+                    <span id="focal-val">2 (mid)</span>
+                </label>
+            </div>
+            <div class="control-group">
+                <label>
+                    Scroll Parallax
+                    <input type="range" id="scroll-parallax" min="0" max="100" step="1" value="50">
+                </label>
+            </div>
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="show-layers">
+                    Show individual layers
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <!-- Layer Preview (toggled via "show layers" checkbox) -->
+    <section class="experiment layer-preview" id="layer-preview" style="display: none;">
+        <h2>Individual Layer Preview</h2>
+        <div class="layer-grid">
+            <div class="layer-preview-item">
+                <div class="layer-thumb" data-layer="0"></div>
+                <span>Layer 0 (far)</span>
+            </div>
+            <div class="layer-preview-item">
+                <div class="layer-thumb" data-layer="1"></div>
+                <span>Layer 1</span>
+            </div>
+            <div class="layer-preview-item">
+                <div class="layer-thumb" data-layer="2"></div>
+                <span>Layer 2</span>
+            </div>
+            <div class="layer-preview-item">
+                <div class="layer-thumb" data-layer="3"></div>
+                <span>Layer 3</span>
+            </div>
+            <div class="layer-preview-item">
+                <div class="layer-thumb" data-layer="4"></div>
+                <span>Layer 4 (near)</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pipeline Instructions -->
+    <section class="experiment" id="instructions">
+        <h2>Reproduce This Pipeline</h2>
+        <pre>
+# Full pipeline: HLS → frames → SharpML → depth sprite sheets
+python tools/generate_depth_sprite_sheets.py \
+    --input "https://d17y8p6t5eu2ht.cloudfront.net/videos/somewhere_in_space/master.m3u8" \
+    --output ./static/test/layered-sprites \
+    --start 0 --duration 3 --fps 5 \
+    --resolutions 320x180,640x360 \
+    --depth-layers 5
+
+# With a persistent work directory (keeps frames + PLY files):
+python tools/generate_depth_sprite_sheets.py \
+    --input "https://d17y8p6t5eu2ht.cloudfront.net/videos/somewhere_in_space/master.m3u8" \
+    --output ./static/test/layered-sprites \
+    --work-dir ./workdir \
+    --start 0 --duration 3 --fps 5
+
+# Re-run assembly only (skip download + SharpML):
+python tools/generate_depth_sprite_sheets.py \
+    --input dummy --output ./static/test/layered-sprites \
+    --work-dir ./workdir \
+    --skip-download --skip-sharp \
+    --resolutions 320x180,640x360
+        </pre>
+    </section>
+</div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="{{ static_url(request, 'js/depth-test.js') }}" defer></script>
+{% endblock %}
