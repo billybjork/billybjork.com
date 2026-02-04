@@ -49,8 +49,8 @@ function checkAndHighlightCode(targetElement) {
     }
 }
 
-// Listen for the htmx:afterSwap event
-document.addEventListener("htmx:afterSwap", function(evt) {
+// Listen for content swap events (fired after partial fetch updates the DOM)
+document.addEventListener("content:swap", function(evt) {
     checkAndHighlightCode(evt.detail.target);
 });
 

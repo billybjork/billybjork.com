@@ -86,7 +86,7 @@ async def read_root(
         has_more = end_idx < len(all_projects)
         general_info = get_general_info()
 
-        if request.headers.get("HX-Request") == "true":
+        if request.headers.get("X-Partial") == "true":
             return templates.TemplateResponse(
                 "projects_infinite_scroll.html",
                 {
@@ -167,9 +167,9 @@ async def read_project(
         is_dev_mode = _is_localhost(request)
         meta_description = extract_meta_description(project.html_content)
         show_drafts_only = show_drafts and is_dev_mode
-        is_htmx = request.headers.get("HX-Request") == "true"
+        is_partial = request.headers.get("X-Partial") == "true"
 
-        if is_htmx and not is_open:
+        if is_partial and not is_open:
             return Response(content="", status_code=200)
 
         # Record page view (analytics never breaks the site)
@@ -191,7 +191,7 @@ async def read_project(
             except Exception:
                 pass
 
-        if is_htmx:
+        if is_partial:
             return templates.TemplateResponse(
                 "project_details.html",
                 {

@@ -655,104 +655,179 @@
 
     /**
      * ============================
-     * HTMX Event Handlers
+     * Partial Fetch Helpers
      * ============================
      */
 
     /**
-     * Handles HTMX beforeRequest event to close any open projects before making a new request.
-     * @param {Event} event - The HTMX event.
+     * Fetches a URL as a partial (server returns HTML fragment).
+     * @param {string} url - The URL to fetch.
+     * @returns {Promise<string>} The response HTML text.
      */
-    const handleHTMXBeforeRequest = (event) => {
-        const triggerElt = event.detail.elt;
-        const projectItem = triggerElt.closest('.project-item');
-
-        if (triggerElt.matches('.project-header, .thumbnail') && projectItem.classList.contains('active')) {
-            // Prevent HTMX request if the project is already open
-            event.preventDefault();
-        } else {
-            // Close any open projects before proceeding
-            closeAllOpenProjects();
+    const fetchPartial = async (url) => {
+        const response = await fetch(url, {
+            headers: { 'X-Partial': 'true' }
+        });
+        if (!response.ok) {
+            throw new Error(`Fetch failed: ${response.status}`);
         }
+        return response.text();
     };
 
     /**
-     * Handles HTMX beforeSwap event to perform cleanup before content is swapped.
-     * @param {Event} event - The HTMX event.
+     * Dispatches a custom 'content:swap' event after DOM content is updated.
+     * Other scripts (code-highlighting, edit-bootstrap) listen for this.
+     * @param {HTMLElement} target - The element whose content was updated.
      */
-    const handleHTMXBeforeSwap = (event) => {
+    const dispatchContentSwap = (target) => {
+        document.dispatchEvent(new CustomEvent('content:swap', {
+            detail: { target }
+        }));
+    };
+
+    /**
+     * Returns the current show_drafts query string fragment if present.
+     * @returns {string} e.g. 'show_drafts=true' or ''.
+     */
+    const getShowDraftsParam = () => {
+        return new URLSearchParams(window.location.search).get('show_drafts') === 'true'
+            ? 'show_drafts=true' : '';
+    };
+
+    /**
+     * Opens a project by fetching its partial details and swapping them in.
+     * @param {HTMLElement} projectItem - The .project-item element.
+     */
+    const openProjectFetch = async (projectItem) => {
+        const slug = projectItem.dataset.slug;
+        if (!slug) return;
+
+        // Close any currently open projects and clean up HLS
+        closeAllOpenProjects();
         cleanupActiveHLSPlayers();
-    };
 
-    /**
-     * Handles HTMX afterSwap event to animate newly loaded project items.
-     * @param {Event} event - The HTMX event.
-     */
-    const handleHTMXAfterSwap = (event) => {
-        const { elt } = event.detail;
+        try {
+            const drafts = getShowDraftsParam();
+            const url = `/${slug}${drafts ? '?' + drafts : ''}`;
+            const html = await fetchPartial(url);
 
-        // Check if the swapped element is an infinite scroll sentinel
-        if (elt.id && elt.id.startsWith('infinite-scroll-sentinel')) {
-            // Select all new project items that do not have 'fade-in' or 'no-fade' classes
-            const newProjectItems = elt.parentElement.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
+            const details = projectItem.querySelector('.project-details');
+            if (!details) return;
 
-            // Observe the newly added project items
-            observeProjectItems(newProjectItems);
-        }
+            details.innerHTML = html;
+            projectItem.classList.add('active');
+            history.pushState({}, '', `/${slug}`);
 
-        // Handle project-details swaps
-        if (elt.classList.contains('project-details')) {
-            const projectItem = elt.closest('.project-item');
-            if (elt.innerHTML.trim() !== '') {
-                projectItem.classList.add('active');
-
-                // Initialize HLS player if video is present
-                const video = elt.querySelector('video.project-video');
-                if (video) {
-                    setupHLSPlayer(video, true).catch(err => {
-                        console.error('Failed to initialize HLS player:', err);
-                    });
-                }
-
-                // Scroll to the project header using the custom function
-                const projectHeader = projectItem.querySelector('.project-header');
-                if (projectHeader) {
-                    scrollToProjectHeader(projectHeader);
-                }
-            } else {
-                projectItem.classList.remove('active');
-
-                // Clean up resources
-                const video = projectItem.querySelector('video.project-video');
-                if (video) {
-                    video.pause();
-                    destroyHLSPlayer(video);
-                }
-                const thumbnail = projectItem.querySelector('.thumbnail');
-                if (thumbnail) {
-                    resetThumbnailPosition(thumbnail);
-                }
+            // Post-swap: set up video, scroll, lazy-load, external links
+            const video = details.querySelector('video.project-video, video.lazy-video');
+            if (video) {
+                setupHLSPlayer(video, true).catch(err => {
+                    console.error('Failed to initialize HLS player:', err);
+                });
             }
+
+            const projectHeader = projectItem.querySelector('.project-header');
+            if (projectHeader) {
+                scrollToProjectHeader(projectHeader);
+            }
+
+            initializeLazyThumbnails(details);
+            initializeLazyVideos(details);
+            updateThumbnails();
+            openExternalLinksInNewTab(details);
+            dispatchContentSwap(details);
+        } catch (err) {
+            console.error('Failed to open project:', err);
+            showNotification('Failed to load content. Please try again.', true);
         }
-
-        // Initialize lazy loading for newly inserted thumbnails and videos
-        initializeLazyThumbnails(elt);
-        initializeLazyVideos(elt);
-        updateThumbnails();
-
-        // Open external links in new tabs
-        openExternalLinksInNewTab(elt);
     };
 
     /**
-     * Handles HTMX load event for project items.
-     * @param {Event} event - The HTMX event.
+     * Closes a project in normal (non-isolation) mode without a network request.
+     * @param {HTMLElement} projectItem - The .project-item element.
      */
-    const handleHTMXLoad = (event) => {
-        const { elt } = event.detail;
-        if (elt.classList.contains('project-item')) {
-            handleProjectContent(elt);
+    const closeProjectNormal = (projectItem) => {
+        projectItem.classList.remove('active');
+
+        const video = projectItem.querySelector('video.project-video');
+        if (video) {
+            video.pause();
+            destroyHLSPlayer(video);
         }
+
+        const thumbnail = projectItem.querySelector('.thumbnail');
+        if (thumbnail) {
+            resetThumbnailPosition(thumbnail);
+        }
+
+        const details = projectItem.querySelector('.project-details');
+        if (details) {
+            details.innerHTML = '';
+        }
+
+        const drafts = getShowDraftsParam();
+        history.pushState({}, '', `/${drafts ? '?' + drafts : ''}`);
+    };
+
+    /**
+     * ============================
+     * Infinite Scroll
+     * ============================
+     */
+
+    let scrollObserver = null;
+
+    /**
+     * Sets up an IntersectionObserver on the current infinite-scroll sentinel.
+     * When the sentinel becomes visible, fetches the next page and replaces it.
+     */
+    const observeScrollSentinel = () => {
+        if (scrollObserver) {
+            scrollObserver.disconnect();
+            scrollObserver = null;
+        }
+
+        const sentinel = document.querySelector('[data-next-page]');
+        if (!sentinel) return;
+
+        scrollObserver = new IntersectionObserver((entries) => {
+            entries.forEach(async (entry) => {
+                if (!entry.isIntersecting) return;
+
+                scrollObserver.disconnect();
+
+                const nextPage = sentinel.dataset.nextPage;
+                const drafts = getShowDraftsParam();
+                const params = [`page=${nextPage}`];
+                if (drafts) params.push(drafts);
+                const url = `/?${params.join('&')}`;
+
+                try {
+                    const html = await fetchPartial(url);
+                    sentinel.outerHTML = html;
+
+                    // Set up newly loaded project items
+                    const projectList = document.getElementById('project-list');
+                    if (projectList) {
+                        const newItems = projectList.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
+                        observeProjectItems(newItems);
+                        initializeLazyThumbnails(projectList);
+                        initializeLazyVideos(projectList);
+                        updateThumbnails();
+                    }
+
+                    // Observe the new sentinel if more pages remain
+                    observeScrollSentinel();
+                } catch (err) {
+                    console.error('Failed to load more projects:', err);
+                    showNotification('Failed to load more projects.', true);
+                }
+            });
+        }, {
+            rootMargin: '200px'
+        });
+
+        scrollObserver.observe(sentinel);
     };
 
     /**
@@ -840,32 +915,52 @@
         initializeProjects();
         initializeProjectObserver();
         openExternalLinksInNewTab();
+        observeScrollSentinel();
 
-        // Attach the window unload event listener to clean up HLS players
         window.addEventListener('beforeunload', cleanupActiveHLSPlayers);
     };
 
     /**
-     * Initializes event listeners for HTMX and other interactive elements.
+     * Initializes event listeners for interactive elements.
      */
     const initializeEventListeners = () => {
-        // HTMX Event Listeners
-        document.body.addEventListener('htmx:afterSwap', handleHTMXAfterSwap);
-        document.body.addEventListener('htmx:beforeRequest', handleHTMXBeforeRequest);
-        document.body.addEventListener('htmx:load', handleHTMXLoad);
-        document.body.addEventListener('htmx:beforeSwap', handleHTMXBeforeSwap);
-        document.body.addEventListener('htmx:responseError', () => {
-            showNotification('Failed to load content. Please try again.', true);
-        });
-        document.body.addEventListener('htmx:sendError', () => {
-            showNotification('Network error. Please check your connection.', true);
+        // Project open: click on header or thumbnail
+        document.body.addEventListener('click', function(event) {
+            const trigger = event.target.closest('.project-header, .thumbnail');
+            if (!trigger) return;
+
+            const projectItem = trigger.closest('.project-item');
+            if (!projectItem) return;
+
+            // Don't re-fetch if already open
+            if (projectItem.classList.contains('active')) return;
+
+            event.preventDefault();
+            openProjectFetch(projectItem);
         });
 
-        // Event delegation for elements with class 'copy-text-link'
+        // Close project button
+        document.body.addEventListener('click', function(event) {
+            const target = event.target.closest('.close-project');
+            if (!target) return;
+
+            event.preventDefault();
+            const projectItem = target.closest('.project-item');
+            if (!projectItem) return;
+
+            const isIsolationMode = document.body.dataset.isolationMode === 'true';
+            if (isIsolationMode) {
+                closeProjectIsolation(projectItem);
+            } else {
+                closeProjectNormal(projectItem);
+            }
+        });
+
+        // Copy-to-clipboard buttons
         document.body.addEventListener('click', (event) => {
             const button = event.target.closest('.copy-text-link');
             if (button) {
-                event.preventDefault(); // Prevent default button behavior if any
+                event.preventDefault();
 
                 const textToCopy = button.getAttribute('data-copy-text');
                 const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
@@ -879,20 +974,7 @@
             }
         });
 
-        // Event delegation for close project buttons
-        document.body.addEventListener('click', function(event) {
-            const target = event.target.closest('.close-project');
-            if (target) {
-                const isIsolationMode = document.body.dataset.isolationMode === 'true';
-                if (isIsolationMode) {
-                    event.preventDefault();
-                    closeProject(target);
-                }
-                // Else, let HTMX handle the click
-            }
-        });
-
-        // Image lightbox: click to enlarge images in project content
+        // Image lightbox
         document.body.addEventListener('click', function(event) {
             const img = event.target.closest('.project-content img');
             if (!img) return;
@@ -912,7 +994,6 @@
             overlay.appendChild(enlargedImg);
             document.body.appendChild(overlay);
 
-            // Trigger fade-in
             requestAnimationFrame(() => overlay.classList.add('visible'));
 
             const closeLightbox = () => {
@@ -926,16 +1007,11 @@
             });
         });
 
-        // Escape key closes lightbox first, then open project (same as clicking X)
-        // Skip if edit mode is active - edit mode handles its own Escape
+        // Escape key: close lightbox first, then open project
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape') {
-                // Don't close project if edit mode is active
-                if (document.body.classList.contains('editing')) {
-                    return;
-                }
+                if (document.body.classList.contains('editing')) return;
 
-                // Close lightbox first if one is open
                 const lightbox = document.querySelector('.image-lightbox');
                 if (lightbox) {
                     lightbox.classList.remove('visible');
@@ -945,20 +1021,37 @@
 
                 const activeProject = document.querySelector('.project-item.active');
                 if (activeProject) {
-                    const closeBtn = activeProject.querySelector('.close-project');
-                    if (closeBtn) {
-                        const isIsolationMode = document.body.dataset.isolationMode === 'true';
-                        if (isIsolationMode) {
-                            closeProject(closeBtn);
-                        } else {
-                            // Trigger HTMX click for non-isolation mode
-                            closeBtn.click();
-                        }
+                    const isIsolationMode = document.body.dataset.isolationMode === 'true';
+                    if (isIsolationMode) {
+                        closeProjectIsolation(activeProject);
+                    } else {
+                        closeProjectNormal(activeProject);
                     }
                 }
             }
         });
     };
+
+    /**
+     * Closes a project in isolation mode with fade-out animation,
+     * then navigates back to the root URL.
+     * @param {HTMLElement} projectItem - The .project-item element.
+     */
+    function closeProjectIsolation(projectItem) {
+        projectItem.classList.add('fade-out');
+
+        projectItem.addEventListener('animationend', function handler() {
+            projectItem.removeEventListener('animationend', handler);
+            const url = new URL('/', window.location.origin);
+            const params = new URLSearchParams(window.location.search);
+            const hasShowDrafts = params.get('show_drafts') === 'true'
+                || sessionStorage.getItem('bb_show_drafts') === 'true';
+            if (hasShowDrafts) {
+                url.searchParams.set('show_drafts', 'true');
+            }
+            window.location.href = url.toString();
+        });
+    }
 
     /**
      * Initializes event listeners and other setups after DOM is fully loaded.
@@ -968,13 +1061,11 @@
         initializeEventListeners();
     };
 
-    // Initialize on DOMContentLoaded
     document.addEventListener('DOMContentLoaded', initialize);
 
-    // Handle hash scrolling (native scrollIntoView)
+    // Handle hash scrolling
     const scrollToHashTarget = () => {
         if (window.location.hash) {
-            // Use getElementById instead of querySelector to handle IDs starting with numbers
             const target = document.getElementById(window.location.hash.slice(1));
             if (target) {
                 target.scrollIntoView({ behavior: 'smooth' });
@@ -984,57 +1075,6 @@
 
     window.addEventListener('load', scrollToHashTarget);
     window.addEventListener('hashchange', scrollToHashTarget);
-
-    /**
-     * Closes a specific project item smoothly.
-     * @param {HTMLElement} button - The close button element.
-     */
-    function closeProject(button) {
-        const projectItem = button.closest('.project-item');
-        if (projectItem) {
-            const isIsolationMode = document.body.dataset.isolationMode === 'true';
-
-            if (isIsolationMode) {
-                // Add the fade-out class to trigger the CSS animation
-                projectItem.classList.add('fade-out');
-
-                // Listen for the animationend event
-                projectItem.addEventListener('animationend', function handler() {
-                    // Remove the event listener to avoid multiple triggers
-                    projectItem.removeEventListener('animationend', handler);
-                    // Navigate back to the root URL (preserve show_drafts if active)
-                    const url = new URL('/', window.location.origin);
-                    const params = new URLSearchParams(window.location.search);
-                    const hasShowDrafts = params.get('show_drafts') === 'true'
-                        || sessionStorage.getItem('bb_show_drafts') === 'true';
-                    if (hasShowDrafts) {
-                        url.searchParams.set('show_drafts', 'true');
-                    }
-                    window.location.href = url.toString();
-                });
-            } else {
-                // Existing behavior for normal mode
-                projectItem.classList.remove('active');
-
-                // Clean up resources
-                const video = projectItem.querySelector('video.project-video');
-                if (video) {
-                    video.pause();
-                    destroyHLSPlayer(video);
-                }
-
-                const thumbnail = projectItem.querySelector('.thumbnail');
-                if (thumbnail) {
-                    resetThumbnailPosition(thumbnail);
-                }
-
-                const projectDetails = projectItem.querySelector('.project-details');
-                if (projectDetails) {
-                    projectDetails.innerHTML = '';
-                }
-            }
-        }
-    }
 
     // Expose necessary functions to the global scope
     window.handleProjectContent = handleProjectContent;

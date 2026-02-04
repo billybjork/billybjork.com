@@ -299,8 +299,8 @@
 
         document.querySelectorAll('.project-item.active').forEach(addProjectControls);
 
-        document.body.addEventListener('htmx:afterSwap', (event) => {
-            const { elt } = event.detail;
+        document.addEventListener('content:swap', (event) => {
+            const elt = event.detail.target;
 
             if (elt.classList && elt.classList.contains('project-details')) {
                 const projectItem = elt.closest('.project-item');
