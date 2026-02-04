@@ -181,8 +181,8 @@ a:hover {
     white-space: nowrap;
     transition: color var(--transition-duration) var(--transition-ease);
     @media (max-width: 768px) {
-        font-size: var(--font-size-small);
-        padding: 0.25rem;
+        font-size: 0.85em;
+        padding: 0.35rem;
     }
 }
 
@@ -199,8 +199,8 @@ a:hover {
     flex-shrink: 0;
     transform: translateX(4px) translateY(2px);
     @media (max-width: 768px) {
-        width: 0.7em;
-        height: 0.7em;
+        width: 0.85em;
+        height: 0.85em;
         margin-right: 0.25rem;
     }
 }
