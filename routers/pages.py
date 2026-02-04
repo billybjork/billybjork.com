@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import templates
 from dependencies import get_general_info
@@ -38,7 +38,7 @@ def extract_meta_description(html_content: str, word_limit: int = 25) -> str:
     return snippet
 
 
-def format_project_for_template(project: ProjectInfo, is_open: bool = False) -> dict:
+def format_project_for_template(project: ProjectInfo) -> dict:
     """Format a ProjectInfo object for template rendering."""
     return {
         "id": project.id,
@@ -50,7 +50,6 @@ def format_project_for_template(project: ProjectInfo, is_open: bool = False) -> 
         "youtube_link": project.youtube_link,
         "formatted_date": project.formatted_date,
         "pinned": project.pinned,
-        "is_open": is_open,
         "is_draft": project.is_draft,
     }
 
@@ -153,7 +152,6 @@ async def read_project(
     request: Request,
     background_tasks: BackgroundTasks,
     project_slug: str,
-    close: bool = False,
     show_drafts: bool = Query(False),
 ):
     try:
@@ -163,29 +161,24 @@ async def read_project(
 
         project = ProjectInfo.from_dict(project_data)
         general_info = get_general_info()
-        is_open = not close
         is_dev_mode = _is_localhost(request)
         meta_description = extract_meta_description(project.html_content)
         show_drafts_only = show_drafts and is_dev_mode
         is_partial = request.headers.get("X-Partial") == "true"
 
-        if is_partial and not is_open:
-            return Response(content="", status_code=200)
-
         # Record page view (analytics never breaks the site)
-        if is_open:
-            try:
-                forwarded = request.headers.get("x-forwarded-for", "")
-                client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
-                ua = request.headers.get("user-agent")
-                ref = request.headers.get("referer")
-                background_tasks.add_task(record_view, project_slug, client_ip, ua, ref)
-            except Exception:
-                pass
+        try:
+            forwarded = request.headers.get("x-forwarded-for", "")
+            client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+            ua = request.headers.get("user-agent")
+            ref = request.headers.get("referer")
+            background_tasks.add_task(record_view, project_slug, client_ip, ua, ref)
+        except Exception:
+            pass
 
         # Fetch stats only on localhost
         analytics = None
-        if is_open and is_dev_mode:
+        if is_dev_mode:
             try:
                 analytics = await asyncio.to_thread(get_project_stats, project_slug)
             except Exception:
@@ -197,7 +190,7 @@ async def read_project(
                 {
                     "request": request,
                     "project": project,
-                    "is_open": is_open,
+                    "is_open": True,
                     "meta_description": meta_description,
                     "analytics": analytics,
                 },
