@@ -1954,7 +1954,7 @@ window.ProjectCreate = {
                     </div>
                     <div class="edit-form-group">
                         <label for="project-slug">URL Slug</label>
-                        <input type="text" id="project-slug" name="slug" required placeholder="my-new-project" pattern="[a-z0-9-]+">
+                        <input type="text" id="project-slug" name="slug" required placeholder="my-new-project" pattern="[a-z0-9\\-]+">
                         <span class="edit-form-hint">Lowercase letters, numbers, and hyphens only</span>
                     </div>
                     <div class="edit-form-group">
@@ -2094,11 +2094,33 @@ window.ProjectCreate = {
 
 /**
  * Project Settings Modal
+ * Includes integrated hero video upload view (no separate modal)
  */
 window.ProjectSettings = {
     modal: null,
     projectSlug: null,
     projectData: null,
+
+    // Video view state
+    currentView: 'settings', // 'settings' or 'video'
+    videoFile: null,
+    spriteStart: 0,
+    spriteDuration: 3,
+    objectUrl: null,
+    activeXhr: null,
+    videoEl: null,
+    videoDuration: 0,
+    _isDraggingSprite: false,
+    _dragStartX: 0,
+    _dragStartTime: 0,
+    _mouseMoveHandler: null,
+    _mouseUpHandler: null,
+    _keyHandler: null,
+    _beforeUnloadHandler: null,
+    _pollTimer: null,
+    _spriteLooping: false,
+    _thumbVideo: null,
+    _thumbCanvas: null,
 
     /**
      * Show settings modal for a project
@@ -2119,147 +2141,688 @@ window.ProjectSettings = {
      * Create the modal
      */
     createModal() {
-        const data = this.projectData;
-
+        this.currentView = 'settings';
         this.modal = document.createElement('div');
         this.modal.className = 'edit-settings-modal';
         this.modal.innerHTML = `
             <div class="edit-settings-overlay"></div>
-            <div class="edit-settings-content">
-                <div class="edit-settings-header">
-                    <h2>Project Settings</h2>
-                    <button class="edit-settings-close">&times;</button>
-                </div>
-                <form class="edit-settings-form" id="settings-form">
-                    <div class="edit-form-group">
-                        <label for="settings-name">Project Name</label>
-                        <input type="text" id="settings-name" name="name" value="${data.name || ''}" required>
-                    </div>
-                    <div class="edit-form-group">
-                        <label for="settings-slug">URL Slug</label>
-                        <input type="text" id="settings-slug" name="slug" value="${data.slug || ''}" required pattern="[a-z0-9-]+">
-                    </div>
-                    <div class="edit-form-group">
-                        <label for="settings-date">Date</label>
-                        <input type="date" id="settings-date" name="date" value="${data.date || ''}" required>
-                    </div>
-                    <div class="edit-form-group">
-                        <label for="settings-youtube">YouTube Link</label>
-                        <input type="url" id="settings-youtube" name="youtube" value="${data.youtube || ''}" placeholder="https://youtube.com/watch?v=...">
-                    </div>
-                    <div class="edit-form-row">
-                        <div class="edit-form-group edit-form-checkbox">
-                            <label>
-                                <input type="checkbox" id="settings-draft" name="draft" ${data.draft ? 'checked' : ''}>
-                                Draft
-                            </label>
-                        </div>
-                        <div class="edit-form-group edit-form-checkbox">
-                            <label>
-                                <input type="checkbox" id="settings-pinned" name="pinned" ${data.pinned ? 'checked' : ''}>
-                                Pinned
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="edit-form-section">
-                        <h3>Hero Video</h3>
-                        <div class="edit-form-group">
-                            <label>Current Video</label>
-                            ${data.video?.hls
-                                ? `<div class="edit-video-info">
-                                    <span>HLS: ${data.video.hls.split('/').pop()}</span>
-                                    <button type="button" class="edit-btn-small" id="upload-hero-video">Replace</button>
-                                   </div>`
-                                : `<button type="button" class="edit-btn edit-btn-secondary" id="upload-hero-video">Upload Hero Video</button>`
-                            }
-                            <input type="file" id="hero-video-input" accept="video/*" style="display: none;">
-                        </div>
-                    </div>
-
-                    <div class="edit-settings-actions">
-                        <button type="button" class="edit-btn edit-btn-danger" id="delete-project">Delete Project</button>
-                        <div class="edit-settings-actions-right">
-                            <button type="button" class="edit-btn edit-btn-secondary" id="settings-cancel">Cancel</button>
-                            <button type="submit" class="edit-btn edit-btn-primary">Save Settings</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
+            <div class="edit-settings-content"></div>
         `;
 
         document.body.appendChild(this.modal);
         document.body.classList.add('modal-open');
 
-        this.setupEventListeners();
+        this.renderSettingsView();
+        this.setupBaseListeners();
     },
 
     /**
-     * Setup event listeners
+     * Setup base listeners (overlay, escape)
      */
-    setupEventListeners() {
-        // Close button
-        this.modal.querySelector('.edit-settings-close').addEventListener('click', () => {
-            this.hide();
-        });
-
+    setupBaseListeners() {
         // Overlay click
         this.modal.querySelector('.edit-settings-overlay').addEventListener('click', () => {
-            this.hide();
+            if (this.currentView === 'video') {
+                this.showSettingsView();
+            } else {
+                this.hide();
+            }
         });
 
-        // Cancel button
-        this.modal.querySelector('#settings-cancel').addEventListener('click', () => {
-            this.hide();
-        });
+        // Escape key
+        this.escHandler = (e) => {
+            if (e.key === 'Escape' && this.modal) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.currentView === 'video') {
+                    this.cancelUpload();
+                } else {
+                    this.hide();
+                }
+            }
+        };
+        document.addEventListener('keydown', this.escHandler, true);
+    },
 
-        // Form submit
-        this.modal.querySelector('#settings-form').addEventListener('submit', async (e) => {
+    /**
+     * Render the settings form view
+     */
+    renderSettingsView() {
+        this.currentView = 'settings';
+        const data = this.projectData;
+        const content = this.modal.querySelector('.edit-settings-content');
+
+        // Remove video class
+        content.classList.remove('edit-settings-content--video');
+
+        content.innerHTML = `
+            <div class="edit-settings-header">
+                <h2>Project Settings</h2>
+                <button class="edit-settings-close">&times;</button>
+            </div>
+            <form class="edit-settings-form" id="settings-form">
+                <div class="edit-form-group">
+                    <label for="settings-name">Project Name</label>
+                    <input type="text" id="settings-name" name="name" value="${this.escAttr(data.name || '')}" required>
+                </div>
+                <div class="edit-form-group">
+                    <label for="settings-slug">URL Slug</label>
+                    <input type="text" id="settings-slug" name="slug" value="${this.escAttr(data.slug || '')}" required pattern="[a-z0-9\\-]+">
+                </div>
+                <div class="edit-form-group">
+                    <label for="settings-date">Date</label>
+                    <input type="date" id="settings-date" name="date" value="${data.date || ''}" required>
+                </div>
+                <div class="edit-form-group">
+                    <label for="settings-youtube">YouTube Link</label>
+                    <input type="url" id="settings-youtube" name="youtube" value="${this.escAttr(data.youtube || '')}" placeholder="https://youtube.com/watch?v=...">
+                </div>
+                <div class="edit-form-row">
+                    <div class="edit-form-group edit-form-checkbox">
+                        <label>
+                            <input type="checkbox" id="settings-draft" name="draft" ${data.draft ? 'checked' : ''}>
+                            Draft
+                        </label>
+                    </div>
+                    <div class="edit-form-group edit-form-checkbox">
+                        <label>
+                            <input type="checkbox" id="settings-pinned" name="pinned" ${data.pinned ? 'checked' : ''}>
+                            Pinned
+                        </label>
+                    </div>
+                </div>
+
+                <div class="edit-form-section">
+                    <h3>Hero Video</h3>
+                    <div class="edit-form-group">
+                        <label>Current Video</label>
+                        ${data.video?.hls
+                            ? `<div class="edit-video-info">
+                                <span>HLS: ${data.video.hls.split('/').pop()}</span>
+                                <button type="button" class="edit-btn-small" id="upload-hero-video">Replace</button>
+                               </div>`
+                            : `<button type="button" class="edit-btn edit-btn-secondary" id="upload-hero-video">Upload Hero Video</button>`
+                        }
+                        <input type="file" id="hero-video-input" accept="video/*" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="edit-settings-actions">
+                    <button type="button" class="edit-btn edit-btn-danger" id="delete-project">Delete Project</button>
+                    <div class="edit-settings-actions-right">
+                        <button type="button" class="edit-btn edit-btn-secondary" id="settings-cancel">Cancel</button>
+                        <button type="submit" class="edit-btn edit-btn-primary">Save Settings</button>
+                    </div>
+                </div>
+            </form>
+        `;
+
+        this.setupSettingsListeners();
+    },
+
+    /**
+     * Setup settings-specific listeners
+     */
+    setupSettingsListeners() {
+        const content = this.modal.querySelector('.edit-settings-content');
+
+        content.querySelector('.edit-settings-close').addEventListener('click', () => this.hide());
+        content.querySelector('#settings-cancel').addEventListener('click', () => this.hide());
+
+        content.querySelector('#settings-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             await this.saveSettings();
         });
 
-        // Delete button
-        this.modal.querySelector('#delete-project').addEventListener('click', async () => {
+        content.querySelector('#delete-project').addEventListener('click', async () => {
             if (confirm(`Are you sure you want to delete "${this.projectData.name}"? This cannot be undone.`)) {
                 await this.deleteProject();
             }
         });
 
         // Hero video upload
-        const uploadBtn = this.modal.querySelector('#upload-hero-video');
-        const fileInput = this.modal.querySelector('#hero-video-input');
+        const uploadBtn = content.querySelector('#upload-hero-video');
+        const fileInput = content.querySelector('#hero-video-input');
 
         if (uploadBtn) {
-            uploadBtn.addEventListener('click', () => {
-                fileInput.click();
-            });
+            uploadBtn.addEventListener('click', () => fileInput.click());
         }
 
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                this.hide();
-                if (window.EditVideo) {
-                    EditVideo.open(file, this.projectSlug, async (result) => {
-                        // Update project video data
-                        this.projectData.video = result.video;
-                        await this.saveVideoData(result.video);
-                        EditUtils.showNotification('Video updated!', 'success');
-                    });
+                if (!file.type.startsWith('video/')) {
+                    EditUtils.showNotification('Please select a video file', 'error');
+                    return;
                 }
+                this.showVideoView(file);
+            }
+        });
+    },
+
+    /**
+     * Show the video processing view (replaces settings form in-place)
+     */
+    showVideoView(file) {
+        this.currentView = 'video';
+        this.videoFile = file;
+        this.spriteStart = 0;
+        this.videoDuration = 0;
+        this._spriteLooping = false;
+
+        const content = this.modal.querySelector('.edit-settings-content');
+        content.classList.add('edit-settings-content--video');
+
+        const fileSize = (file.size / (1024 * 1024)).toFixed(1);
+
+        content.innerHTML = `
+            <div class="edit-settings-header">
+                <h2>Process Hero Video</h2>
+                <button class="edit-settings-close">&times;</button>
+            </div>
+            <div class="edit-hero-video-preview">
+                <video class="edit-hero-video-player" controls playsinline></video>
+            </div>
+            <div class="edit-hero-file-info">${this.escHtml(file.name)} (${fileSize} MB)</div>
+            <div class="edit-hero-timeline">
+                <div class="edit-hero-timeline-track">
+                    <canvas class="edit-hero-timeline-thumbs"></canvas>
+                    <div class="edit-hero-timeline-dim-left"></div>
+                    <div class="edit-hero-timeline-dim-right"></div>
+                    <div class="edit-hero-sprite-range"></div>
+                    <div class="edit-hero-playhead"></div>
+                </div>
+            </div>
+            <div class="edit-hero-time-display">
+                <span class="edit-hero-current-time">0:00</span>
+                <span class="edit-hero-sprite-info">Sprite: 0:00 - 0:03</span>
+                <span class="edit-hero-total-time">0:00</span>
+            </div>
+            <div class="edit-hero-progress" style="display: none;">
+                <div class="edit-hero-progress-bar">
+                    <div class="edit-hero-progress-fill"></div>
+                </div>
+                <div class="edit-hero-progress-text">Uploading...</div>
+            </div>
+            <div class="edit-hero-actions">
+                <button type="button" class="edit-btn edit-btn-secondary" id="hero-video-cancel">Cancel</button>
+                <button type="button" class="edit-btn edit-btn-primary" id="hero-video-process">Upload & Process</button>
+            </div>
+        `;
+
+        // Close goes back to settings
+        content.querySelector('.edit-settings-close').addEventListener('click', () => this.cancelUpload());
+
+        // Action buttons
+        content.querySelector('#hero-video-cancel').addEventListener('click', () => this.cancelUpload());
+        content.querySelector('#hero-video-process').addEventListener('click', () => this.processVideo());
+
+        // Load video preview
+        this.objectUrl = URL.createObjectURL(file);
+        this.videoEl = content.querySelector('.edit-hero-video-player');
+        this.videoEl.src = this.objectUrl;
+
+        this.videoEl.addEventListener('loadedmetadata', () => {
+            this.videoDuration = this.videoEl.duration;
+            content.querySelector('.edit-hero-total-time').textContent = this.formatTime(this.videoDuration);
+            this.updateSpriteRange();
+
+            // Check if browser can decode the video track (e.g. ProRes/HEVC .mov files)
+            if (this.videoEl.videoWidth === 0) {
+                this._noVideoTrack = true;
+                const preview = content.querySelector('.edit-hero-video-preview');
+                preview.innerHTML = '<div class="edit-hero-no-preview">Preview unavailable for this codec. Sprite selection and processing will still work.</div>';
+            } else {
+                this._noVideoTrack = false;
+                this.generateTimelineThumbnails();
             }
         });
 
-        // Escape key - close modal and stop propagation to prevent project close
-        this.escHandler = (e) => {
-            if (e.key === 'Escape' && this.modal) {
+        this.videoEl.addEventListener('timeupdate', () => {
+            this.updatePlayhead();
+            content.querySelector('.edit-hero-current-time').textContent = this.formatTime(this.videoEl.currentTime);
+
+            // Sprite loop: wrap back to start when reaching end of sprite range
+            if (this._spriteLooping && this.videoEl.currentTime >= this.spriteStart + this.spriteDuration) {
+                this.videoEl.currentTime = this.spriteStart;
+            }
+        });
+
+        // Timeline click — click on sprite range to loop, outside to seek freely
+        const track = content.querySelector('.edit-hero-timeline-track');
+        track.addEventListener('click', (e) => {
+            if (this._isDraggingSprite) return;
+            const rect = track.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            const time = pct * this.videoDuration;
+
+            // Check if click landed inside the sprite range
+            const spriteEnd = this.spriteStart + this.spriteDuration;
+            if (time >= this.spriteStart && time <= spriteEnd) {
+                // Activate sprite loop and play from clicked position within range
+                this._spriteLooping = true;
+                this.videoEl.currentTime = time;
+                this.videoEl.play();
+            } else {
+                // Click outside sprite range: move sprite position, disable loop
+                this._spriteLooping = false;
+                this.spriteStart = Math.max(0, Math.min(time, this.videoDuration - this.spriteDuration));
+                this.videoEl.currentTime = this.spriteStart;
+                this.updateSpriteRange();
+            }
+            this.updateSpriteLoopUI();
+        });
+
+        // Sprite range drag
+        const spriteRange = content.querySelector('.edit-hero-sprite-range');
+        spriteRange.addEventListener('mousedown', (e) => {
+            this._isDraggingSprite = true;
+            this._dragStartX = e.clientX;
+            this._dragStartTime = this.spriteStart;
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        // Double-click sprite range to toggle loop playback
+        spriteRange.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this._spriteLooping = !this._spriteLooping;
+            if (this._spriteLooping) {
+                this.videoEl.currentTime = this.spriteStart;
+                this.videoEl.play();
+            }
+            this.updateSpriteLoopUI();
+        });
+
+        this._mouseMoveHandler = (e) => {
+            if (!this._isDraggingSprite) return;
+            const rect = this.modal.querySelector('.edit-hero-timeline-track').getBoundingClientRect();
+            const dx = e.clientX - this._dragStartX;
+            const dt = (dx / rect.width) * this.videoDuration;
+            this.spriteStart = Math.max(0, Math.min(this._dragStartTime + dt, this.videoDuration - this.spriteDuration));
+            this.videoEl.currentTime = this.spriteStart;
+            this.updateSpriteRange();
+        };
+        document.addEventListener('mousemove', this._mouseMoveHandler);
+
+        this._mouseUpHandler = () => {
+            this._isDraggingSprite = false;
+        };
+        document.addEventListener('mouseup', this._mouseUpHandler);
+
+        // Arrow key adjustment
+        this._keyHandler = (e) => {
+            if (this.currentView !== 'video' || !this.modal) return;
+            if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                e.stopPropagation();
-                this.hide();
+                this.spriteStart = Math.max(0, this.spriteStart - 0.5);
+                this.videoEl.currentTime = this.spriteStart;
+                this.updateSpriteRange();
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.spriteStart = Math.min(this.videoDuration - this.spriteDuration, this.spriteStart + 0.5);
+                this.videoEl.currentTime = this.spriteStart;
+                this.updateSpriteRange();
             }
         };
-        document.addEventListener('keydown', this.escHandler, true); // Use capture phase
+        document.addEventListener('keydown', this._keyHandler);
+    },
+
+    /**
+     * Generate thumbnail filmstrip for the timeline track.
+     * Uses a hidden video element + canvas to extract frames without
+     * interfering with the user's playback.
+     */
+    generateTimelineThumbnails() {
+        const canvas = this.modal.querySelector('.edit-hero-timeline-thumbs');
+        if (!canvas) return;
+
+        const track = canvas.parentElement;
+        const trackWidth = track.clientWidth;
+        const trackHeight = track.clientHeight;
+
+        // Size canvas to match track at device pixel ratio for crisp rendering
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = trackWidth * dpr;
+        canvas.height = trackHeight * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        // Determine how many thumbnails to generate (~1 per 20px)
+        const numThumbs = Math.min(Math.max(Math.floor(trackWidth / 20), 10), 60);
+        const sliceWidth = trackWidth / numThumbs;
+
+        // Create a hidden video for seeking without disturbing playback
+        const thumbVid = document.createElement('video');
+        thumbVid.muted = true;
+        thumbVid.preload = 'auto';
+        thumbVid.src = this.objectUrl;
+        this._thumbVideo = thumbVid;
+        this._thumbCanvas = canvas;
+
+        let current = 0;
+
+        const drawNext = () => {
+            if (current >= numThumbs || !this._thumbVideo) {
+                // All frames drawn
+                canvas.classList.add('loaded');
+                if (this._thumbVideo) {
+                    this._thumbVideo.src = '';
+                    this._thumbVideo = null;
+                }
+                return;
+            }
+
+            const time = (current + 0.5) / numThumbs * this.videoDuration;
+            thumbVid.currentTime = time;
+        };
+
+        thumbVid.addEventListener('seeked', () => {
+            if (!this._thumbVideo) return;
+            const x = current * sliceWidth;
+            // Draw the video frame scaled to fill the slice height, cropped to slice width
+            const vw = thumbVid.videoWidth || 1;
+            const vh = thumbVid.videoHeight || 1;
+            const aspect = vw / vh;
+            const drawHeight = trackHeight;
+            const drawWidth = drawHeight * aspect;
+            const offsetX = x + (sliceWidth - drawWidth) / 2;
+            // Clip to this slice
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, 0, sliceWidth, trackHeight);
+            ctx.clip();
+            ctx.drawImage(thumbVid, offsetX, 0, drawWidth, drawHeight);
+            ctx.restore();
+            current++;
+            // Use requestAnimationFrame to avoid blocking
+            requestAnimationFrame(drawNext);
+        });
+
+        // Start once video is ready
+        thumbVid.addEventListener('loadeddata', () => {
+            drawNext();
+        }, { once: true });
+    },
+
+    /**
+     * Update the sprite loop UI indicator
+     */
+    updateSpriteLoopUI() {
+        if (!this.modal) return;
+        const info = this.modal.querySelector('.edit-hero-sprite-info');
+        if (!info) return;
+        if (this._spriteLooping) {
+            info.classList.add('looping');
+        } else {
+            info.classList.remove('looping');
+        }
+    },
+
+    /**
+     * Restore the settings form view, cleaning up video state
+     */
+    showSettingsView() {
+        this.cleanupVideoState();
+        this.renderSettingsView();
+    },
+
+    /**
+     * Clean up video-related state and listeners
+     */
+    cleanupVideoState() {
+        if (this._thumbVideo) {
+            this._thumbVideo.src = '';
+            this._thumbVideo = null;
+        }
+        this._thumbCanvas = null;
+        if (this.objectUrl) {
+            URL.revokeObjectURL(this.objectUrl);
+            this.objectUrl = null;
+        }
+        if (this._mouseMoveHandler) {
+            document.removeEventListener('mousemove', this._mouseMoveHandler);
+            this._mouseMoveHandler = null;
+        }
+        if (this._mouseUpHandler) {
+            document.removeEventListener('mouseup', this._mouseUpHandler);
+            this._mouseUpHandler = null;
+        }
+        if (this._keyHandler) {
+            document.removeEventListener('keydown', this._keyHandler);
+            this._keyHandler = null;
+        }
+        if (this._beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+            this._beforeUnloadHandler = null;
+        }
+        if (this._pollTimer) {
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.videoEl = null;
+        this.videoFile = null;
+        this._isDraggingSprite = false;
+        this._spriteLooping = false;
+        this._noVideoTrack = false;
+    },
+
+    /**
+     * Update the sprite range indicator and dim overlays on the timeline
+     */
+    updateSpriteRange() {
+        if (!this.modal || !this.videoDuration) return;
+        const range = this.modal.querySelector('.edit-hero-sprite-range');
+        const info = this.modal.querySelector('.edit-hero-sprite-info');
+        const dimLeft = this.modal.querySelector('.edit-hero-timeline-dim-left');
+        const dimRight = this.modal.querySelector('.edit-hero-timeline-dim-right');
+        if (!range) return;
+
+        const startPct = (this.spriteStart / this.videoDuration) * 100;
+        const widthPct = (this.spriteDuration / this.videoDuration) * 100;
+        range.style.left = `${startPct}%`;
+        range.style.width = `${widthPct}%`;
+
+        // Position dim overlays
+        if (dimLeft) {
+            dimLeft.style.width = `${startPct}%`;
+        }
+        if (dimRight) {
+            dimRight.style.left = `${startPct + widthPct}%`;
+            dimRight.style.width = `${100 - startPct - widthPct}%`;
+        }
+
+        if (info) {
+            const end = this.spriteStart + this.spriteDuration;
+            info.textContent = `Sprite: ${this.formatTime(this.spriteStart)} - ${this.formatTime(end)}`;
+        }
+    },
+
+    /**
+     * Update the playhead position on the timeline
+     */
+    updatePlayhead() {
+        if (!this.modal || !this.videoEl || !this.videoDuration) return;
+        const playhead = this.modal.querySelector('.edit-hero-playhead');
+        if (!playhead) return;
+        const pct = (this.videoEl.currentTime / this.videoDuration) * 100;
+        playhead.style.left = `${pct}%`;
+    },
+
+    /**
+     * Upload and process the video using XHR for progress tracking
+     */
+    processVideo() {
+        const processBtn = this.modal.querySelector('#hero-video-process');
+        const cancelBtn = this.modal.querySelector('#hero-video-cancel');
+        const progressDiv = this.modal.querySelector('.edit-hero-progress');
+        const progressFill = this.modal.querySelector('.edit-hero-progress-fill');
+        const progressText = this.modal.querySelector('.edit-hero-progress-text');
+
+        processBtn.disabled = true;
+        processBtn.textContent = 'Uploading...';
+        progressDiv.style.display = 'block';
+
+        // beforeunload warning
+        this._beforeUnloadHandler = (e) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', this._beforeUnloadHandler);
+
+        const formData = new FormData();
+        formData.append('file', this.videoFile);
+        formData.append('project_slug', this.projectSlug);
+        formData.append('sprite_start', this.spriteStart);
+        formData.append('sprite_duration', this.spriteDuration);
+
+        const xhr = new XMLHttpRequest();
+        this.activeXhr = xhr;
+
+        // Upload progress: 0-40%
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const pct = (e.loaded / e.total) * 40;
+                progressFill.style.width = `${pct}%`;
+                const mb = (e.loaded / (1024 * 1024)).toFixed(1);
+                const totalMb = (e.total / (1024 * 1024)).toFixed(1);
+                progressText.textContent = `Uploading: ${mb} / ${totalMb} MB`;
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            this.activeXhr = null;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    if (result.success) {
+                        // Upload done, now poll for processing progress
+                        progressFill.style.width = '40%';
+                        progressText.textContent = 'Processing on server...';
+                        this.pollProcessingProgress(progressFill, progressText, cancelBtn, processBtn);
+                    } else {
+                        throw new Error(result.detail || 'Processing failed');
+                    }
+                } catch (e) {
+                    this.handleProcessingError(e.message, processBtn, progressDiv);
+                }
+            } else {
+                let msg = 'Upload failed';
+                try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (_) {}
+                this.handleProcessingError(msg, processBtn, progressDiv);
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            this.activeXhr = null;
+            this.handleProcessingError('Network error during upload', processBtn, progressDiv);
+        });
+
+        xhr.addEventListener('abort', () => {
+            this.activeXhr = null;
+        });
+
+        xhr.open('POST', '/api/process-hero-video');
+        xhr.send(formData);
+    },
+
+    /**
+     * Poll the server for processing progress after upload completes
+     */
+    pollProcessingProgress(progressFill, progressText, cancelBtn, processBtn) {
+        this._pollTimer = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/process-hero-video/progress/${this.projectSlug}`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                const pct = 40 + (data.progress || 0) * 0.6; // 40-100%
+                progressFill.style.width = `${pct}%`;
+                progressText.textContent = data.stage || 'Processing...';
+
+                if (data.status === 'complete') {
+                    clearInterval(this._pollTimer);
+                    this._pollTimer = null;
+                    progressFill.style.width = '100%';
+                    progressText.textContent = 'Complete!';
+
+                    // Update project data with new video info
+                    if (data.video) {
+                        this.projectData.video = data.video;
+                        await this.saveVideoData(data.video);
+                    }
+
+                    EditUtils.showNotification('Video processed successfully!', 'success');
+
+                    // Return to settings view after a brief pause
+                    setTimeout(() => this.showSettingsView(), 800);
+                }
+
+                if (data.status === 'error') {
+                    clearInterval(this._pollTimer);
+                    this._pollTimer = null;
+                    this.handleProcessingError(data.error || 'Processing failed', processBtn, progressFill.closest('.edit-hero-progress'));
+                }
+            } catch (_) {
+                // Polling error, keep trying
+            }
+        }, 1000);
+    },
+
+    /**
+     * Handle a processing error
+     */
+    handleProcessingError(message, processBtn, progressDiv) {
+        if (this._beforeUnloadHandler) {
+            window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+            this._beforeUnloadHandler = null;
+        }
+        EditUtils.showNotification(`Video processing failed: ${message}`, 'error');
+        if (processBtn) {
+            processBtn.disabled = false;
+            processBtn.textContent = 'Upload & Process';
+        }
+        if (progressDiv) {
+            progressDiv.style.display = 'none';
+        }
+    },
+
+    /**
+     * Cancel upload or return to settings from video view
+     */
+    cancelUpload() {
+        if (this.activeXhr) {
+            this.activeXhr.abort();
+            this.activeXhr = null;
+        }
+        if (this._pollTimer) {
+            // Server processing continues in background, just stop polling
+            clearInterval(this._pollTimer);
+            this._pollTimer = null;
+        }
+        this.showSettingsView();
+    },
+
+    /**
+     * Format time as M:SS
+     */
+    formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    },
+
+    /**
+     * Escape HTML attribute value
+     */
+    escAttr(str) {
+        return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    },
+
+    /**
+     * Escape HTML text content
+     */
+    escHtml(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     },
 
     /**
@@ -2342,6 +2905,7 @@ window.ProjectSettings = {
      * Hide modal
      */
     hide() {
+        this.cleanupVideoState();
         if (this.escHandler) {
             document.removeEventListener('keydown', this.escHandler, true);
             this.escHandler = null;
