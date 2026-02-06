@@ -11,7 +11,7 @@ from config import templates
 from middleware.cache_control import CacheControlMiddleware
 from middleware.forwarded_proto import ForwardedProtoMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
-from routers import admin, api, feed, pages
+from routers import admin, api, feed, pages, test
 from utils.analytics import init_db
 
 load_dotenv()
@@ -33,6 +33,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(api.router)
 app.include_router(admin.router)
 app.include_router(feed.router)
+app.include_router(test.router)
 app.include_router(pages.router)
 
 

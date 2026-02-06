@@ -1,0 +1,27 @@
+{
+  "frames": 21,
+  "columns": 5,
+  "rows": 5,
+  "depth_normalization": {
+    "global_min": 0.0,
+    "global_max": 1216.0
+  },
+  "resolutions": {
+    "320x180": {
+      "frame_width": 320,
+      "frame_height": 180,
+      "sheet_width": 1600,
+      "sheet_height": 900,
+      "rgb_file": "rgb_320x180.webp",
+      "depth_file": "depth_320x180.png"
+    },
+    "640x360": {
+      "frame_width": 640,
+      "frame_height": 360,
+      "sheet_width": 3200,
+      "sheet_height": 1800,
+      "rgb_file": "rgb_640x360.webp",
+      "depth_file": "depth_640x360.png"
+    }
+  }
+}
