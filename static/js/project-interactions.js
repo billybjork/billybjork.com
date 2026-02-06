@@ -655,103 +655,91 @@
 
     /**
      * ============================
-     * HTMX Event Handlers
+     * Project Event Handlers
      * ============================
      */
 
     /**
-     * Handles HTMX beforeRequest event to close any open projects before making a new request.
-     * @param {Event} event - The HTMX event.
+     * Handles project:beforeSwap event to perform cleanup before content is swapped.
+     * @param {Event} event - The custom event.
      */
-    const handleHTMXBeforeRequest = (event) => {
-        const triggerElt = event.detail.elt;
-        const projectItem = triggerElt.closest('.project-item');
-
-        if (triggerElt.matches('.project-header, .thumbnail') && projectItem.classList.contains('active')) {
-            // Prevent HTMX request if the project is already open
-            event.preventDefault();
-        } else {
-            // Close any open projects before proceeding
-            closeAllOpenProjects();
-        }
-    };
-
-    /**
-     * Handles HTMX beforeSwap event to perform cleanup before content is swapped.
-     * @param {Event} event - The HTMX event.
-     */
-    const handleHTMXBeforeSwap = (event) => {
+    const handleProjectBeforeSwap = (event) => {
         cleanupActiveHLSPlayers();
     };
 
     /**
-     * Handles HTMX afterSwap event to animate newly loaded project items.
-     * @param {Event} event - The HTMX event.
+     * Handles project:afterSwap event to set up newly loaded project content.
+     * @param {Event} event - The custom event.
      */
-    const handleHTMXAfterSwap = (event) => {
-        const { elt } = event.detail;
+    const handleProjectAfterSwap = (event) => {
+        const { element, slug, isOpen, smoothScroll = true } = event.detail;
 
-        // Check if the swapped element is an infinite scroll sentinel
-        if (elt.id && elt.id.startsWith('infinite-scroll-sentinel')) {
-            // Select all new project items that do not have 'fade-in' or 'no-fade' classes
-            const newProjectItems = elt.parentElement.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
+        if (!element) return;
 
-            // Observe the newly added project items
-            observeProjectItems(newProjectItems);
-        }
+        const projectItem = element.closest('.project-item');
+        if (!projectItem) return;
 
-        // Handle project-details swaps
-        if (elt.classList.contains('project-details')) {
-            const projectItem = elt.closest('.project-item');
-            if (elt.innerHTML.trim() !== '') {
-                projectItem.classList.add('active');
+        if (isOpen) {
+            // Initialize HLS player if video is present
+            const video = element.querySelector('video.project-video');
+            if (video) {
+                setupHLSPlayer(video, true).catch(err => {
+                    console.error('Failed to initialize HLS player:', err);
+                });
+            }
 
-                // Initialize HLS player if video is present
-                const video = elt.querySelector('video.project-video');
-                if (video) {
-                    setupHLSPlayer(video, true).catch(err => {
-                        console.error('Failed to initialize HLS player:', err);
-                    });
-                }
-
-                // Scroll to the project header using the custom function
-                const projectHeader = projectItem.querySelector('.project-header');
-                if (projectHeader) {
-                    scrollToProjectHeader(projectHeader);
-                }
-            } else {
-                projectItem.classList.remove('active');
-
-                // Clean up resources
-                const video = projectItem.querySelector('video.project-video');
-                if (video) {
-                    video.pause();
-                    destroyHLSPlayer(video);
-                }
-                const thumbnail = projectItem.querySelector('.thumbnail');
-                if (thumbnail) {
-                    resetThumbnailPosition(thumbnail);
-                }
+            // Scroll to the project header
+            const projectHeader = projectItem.querySelector('.project-header');
+            if (projectHeader && smoothScroll) {
+                scrollToProjectHeader(projectHeader);
+            }
+        } else {
+            // Clean up resources when closing
+            const video = projectItem.querySelector('video.project-video');
+            if (video) {
+                video.pause();
+                destroyHLSPlayer(video);
+            }
+            const thumbnail = projectItem.querySelector('.thumbnail');
+            if (thumbnail) {
+                resetThumbnailPosition(thumbnail);
             }
         }
 
         // Initialize lazy loading for newly inserted thumbnails and videos
-        initializeLazyThumbnails(elt);
-        initializeLazyVideos(elt);
+        initializeLazyThumbnails(element);
+        initializeLazyVideos(element);
         updateThumbnails();
 
         // Open external links in new tabs
-        openExternalLinksInNewTab(elt);
+        openExternalLinksInNewTab(element);
     };
 
     /**
-     * Handles HTMX load event for project items.
-     * @param {Event} event - The HTMX event.
+     * Handles projects:loaded event for infinite scroll (new projects added to page).
+     * @param {Event} event - The custom event.
      */
-    const handleHTMXLoad = (event) => {
-        const { elt } = event.detail;
-        if (elt.classList.contains('project-item')) {
-            handleProjectContent(elt);
+    const handleProjectsLoaded = (event) => {
+        // Select all new project items that do not have 'fade-in' or 'no-fade' classes
+        const newProjectItems = document.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
+
+        // Observe the newly added project items
+        observeProjectItems(newProjectItems);
+
+        // Initialize lazy loading for new thumbnails
+        initializeLazyThumbnails();
+        updateThumbnails();
+    };
+
+    /**
+     * Handles project:loaded event for project items.
+     * @param {Event} event - The custom event.
+     */
+    const handleProjectLoaded = (event) => {
+        const { element } = event.detail;
+        const projectItem = element?.closest('.project-item');
+        if (projectItem) {
+            handleProjectContent(projectItem);
         }
     };
 
@@ -846,19 +834,16 @@
     };
 
     /**
-     * Initializes event listeners for HTMX and other interactive elements.
+     * Initializes event listeners for project loader and other interactive elements.
      */
     const initializeEventListeners = () => {
-        // HTMX Event Listeners
-        document.body.addEventListener('htmx:afterSwap', handleHTMXAfterSwap);
-        document.body.addEventListener('htmx:beforeRequest', handleHTMXBeforeRequest);
-        document.body.addEventListener('htmx:load', handleHTMXLoad);
-        document.body.addEventListener('htmx:beforeSwap', handleHTMXBeforeSwap);
-        document.body.addEventListener('htmx:responseError', () => {
+        // Project Loader Event Listeners
+        document.body.addEventListener('project:afterSwap', handleProjectAfterSwap);
+        document.body.addEventListener('project:beforeSwap', handleProjectBeforeSwap);
+        document.body.addEventListener('project:loaded', handleProjectLoaded);
+        document.body.addEventListener('projects:loaded', handleProjectsLoaded);
+        document.body.addEventListener('project:error', () => {
             showNotification('Failed to load content. Please try again.', true);
-        });
-        document.body.addEventListener('htmx:sendError', () => {
-            showNotification('Network error. Please check your connection.', true);
         });
 
         // Event delegation for elements with class 'copy-text-link'
@@ -879,7 +864,8 @@
             }
         });
 
-        // Event delegation for close project buttons
+        // Event delegation for close project buttons (isolation mode only)
+        // Non-isolation mode close is handled by project-loader.js
         document.body.addEventListener('click', function(event) {
             const target = event.target.closest('.close-project');
             if (target) {
@@ -888,7 +874,6 @@
                     event.preventDefault();
                     closeProject(target);
                 }
-                // Else, let HTMX handle the click
             }
         });
 
@@ -951,8 +936,11 @@
                         if (isIsolationMode) {
                             closeProject(closeBtn);
                         } else {
-                            // Trigger HTMX click for non-isolation mode
-                            closeBtn.click();
+                            // Use ProjectLoader for non-isolation mode
+                            const slug = activeProject.dataset.slug;
+                            if (slug && window.ProjectLoader) {
+                                window.ProjectLoader.closeProject(slug);
+                            }
                         }
                     }
                 }

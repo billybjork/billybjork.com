@@ -1,11 +1,7 @@
-<aside 
+<aside
     id="infinite-scroll-sentinel-{{ page }}"
     {% if has_more %}
         data-page="{{ page + 1 }}"
-        hx-get="/?page={{ page + 1 }}{% if show_drafts %}&show_drafts=true{% endif %}"
-        hx-trigger="revealed" 
-        hx-target="#infinite-scroll-sentinel-{{ page }}" 
-        hx-swap="outerHTML"
         style="height: 100px; text-align: center; padding: 20px;">
         <p>Loading more projects...</p>
     {% else %}

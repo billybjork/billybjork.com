@@ -204,7 +204,7 @@
 
         const btn = document.createElement('button');
         btn.className = 'show-drafts-toggle' + (isActive ? ' active' : '');
-        btn.textContent = isActive ? 'Hide Drafts' : 'Show Drafts';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Drafts';
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const url = new URL(window.location);
@@ -299,13 +299,13 @@
 
         document.querySelectorAll('.project-item.active').forEach(addProjectControls);
 
-        document.body.addEventListener('htmx:afterSwap', (event) => {
-            const { elt } = event.detail;
+        document.body.addEventListener('project:afterSwap', (event) => {
+            const { element, isOpen } = event.detail;
 
-            if (elt.classList && elt.classList.contains('project-details')) {
-                const projectItem = elt.closest('.project-item');
+            if (element && element.classList && element.classList.contains('project-details')) {
+                const projectItem = element.closest('.project-item');
                 if (projectItem) {
-                    if (elt.innerHTML.trim() !== '') {
+                    if (isOpen) {
                         setTimeout(() => addProjectControls(projectItem), 50);
                     } else {
                         removeProjectControls(projectItem);

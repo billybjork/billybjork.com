@@ -49,9 +49,11 @@ function checkAndHighlightCode(targetElement) {
     }
 }
 
-// Listen for the htmx:afterSwap event
-document.addEventListener("htmx:afterSwap", function(evt) {
-    checkAndHighlightCode(evt.detail.target);
+// Listen for the project:afterSwap event
+document.addEventListener("project:afterSwap", function(evt) {
+    if (evt.detail.element) {
+        checkAndHighlightCode(evt.detail.element);
+    }
 });
 
 // Check on initial page load
