@@ -35,6 +35,12 @@ logger = logging.getLogger(__name__)
 # Processing progress tracker: { slug: { status, stage, progress, video, error } }
 _processing_progress = {}
 
+# Temp video files for thumbnail preview: { temp_id: { path, timestamp, frames, frames_complete } }
+_temp_video_files = {}
+
+# HLS encoding sessions: { session_id: { status, stage, progress, hls_url, temp_id, slug, timestamp, error } }
+_hls_sessions = {}
+
 router = APIRouter(
     prefix="/api",
     tags=["admin"],
@@ -294,24 +300,31 @@ async def upload_media(request: Request):
         raise HTTPException(status_code=500, detail="Image upload failed")
 
 
-@router.post("/process-hero-video")
-async def process_hero_video(request: Request):
-    """Process a hero video: generate HLS, sprite sheet, and thumbnail.
+@router.post("/video-thumbnails")
+async def video_thumbnails(request: Request):
+    """Extract thumbnail frames from uploaded video for preview.
 
+    Uses server-side ffmpeg to support any codec (ProRes, HEVC, etc.).
     Streams the upload in 1 MB chunks to avoid loading the entire file into RAM.
-    Processing runs in a background thread with progress tracking.
+
+    Returns first frame immediately for fast UI feedback, then extracts remaining
+    frames in background. If project_slug is provided, auto-starts HLS encoding.
+
+    Returns: { success, frames (first frame only), duration, temp_id, hls_session_id? }
     """
+    import secrets
     import threading
+
+    from utils.video import extract_thumbnail_frames, get_video_info
 
     form = await request.form()
     file = form.get("file")
     project_slug = form.get("project_slug")
-    sprite_start = float(form.get("sprite_start", 0))
-    sprite_duration = float(form.get("sprite_duration", 3))
 
-    if not file or not project_slug:
-        raise HTTPException(status_code=400, detail="File and project_slug are required")
-    if not validate_slug(project_slug):
+    if not file:
+        raise HTTPException(status_code=400, detail="File is required")
+
+    if project_slug and not validate_slug(project_slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
 
     try:
@@ -324,8 +337,311 @@ async def process_hero_video(request: Request):
                 temp_file.write(chunk)
             temp_path = temp_file.name
     except Exception as e:
-        logger.exception("Hero video upload failed")
+        logger.exception("Video thumbnail upload failed")
         raise HTTPException(status_code=500, detail="Video upload failed")
+
+    try:
+        # Get video duration first (fast operation)
+        info = get_video_info(temp_path)
+        duration = info["duration"]
+
+        # Extract first frame only for immediate response
+        first_frames, _ = extract_thumbnail_frames(temp_path, num_frames=1, width=160, height=90)
+
+        # Generate unique temp_id and store the temp file path
+        temp_id = secrets.token_urlsafe(16)
+        _temp_video_files[temp_id] = {
+            "path": temp_path,
+            "timestamp": datetime.now(),
+            "frames": first_frames,  # Will be extended with more frames
+            "frames_complete": False,
+        }
+
+        # Start background extraction of remaining 29 frames
+        def extract_remaining_frames():
+            try:
+                all_frames, _ = extract_thumbnail_frames(temp_path, num_frames=30, width=160, height=90)
+                if temp_id in _temp_video_files:
+                    _temp_video_files[temp_id]["frames"] = all_frames
+                    _temp_video_files[temp_id]["frames_complete"] = True
+            except Exception as e:
+                logger.warning(f"Background thumbnail extraction failed: {e}")
+                if temp_id in _temp_video_files:
+                    _temp_video_files[temp_id]["frames_complete"] = True
+
+        thread = threading.Thread(target=extract_remaining_frames, daemon=True)
+        thread.start()
+
+        response = {
+            "success": True,
+            "frames": first_frames,
+            "duration": duration,
+            "temp_id": temp_id,
+        }
+
+        # Auto-start HLS encoding if project_slug provided
+        if project_slug:
+            hls_session_id = secrets.token_urlsafe(16)
+            _hls_sessions[hls_session_id] = {
+                "status": "processing",
+                "stage": "Starting HLS encoding...",
+                "progress": 0,
+                "hls_url": None,
+                "temp_id": temp_id,
+                "slug": project_slug,
+                "timestamp": datetime.now(),
+                "error": None,
+            }
+
+            def run_hls_encoding():
+                from utils.video import generate_hls_only
+                from utils.assets import delete_video_prefix
+
+                def progress_callback(stage, progress):
+                    if hls_session_id in _hls_sessions:
+                        _hls_sessions[hls_session_id]["stage"] = stage
+                        _hls_sessions[hls_session_id]["progress"] = progress
+
+                try:
+                    # Clean up old HLS files first
+                    progress_callback("Cleaning up old video files...", 2)
+                    delete_video_prefix(project_slug)
+
+                    hls_url = generate_hls_only(
+                        temp_path,
+                        project_slug,
+                        trim_start=0,
+                        progress_callback=progress_callback,
+                    )
+                    if hls_session_id in _hls_sessions:
+                        _hls_sessions[hls_session_id].update({
+                            "status": "complete",
+                            "stage": "HLS complete!",
+                            "progress": 100,
+                            "hls_url": hls_url,
+                        })
+                except Exception as e:
+                    logger.exception("HLS encoding failed")
+                    if hls_session_id in _hls_sessions:
+                        _hls_sessions[hls_session_id].update({
+                            "status": "error",
+                            "stage": "HLS encoding failed",
+                            "error": str(e),
+                        })
+
+            hls_thread = threading.Thread(target=run_hls_encoding, daemon=True)
+            hls_thread.start()
+
+            response["hls_session_id"] = hls_session_id
+
+        return response
+
+    except Exception as e:
+        # Clean up temp file on error
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+        logger.exception("Video thumbnail extraction failed")
+        raise HTTPException(status_code=500, detail=f"Thumbnail extraction failed: {str(e)}")
+
+
+@router.get("/video-thumbnails/more/{temp_id}")
+async def get_more_thumbnails(temp_id: str):
+    """Get additional thumbnail frames that were extracted in background.
+
+    Returns frames extracted beyond the first frame, used for progressive loading.
+    Client polls this endpoint until complete=true.
+    """
+    temp_info = _temp_video_files.get(temp_id)
+    if not temp_info:
+        raise HTTPException(status_code=404, detail="Invalid or expired temp_id")
+
+    return {
+        "frames": temp_info.get("frames", []),
+        "complete": temp_info.get("frames_complete", False),
+    }
+
+
+@router.get("/hls-progress/{session_id}")
+async def get_hls_progress(session_id: str):
+    """Get HLS encoding progress for a session.
+
+    Returns current status, stage, progress percentage, and hls_url when complete.
+    """
+    session = _hls_sessions.get(session_id)
+    if not session:
+        return JSONResponse({
+            "status": "unknown",
+            "stage": "Session not found",
+            "progress": 0,
+        })
+
+    response = {
+        "status": session["status"],
+        "stage": session["stage"],
+        "progress": session["progress"],
+    }
+
+    if session["status"] == "complete" and session.get("hls_url"):
+        response["hls_url"] = session["hls_url"]
+
+    if session["status"] == "error":
+        response["error"] = session.get("error", "Unknown error")
+
+    return response
+
+
+@router.post("/generate-sprite-sheet")
+async def generate_sprite_sheet_endpoint(request: Request):
+    """Generate sprite sheet and thumbnail after user confirms selection.
+
+    Called after user has selected their sprite range. HLS encoding should
+    already be complete or in progress from the initial thumbnail extraction.
+
+    If HLS is still processing, this endpoint waits for it to complete
+    before returning the combined result.
+    """
+    import time
+
+    form = await request.form()
+    temp_id = form.get("temp_id")
+    hls_session_id = form.get("hls_session_id")
+    project_slug = form.get("project_slug")
+    sprite_start = float(form.get("sprite_start", 0))
+    sprite_duration = float(form.get("sprite_duration", 3))
+
+    if not temp_id:
+        raise HTTPException(status_code=400, detail="temp_id is required")
+    if not project_slug:
+        raise HTTPException(status_code=400, detail="project_slug is required")
+    if not validate_slug(project_slug):
+        raise HTTPException(status_code=400, detail="Invalid slug format")
+
+    # Get the temp video file
+    temp_info = _temp_video_files.get(temp_id)
+    if not temp_info:
+        raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
+
+    temp_path = temp_info["path"]
+    if not os.path.exists(temp_path):
+        raise HTTPException(status_code=400, detail="Temp file not found")
+
+    try:
+        from utils.video import generate_sprite_and_thumbnail
+
+        # Generate sprite sheet and thumbnail
+        result = generate_sprite_and_thumbnail(
+            temp_path,
+            project_slug,
+            sprite_start=sprite_start,
+            sprite_duration=sprite_duration,
+        )
+
+        # Wait for HLS to complete if session ID provided
+        hls_url = None
+        if hls_session_id:
+            # Poll for HLS completion (max 5 minutes)
+            max_wait = 300
+            waited = 0
+            while waited < max_wait:
+                session = _hls_sessions.get(hls_session_id)
+                if not session:
+                    break
+                if session["status"] == "complete":
+                    hls_url = session.get("hls_url")
+                    break
+                if session["status"] == "error":
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"HLS encoding failed: {session.get('error', 'Unknown error')}"
+                    )
+                time.sleep(1)
+                waited += 1
+
+            if waited >= max_wait:
+                raise HTTPException(status_code=500, detail="HLS encoding timed out")
+
+        # Combine results
+        response = {
+            "success": True,
+            "video": {
+                "hls": hls_url,
+                "thumbnail": result["thumbnail"],
+                "spriteSheet": result["spriteSheet"],
+            },
+        }
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Sprite sheet generation failed")
+        raise HTTPException(status_code=500, detail=f"Sprite sheet generation failed: {str(e)}")
+    finally:
+        # Clean up temp file and sessions
+        if temp_id in _temp_video_files:
+            if os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+            del _temp_video_files[temp_id]
+        if hls_session_id and hls_session_id in _hls_sessions:
+            del _hls_sessions[hls_session_id]
+
+
+@router.post("/process-hero-video")
+async def process_hero_video(request: Request):
+    """Process a hero video: generate HLS, sprite sheet, and thumbnail.
+
+    Streams the upload in 1 MB chunks to avoid loading the entire file into RAM.
+    Processing runs in a background thread with progress tracking.
+
+    Accepts either a file upload OR a temp_id from a previous thumbnail extraction.
+    """
+    import threading
+
+    form = await request.form()
+    file = form.get("file")
+    temp_id = form.get("temp_id")
+    project_slug = form.get("project_slug")
+    sprite_start = float(form.get("sprite_start", 0))
+    sprite_duration = float(form.get("sprite_duration", 3))
+
+    if not project_slug:
+        raise HTTPException(status_code=400, detail="project_slug is required")
+    if not validate_slug(project_slug):
+        raise HTTPException(status_code=400, detail="Invalid slug format")
+
+    # Use existing temp file if temp_id provided, otherwise expect file upload
+    temp_path = None
+    use_existing_temp = False
+
+    if temp_id:
+        # Use existing temp file from thumbnail extraction
+        temp_info = _temp_video_files.get(temp_id)
+        if not temp_info:
+            raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
+        temp_path = temp_info["path"]
+        if not os.path.exists(temp_path):
+            raise HTTPException(status_code=400, detail="Temp file not found")
+        use_existing_temp = True
+    else:
+        # Backwards compatible: accept file upload
+        if not file:
+            raise HTTPException(status_code=400, detail="Either file or temp_id is required")
+        try:
+            # Stream upload to temp file in 1 MB chunks
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    temp_file.write(chunk)
+                temp_path = temp_file.name
+        except Exception as e:
+            logger.exception("Hero video upload failed")
+            raise HTTPException(status_code=500, detail="Video upload failed")
 
     # Initialize progress tracking
     _processing_progress[project_slug] = {
@@ -377,8 +693,12 @@ async def process_hero_video(request: Request):
                 "error": str(e),
             })
         finally:
+            # Clean up temp file
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
+            # Remove from temp files dict if it was using a temp_id
+            if temp_id and temp_id in _temp_video_files:
+                del _temp_video_files[temp_id]
 
     # Start processing in background thread
     thread = threading.Thread(target=run_processing, daemon=True)
@@ -445,3 +765,60 @@ async def process_content_video(request: Request):
     except Exception as e:
         logger.exception("Content video processing failed")
         raise HTTPException(status_code=500, detail="Video processing failed")
+
+
+def cleanup_old_temp_videos():
+    """
+    Clean up temp video files and orphaned HLS sessions older than 1 hour.
+    Called on server startup and can be called periodically if needed.
+
+    For HLS sessions that completed but sprite sheet was never requested,
+    this also deletes the orphaned HLS files from S3.
+    """
+    from datetime import timedelta
+
+    now = datetime.now()
+    expired_ids = []
+
+    for temp_id, temp_info in _temp_video_files.items():
+        age = now - temp_info["timestamp"]
+        if age > timedelta(hours=1):
+            temp_path = temp_info["path"]
+            if os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                    logger.info(f"Cleaned up expired temp video file: {temp_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp file {temp_path}: {e}")
+            expired_ids.append(temp_id)
+
+    # Remove expired entries from the dict
+    for temp_id in expired_ids:
+        del _temp_video_files[temp_id]
+
+    if expired_ids:
+        logger.info(f"Cleaned up {len(expired_ids)} expired temp video file(s)")
+
+    # Clean up orphaned HLS sessions
+    expired_hls_ids = []
+    for session_id, session in _hls_sessions.items():
+        age = now - session["timestamp"]
+        if age > timedelta(hours=1):
+            # If HLS completed but sprite was never requested, clean up S3 files
+            if session["status"] == "complete" and session.get("slug"):
+                try:
+                    delete_video_prefix(session["slug"])
+                    logger.info(f"Cleaned up orphaned HLS files for slug: {session['slug']}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up HLS files for {session['slug']}: {e}")
+            expired_hls_ids.append(session_id)
+
+    for session_id in expired_hls_ids:
+        del _hls_sessions[session_id]
+
+    if expired_hls_ids:
+        logger.info(f"Cleaned up {len(expired_hls_ids)} expired HLS session(s)")
+
+
+# Clean up any leftover temp files on startup
+cleanup_old_temp_videos()

@@ -27,6 +27,9 @@ __all__ = [
     "compress_video",
     "process_hero_video",
     "process_content_video",
+    "extract_thumbnail_frames",
+    "generate_hls_only",
+    "generate_sprite_and_thumbnail",
 ]
 
 
@@ -200,7 +203,7 @@ def generate_sprite_sheet(
             '-ss', str(start_time),
             '-i', video_path,
             '-t', str(duration),
-            '-vf', f'fps={fps},scale={frame_width}:{frame_height}',
+            '-vf', f'fps={fps},scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,crop={frame_width}:{frame_height}',
             '-q:v', '5',
             frames_pattern
         ]
@@ -239,7 +242,7 @@ def generate_sprite_sheet(
                 '-ss', str(start_time),
                 '-i', video_path,
                 '-t', str(duration),
-                '-vf', f'fps={fps},scale={frame_width}:{frame_height},tile={tile_w}x{tile_h}',
+                '-vf', f'fps={fps},scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,crop={frame_width}:{frame_height},tile={tile_w}x{tile_h}',
                 '-frames:v', '1',
                 '-q:v', '5',
                 output_path
@@ -337,6 +340,77 @@ def compress_video(
         raise ValueError(f"Video compression failed: {result.stderr}")
 
     return output_path
+
+
+def extract_thumbnail_frames(
+    video_path: str,
+    num_frames: int = 30,
+    width: int = 160,
+    height: int = 90
+) -> Tuple[list, float]:
+    """
+    Extract evenly-spaced thumbnail frames from a video using ffmpeg.
+
+    Uses input seeking (-ss before -i) for fast keyframe extraction.
+    Works with any codec that ffmpeg supports, including ProRes and HEVC.
+
+    Args:
+        video_path: Path to source video
+        num_frames: Number of frames to extract (default 30)
+        width: Thumbnail width in pixels
+        height: Thumbnail height in pixels
+
+    Returns:
+        Tuple of (list of base64 JPEG strings, video duration in seconds)
+    """
+    import base64
+
+    # Get video duration first
+    info = get_video_info(video_path)
+    duration = info['duration']
+
+    if duration <= 0:
+        raise ValueError("Invalid video duration")
+
+    # Calculate frame timestamps (evenly distributed)
+    frame_times = [i * duration / max(num_frames - 1, 1) for i in range(num_frames)]
+
+    frames_b64 = []
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        for i, timestamp in enumerate(frame_times):
+            output_path = os.path.join(temp_dir, f'thumb_{i:03d}.jpg')
+
+            # Use -ss before -i for fast keyframe seeking
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-ss', str(timestamp),
+                '-i', video_path,
+                '-vframes', '1',
+                '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2',
+                '-q:v', '5',
+                output_path
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                # Skip failed frames rather than failing entire extraction
+                continue
+
+            # Read and encode as base64
+            try:
+                with open(output_path, 'rb') as f:
+                    frame_data = f.read()
+                    b64_str = base64.b64encode(frame_data).decode('utf-8')
+                    frames_b64.append(b64_str)
+            except Exception:
+                continue
+
+    if not frames_b64:
+        raise ValueError("Failed to extract any frames from video")
+
+    return frames_b64, duration
 
 
 def process_hero_video(
@@ -459,6 +533,157 @@ def process_hero_video(
             video_path,
             thumb_path,
             time=trim_start + sprite_start
+        )
+
+        thumbnail_key = hero_thumbnail_key(project_slug)
+        with open(thumb_path, 'rb') as f:
+            s3.upload_fileobj(
+                f,
+                S3_BUCKET,
+                thumbnail_key,
+                ExtraArgs={
+                    'ContentType': 'image/webp',
+                    'CacheControl': 'max-age=31536000',
+                }
+            )
+
+        results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
+        _report('Complete!', 100)
+
+    return results
+
+
+def generate_hls_only(
+    video_path: str,
+    project_slug: str,
+    trim_start: float = 0,
+    progress_callback=None,
+) -> str:
+    """
+    Generate and upload HLS streams only (without sprite sheet or thumbnail).
+
+    This is used for parallel processing - HLS can start immediately after
+    upload while the user is still selecting the sprite range.
+
+    Args:
+        video_path: Path to source video
+        project_slug: Project slug for S3 key organization
+        trim_start: Start time for video trim
+        progress_callback: Optional callable(stage: str, progress: float)
+
+    Returns:
+        CloudFront URL for the HLS master playlist
+    """
+    if not check_ffmpeg():
+        raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
+
+    def _report(stage, progress):
+        if progress_callback:
+            progress_callback(stage, progress)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        hls_dir = os.path.join(temp_dir, 'hls')
+
+        _report('Generating HLS streams...', 10)
+        generate_hls(video_path, hls_dir, start_time=trim_start)
+
+        # Upload HLS files to S3
+        s3 = get_s3_client()
+        hls_prefix = hero_hls_prefix(project_slug)
+        hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
+        total_hls = len(hls_files)
+
+        for i, file_path in enumerate(hls_files):
+            _report(f'Uploading HLS to S3... ({i + 1}/{total_hls})', 10 + (i / max(total_hls, 1)) * 85)
+            relative_path = file_path.relative_to(hls_dir)
+            s3_key = f'{hls_prefix}/{relative_path}'
+
+            content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
+
+            with open(file_path, 'rb') as f:
+                s3.upload_fileobj(
+                    f,
+                    S3_BUCKET,
+                    s3_key,
+                    ExtraArgs={
+                        'ContentType': content_type,
+                        'CacheControl': 'max-age=31536000',
+                    }
+                )
+
+        _report('HLS complete!', 100)
+        return f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
+
+
+def generate_sprite_and_thumbnail(
+    video_path: str,
+    project_slug: str,
+    sprite_start: float = 0,
+    sprite_duration: float = 3,
+    progress_callback=None,
+) -> dict:
+    """
+    Generate sprite sheet and thumbnail, upload to S3.
+
+    This is called after the user confirms their sprite range selection.
+    Can run independently of HLS generation.
+
+    Args:
+        video_path: Path to source video
+        project_slug: Project slug for S3 key organization
+        sprite_start: Start time for sprite sheet
+        sprite_duration: Duration for sprite sheet
+        progress_callback: Optional callable(stage: str, progress: float)
+
+    Returns:
+        Dict with spriteSheet, spriteMeta, and thumbnail URLs
+    """
+    if not check_ffmpeg():
+        raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
+
+    def _report(stage, progress):
+        if progress_callback:
+            progress_callback(stage, progress)
+
+    results = {}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        sprite_path = os.path.join(temp_dir, 'sprite.jpg')
+
+        # Generate sprite sheet
+        _report('Generating sprite sheet...', 10)
+        _, sprite_meta = generate_sprite_sheet(
+            video_path,
+            sprite_path,
+            start_time=sprite_start,
+            duration=sprite_duration,
+        )
+
+        # Upload sprite sheet to S3
+        _report('Uploading sprite sheet...', 40)
+        s3 = get_s3_client()
+        sprite_key = hero_sprite_key(project_slug)
+        with open(sprite_path, 'rb') as f:
+            s3.upload_fileobj(
+                f,
+                S3_BUCKET,
+                sprite_key,
+                ExtraArgs={
+                    'ContentType': 'image/jpeg',
+                    'CacheControl': 'max-age=31536000',
+                }
+            )
+
+        results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
+        results['spriteMeta'] = sprite_meta
+
+        # Generate and upload thumbnail
+        _report('Generating thumbnail...', 70)
+        thumb_path = os.path.join(temp_dir, 'thumb.webp')
+        generate_thumbnail(
+            video_path,
+            thumb_path,
+            time=sprite_start
         )
 
         thumbnail_key = hero_thumbnail_key(project_slug)

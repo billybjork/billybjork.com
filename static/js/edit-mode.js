@@ -2122,11 +2122,23 @@ window.ProjectSettings = {
     _thumbVideo: null,
     _thumbCanvas: null,
 
+    // HLS parallel encoding state
+    _hlsSessionId: null,
+    _hlsComplete: false,
+    _hlsPollTimer: null,
+    _thumbnailPollTimer: null,
+
     /**
      * Show settings modal for a project
      */
     async show(slug) {
         this.projectSlug = slug;
+
+        // Pause any playing videos in the project
+        const projectItem = document.querySelector(`#project-${slug}`);
+        if (projectItem) {
+            projectItem.querySelectorAll('video').forEach(video => video.pause());
+        }
 
         try {
             this.projectData = await EditUtils.fetchJSON(`/api/project/${slug}`);
@@ -2309,6 +2321,11 @@ window.ProjectSettings = {
         this.spriteStart = 0;
         this.videoDuration = 0;
         this._spriteLooping = false;
+        this._tempId = null;
+
+        // Reset HLS state
+        this._hlsSessionId = null;
+        this._hlsComplete = false;
 
         const content = this.modal.querySelector('.edit-settings-content');
         content.classList.add('edit-settings-content--video');
@@ -2346,7 +2363,7 @@ window.ProjectSettings = {
             </div>
             <div class="edit-hero-actions">
                 <button type="button" class="edit-btn edit-btn-secondary" id="hero-video-cancel">Cancel</button>
-                <button type="button" class="edit-btn edit-btn-primary" id="hero-video-process">Upload & Process</button>
+                <button type="button" class="edit-btn edit-btn-primary" id="hero-video-process" disabled>Confirm & Generate Sprite</button>
             </div>
         `;
 
@@ -2357,26 +2374,8 @@ window.ProjectSettings = {
         content.querySelector('#hero-video-cancel').addEventListener('click', () => this.cancelUpload());
         content.querySelector('#hero-video-process').addEventListener('click', () => this.processVideo());
 
-        // Load video preview
-        this.objectUrl = URL.createObjectURL(file);
-        this.videoEl = content.querySelector('.edit-hero-video-player');
-        this.videoEl.src = this.objectUrl;
-
-        this.videoEl.addEventListener('loadedmetadata', () => {
-            this.videoDuration = this.videoEl.duration;
-            content.querySelector('.edit-hero-total-time').textContent = this.formatTime(this.videoDuration);
-            this.updateSpriteRange();
-
-            // Check if browser can decode the video track (e.g. ProRes/HEVC .mov files)
-            if (this.videoEl.videoWidth === 0) {
-                this._noVideoTrack = true;
-                const preview = content.querySelector('.edit-hero-video-preview');
-                preview.innerHTML = '<div class="edit-hero-no-preview">Preview unavailable for this codec. Sprite selection and processing will still work.</div>';
-            } else {
-                this._noVideoTrack = false;
-                this.generateTimelineThumbnails();
-            }
-        });
+        // Immediately upload to server for thumbnail extraction
+        this.extractServerThumbnails(file, content);
 
         this.videoEl.addEventListener('timeupdate', () => {
             this.updatePlayhead();
@@ -2471,80 +2470,339 @@ window.ProjectSettings = {
     },
 
     /**
-     * Generate thumbnail filmstrip for the timeline track.
-     * Uses a hidden video element + canvas to extract frames without
-     * interfering with the user's playback.
+     * Extract thumbnails using server-side ffmpeg.
+     * Supports any codec (ProRes, HEVC, etc.) that ffmpeg can decode.
+     *
+     * Also triggers auto-HLS encoding in parallel - HLS starts immediately
+     * while user selects sprite range. Progress is shown in the main progress bar.
      */
-    generateTimelineThumbnails() {
+    extractServerThumbnails(file, content) {
+        const processBtn = content.querySelector('#hero-video-process');
+        const progressDiv = content.querySelector('.edit-hero-progress');
+        const progressFill = content.querySelector('.edit-hero-progress-fill');
+        const progressText = content.querySelector('.edit-hero-progress-text');
+
+        progressDiv.style.display = 'block';
+        progressText.textContent = 'Uploading video...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        // Pass project_slug to auto-start HLS encoding in parallel
+        formData.append('project_slug', this.projectSlug);
+
+        const xhr = new XMLHttpRequest();
+        this.activeXhr = xhr;
+
+        // Upload progress: 0-50% of bar
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const pct = (e.loaded / e.total) * 50;
+                progressFill.style.width = `${pct}%`;
+                const mb = (e.loaded / (1024 * 1024)).toFixed(1);
+                const totalMb = (e.total / (1024 * 1024)).toFixed(1);
+                progressText.textContent = `Uploading: ${mb} / ${totalMb} MB`;
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            this.activeXhr = null;
+
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const result = JSON.parse(xhr.responseText);
+                    if (result.success) {
+                        // Store temp_id for later processing
+                        this._tempId = result.temp_id;
+                        this.videoDuration = result.duration;
+
+                        // Update UI with duration
+                        content.querySelector('.edit-hero-total-time').textContent = this.formatTime(this.videoDuration);
+                        this.updateSpriteRange();
+
+                        // Render first frame immediately on timeline
+                        this.renderServerThumbnails(result.frames);
+
+                        // Start polling for remaining thumbnail frames
+                        this.pollRemainingThumbnails();
+
+                        // Enable process button
+                        processBtn.disabled = false;
+
+                        // Start HLS progress polling if session ID returned
+                        // Progress bar continues from 50% to 100% for HLS encoding
+                        if (result.hls_session_id) {
+                            this._hlsSessionId = result.hls_session_id;
+                            progressFill.style.width = '50%';
+                            progressText.textContent = 'Encoding HLS...';
+                            this.pollHlsProgress(progressFill, progressText, progressDiv);
+                        } else {
+                            progressDiv.style.display = 'none';
+                        }
+
+                        // Create hidden video element for playback (if browser supports it)
+                        this.objectUrl = URL.createObjectURL(file);
+                        this.videoEl = content.querySelector('.edit-hero-video-player');
+                        this.videoEl.src = this.objectUrl;
+
+                        // Set up video event listeners
+                        this.setupVideoListeners(content);
+                    } else {
+                        throw new Error(result.detail || 'Thumbnail extraction failed');
+                    }
+                } catch (e) {
+                    EditUtils.showNotification(`Thumbnail extraction failed: ${e.message}`, 'error');
+                    this.cancelUpload();
+                }
+            } else {
+                let msg = 'Thumbnail extraction failed';
+                try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (_) {}
+                EditUtils.showNotification(msg, 'error');
+                this.cancelUpload();
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            this.activeXhr = null;
+            EditUtils.showNotification('Network error during thumbnail extraction', 'error');
+            this.cancelUpload();
+        });
+
+        xhr.open('POST', '/api/video-thumbnails');
+        xhr.send(formData);
+    },
+
+    /**
+     * Poll for remaining thumbnail frames extracted in background.
+     */
+    pollRemainingThumbnails() {
+        const poll = async () => {
+            if (!this._tempId || this.currentView !== 'video') return;
+
+            try {
+                const res = await fetch(`/api/video-thumbnails/more/${this._tempId}`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+                // Re-render with all available frames
+                if (data.frames && data.frames.length > 0) {
+                    this.renderServerThumbnails(data.frames);
+                }
+
+                if (!data.complete) {
+                    this._thumbnailPollTimer = setTimeout(poll, 500);
+                }
+            } catch (_) {
+                // Polling error, keep trying
+                this._thumbnailPollTimer = setTimeout(poll, 1000);
+            }
+        };
+        poll();
+    },
+
+    /**
+     * Poll HLS encoding progress, updating the main progress bar.
+     * Progress bar goes from 50% to 100% during HLS encoding.
+     */
+    pollHlsProgress(progressFill, progressText, progressDiv) {
+        if (!this._hlsSessionId) return;
+
+        this._hlsPollTimer = setInterval(async () => {
+            if (!this._hlsSessionId || this.currentView !== 'video') {
+                clearInterval(this._hlsPollTimer);
+                this._hlsPollTimer = null;
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/hls-progress/${this._hlsSessionId}`);
+                if (!res.ok) return;
+
+                const data = await res.json();
+
+                if (data.status === 'complete') {
+                    clearInterval(this._hlsPollTimer);
+                    this._hlsPollTimer = null;
+                    this._hlsComplete = true;
+
+                    progressFill.style.width = '100%';
+                    progressText.textContent = 'HLS ready! Select sprite range and confirm.';
+
+                    // Hide progress bar after a moment
+                    setTimeout(() => {
+                        if (progressDiv && this.currentView === 'video') {
+                            progressDiv.style.display = 'none';
+                        }
+                    }, 1500);
+                } else if (data.status === 'error') {
+                    clearInterval(this._hlsPollTimer);
+                    this._hlsPollTimer = null;
+
+                    progressText.textContent = 'HLS encoding failed - will retry on confirm';
+                    progressFill.style.background = '#ef4444';
+
+                    setTimeout(() => {
+                        if (progressDiv && this.currentView === 'video') {
+                            progressDiv.style.display = 'none';
+                            progressFill.style.background = '';
+                        }
+                    }, 2000);
+                } else {
+                    // Map HLS progress (0-100) to bar progress (50-100)
+                    const hlsProgress = data.progress || 0;
+                    const barProgress = 50 + (hlsProgress * 0.5);
+                    progressFill.style.width = `${barProgress}%`;
+                    progressText.textContent = data.stage || `Encoding HLS... ${Math.round(hlsProgress)}%`;
+                }
+            } catch (_) {
+                // Polling error, keep trying
+            }
+        }, 1000);
+    },
+
+    /**
+     * Render server-extracted thumbnail frames on the timeline canvas.
+     */
+    renderServerThumbnails(framesB64) {
         const canvas = this.modal.querySelector('.edit-hero-timeline-thumbs');
-        if (!canvas) return;
+        if (!canvas || !framesB64 || framesB64.length === 0) return;
 
         const track = canvas.parentElement;
         const trackWidth = track.clientWidth;
         const trackHeight = track.clientHeight;
 
-        // Size canvas to match track at device pixel ratio for crisp rendering
+        // Size canvas to match track at device pixel ratio
         const dpr = window.devicePixelRatio || 1;
         canvas.width = trackWidth * dpr;
         canvas.height = trackHeight * dpr;
         const ctx = canvas.getContext('2d');
         ctx.scale(dpr, dpr);
 
-        // Determine how many thumbnails to generate (~1 per 20px)
-        const numThumbs = Math.min(Math.max(Math.floor(trackWidth / 20), 10), 60);
+        const numThumbs = framesB64.length;
         const sliceWidth = trackWidth / numThumbs;
 
-        // Create a hidden video for seeking without disturbing playback
-        const thumbVid = document.createElement('video');
-        thumbVid.muted = true;
-        thumbVid.preload = 'auto';
-        thumbVid.src = this.objectUrl;
-        this._thumbVideo = thumbVid;
-        this._thumbCanvas = canvas;
+        let loaded = 0;
 
-        let current = 0;
+        framesB64.forEach((b64Data, i) => {
+            const img = new Image();
+            img.onload = () => {
+                const x = i * sliceWidth;
+                const imgAspect = img.width / img.height;
+                const drawHeight = trackHeight;
+                const drawWidth = drawHeight * imgAspect;
+                const offsetX = x + (sliceWidth - drawWidth) / 2;
 
-        const drawNext = () => {
-            if (current >= numThumbs || !this._thumbVideo) {
-                // All frames drawn
-                canvas.classList.add('loaded');
-                if (this._thumbVideo) {
-                    this._thumbVideo.src = '';
-                    this._thumbVideo = null;
+                // Clip to this slice
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(x, 0, sliceWidth, trackHeight);
+                ctx.clip();
+                ctx.drawImage(img, offsetX, 0, drawWidth, drawHeight);
+                ctx.restore();
+
+                loaded++;
+                if (loaded === numThumbs) {
+                    canvas.classList.add('loaded');
                 }
-                return;
+            };
+            img.src = 'data:image/jpeg;base64,' + b64Data;
+        });
+    },
+
+    /**
+     * Set up video element event listeners for playback and scrubbing.
+     */
+    setupVideoListeners(content) {
+        // Video timeupdate handler
+        this.videoEl.addEventListener('timeupdate', () => {
+            this.updatePlayhead();
+            content.querySelector('.edit-hero-current-time').textContent = this.formatTime(this.videoEl.currentTime);
+
+            // Sprite loop: wrap back to start when reaching end of sprite range
+            if (this._spriteLooping && this.videoEl.currentTime >= this.spriteStart + this.spriteDuration) {
+                this.videoEl.currentTime = this.spriteStart;
             }
-
-            const time = (current + 0.5) / numThumbs * this.videoDuration;
-            thumbVid.currentTime = time;
-        };
-
-        thumbVid.addEventListener('seeked', () => {
-            if (!this._thumbVideo) return;
-            const x = current * sliceWidth;
-            // Draw the video frame scaled to fill the slice height, cropped to slice width
-            const vw = thumbVid.videoWidth || 1;
-            const vh = thumbVid.videoHeight || 1;
-            const aspect = vw / vh;
-            const drawHeight = trackHeight;
-            const drawWidth = drawHeight * aspect;
-            const offsetX = x + (sliceWidth - drawWidth) / 2;
-            // Clip to this slice
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(x, 0, sliceWidth, trackHeight);
-            ctx.clip();
-            ctx.drawImage(thumbVid, offsetX, 0, drawWidth, drawHeight);
-            ctx.restore();
-            current++;
-            // Use requestAnimationFrame to avoid blocking
-            requestAnimationFrame(drawNext);
         });
 
-        // Start once video is ready
-        thumbVid.addEventListener('loadeddata', () => {
-            drawNext();
-        }, { once: true });
+        // Timeline click — click on sprite range to loop, outside to seek freely
+        const track = content.querySelector('.edit-hero-timeline-track');
+        track.addEventListener('click', (e) => {
+            if (this._isDraggingSprite) return;
+            const rect = track.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            const time = pct * this.videoDuration;
+
+            // Check if click landed inside the sprite range
+            const spriteEnd = this.spriteStart + this.spriteDuration;
+            if (time >= this.spriteStart && time <= spriteEnd) {
+                // Activate sprite loop and play from clicked position within range
+                this._spriteLooping = true;
+                this.videoEl.currentTime = time;
+                this.videoEl.play();
+            } else {
+                // Click outside sprite range: move sprite position, disable loop
+                this._spriteLooping = false;
+                this.spriteStart = Math.max(0, Math.min(time, this.videoDuration - this.spriteDuration));
+                this.videoEl.currentTime = this.spriteStart;
+                this.updateSpriteRange();
+            }
+            this.updateSpriteLoopUI();
+        });
+
+        // Sprite range drag
+        const spriteRange = content.querySelector('.edit-hero-sprite-range');
+        spriteRange.addEventListener('mousedown', (e) => {
+            this._isDraggingSprite = true;
+            this._dragStartX = e.clientX;
+            this._dragStartTime = this.spriteStart;
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        // Double-click sprite range to toggle loop playback
+        spriteRange.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this._spriteLooping = !this._spriteLooping;
+            if (this._spriteLooping) {
+                this.videoEl.currentTime = this.spriteStart;
+                this.videoEl.play();
+            }
+            this.updateSpriteLoopUI();
+        });
+
+        this._mouseMoveHandler = (e) => {
+            if (!this._isDraggingSprite) return;
+            const rect = this.modal.querySelector('.edit-hero-timeline-track').getBoundingClientRect();
+            const dx = e.clientX - this._dragStartX;
+            const dt = (dx / rect.width) * this.videoDuration;
+            this.spriteStart = Math.max(0, Math.min(this._dragStartTime + dt, this.videoDuration - this.spriteDuration));
+            this.videoEl.currentTime = this.spriteStart;
+            this.updateSpriteRange();
+        };
+        document.addEventListener('mousemove', this._mouseMoveHandler);
+
+        this._mouseUpHandler = () => {
+            this._isDraggingSprite = false;
+        };
+        document.addEventListener('mouseup', this._mouseUpHandler);
+
+        // Arrow key adjustment
+        this._keyHandler = (e) => {
+            if (this.currentView !== 'video' || !this.modal) return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                this.spriteStart = Math.max(0, this.spriteStart - 0.5);
+                this.videoEl.currentTime = this.spriteStart;
+                this.updateSpriteRange();
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.spriteStart = Math.min(this.videoDuration - this.spriteDuration, this.spriteStart + 0.5);
+                this.videoEl.currentTime = this.spriteStart;
+                this.updateSpriteRange();
+            }
+        };
+        document.addEventListener('keydown', this._keyHandler);
     },
 
     /**
@@ -2573,11 +2831,6 @@ window.ProjectSettings = {
      * Clean up video-related state and listeners
      */
     cleanupVideoState() {
-        if (this._thumbVideo) {
-            this._thumbVideo.src = '';
-            this._thumbVideo = null;
-        }
-        this._thumbCanvas = null;
         if (this.objectUrl) {
             URL.revokeObjectURL(this.objectUrl);
             this.objectUrl = null;
@@ -2602,11 +2855,28 @@ window.ProjectSettings = {
             clearInterval(this._pollTimer);
             this._pollTimer = null;
         }
+        // Clean up HLS polling timer
+        if (this._hlsPollTimer) {
+            clearInterval(this._hlsPollTimer);
+            this._hlsPollTimer = null;
+        }
+        // Clean up thumbnail polling timer
+        if (this._thumbnailPollTimer) {
+            clearTimeout(this._thumbnailPollTimer);
+            this._thumbnailPollTimer = null;
+        }
+        if (this.activeXhr) {
+            this.activeXhr.abort();
+            this.activeXhr = null;
+        }
         this.videoEl = null;
         this.videoFile = null;
+        this._tempId = null;
         this._isDraggingSprite = false;
         this._spriteLooping = false;
-        this._noVideoTrack = false;
+        // Clean up HLS state
+        this._hlsSessionId = null;
+        this._hlsComplete = false;
     },
 
     /**
@@ -2652,9 +2922,10 @@ window.ProjectSettings = {
     },
 
     /**
-     * Upload and process the video using XHR for progress tracking
+     * Generate sprite sheet after user confirms sprite selection.
+     * HLS encoding should already be complete or in progress from thumbnail extraction.
      */
-    processVideo() {
+    async processVideo() {
         const processBtn = this.modal.querySelector('#hero-video-process');
         const cancelBtn = this.modal.querySelector('#hero-video-cancel');
         const progressDiv = this.modal.querySelector('.edit-hero-progress');
@@ -2662,110 +2933,78 @@ window.ProjectSettings = {
         const progressText = this.modal.querySelector('.edit-hero-progress-text');
 
         processBtn.disabled = true;
-        processBtn.textContent = 'Uploading...';
+        processBtn.textContent = 'Processing...';
         progressDiv.style.display = 'block';
+
+        // Show waiting message if HLS not yet complete
+        if (this._hlsSessionId && !this._hlsComplete) {
+            progressFill.style.width = '20%';
+            progressText.textContent = 'Waiting for HLS encoding to finish...';
+        } else {
+            progressFill.style.width = '30%';
+            progressText.textContent = 'Generating sprite sheet...';
+        }
 
         // beforeunload warning
         this._beforeUnloadHandler = (e) => { e.preventDefault(); e.returnValue = ''; };
         window.addEventListener('beforeunload', this._beforeUnloadHandler);
 
-        const formData = new FormData();
-        formData.append('file', this.videoFile);
-        formData.append('project_slug', this.projectSlug);
-        formData.append('sprite_start', this.spriteStart);
-        formData.append('sprite_duration', this.spriteDuration);
+        try {
+            const formData = new FormData();
+            formData.append('temp_id', this._tempId);
+            formData.append('project_slug', this.projectSlug);
+            formData.append('sprite_start', this.spriteStart);
+            formData.append('sprite_duration', this.spriteDuration);
 
-        const xhr = new XMLHttpRequest();
-        this.activeXhr = xhr;
-
-        // Upload progress: 0-40%
-        xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-                const pct = (e.loaded / e.total) * 40;
-                progressFill.style.width = `${pct}%`;
-                const mb = (e.loaded / (1024 * 1024)).toFixed(1);
-                const totalMb = (e.total / (1024 * 1024)).toFixed(1);
-                progressText.textContent = `Uploading: ${mb} / ${totalMb} MB`;
+            // Pass HLS session ID so server can wait for it if needed
+            if (this._hlsSessionId) {
+                formData.append('hls_session_id', this._hlsSessionId);
             }
-        });
 
-        xhr.addEventListener('load', () => {
-            this.activeXhr = null;
-            if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                    const result = JSON.parse(xhr.responseText);
-                    if (result.success) {
-                        // Upload done, now poll for processing progress
-                        progressFill.style.width = '40%';
-                        progressText.textContent = 'Processing on server...';
-                        this.pollProcessingProgress(progressFill, progressText, cancelBtn, processBtn);
-                    } else {
-                        throw new Error(result.detail || 'Processing failed');
-                    }
-                } catch (e) {
-                    this.handleProcessingError(e.message, processBtn, progressDiv);
-                }
+            // Stop HLS polling since the server will handle waiting
+            if (this._hlsPollTimer) {
+                clearInterval(this._hlsPollTimer);
+                this._hlsPollTimer = null;
+            }
+
+            progressFill.style.width = '50%';
+            progressText.textContent = 'Generating sprite sheet & thumbnail...';
+
+            const response = await fetch('/api/generate-sprite-sheet', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.detail || 'Sprite sheet generation failed');
+            }
+
+            const result = await response.json();
+
+            if (result.success && result.video) {
+                progressFill.style.width = '100%';
+                progressText.textContent = 'Complete!';
+
+                // Update project data with new video info
+                this.projectData.video = result.video;
+                await this.saveVideoData(result.video);
+
+                EditUtils.showNotification('Video processed successfully!', 'success');
+
+                // Return to settings view after a brief pause
+                setTimeout(() => this.showSettingsView(), 800);
             } else {
-                let msg = 'Upload failed';
-                try { msg = JSON.parse(xhr.responseText).detail || msg; } catch (_) {}
-                this.handleProcessingError(msg, processBtn, progressDiv);
+                throw new Error(result.detail || 'Processing failed');
             }
-        });
-
-        xhr.addEventListener('error', () => {
-            this.activeXhr = null;
-            this.handleProcessingError('Network error during upload', processBtn, progressDiv);
-        });
-
-        xhr.addEventListener('abort', () => {
-            this.activeXhr = null;
-        });
-
-        xhr.open('POST', '/api/process-hero-video');
-        xhr.send(formData);
-    },
-
-    /**
-     * Poll the server for processing progress after upload completes
-     */
-    pollProcessingProgress(progressFill, progressText, cancelBtn, processBtn) {
-        this._pollTimer = setInterval(async () => {
-            try {
-                const res = await fetch(`/api/process-hero-video/progress/${this.projectSlug}`);
-                if (!res.ok) return;
-
-                const data = await res.json();
-                const pct = 40 + (data.progress || 0) * 0.6; // 40-100%
-                progressFill.style.width = `${pct}%`;
-                progressText.textContent = data.stage || 'Processing...';
-
-                if (data.status === 'complete') {
-                    clearInterval(this._pollTimer);
-                    this._pollTimer = null;
-                    progressFill.style.width = '100%';
-                    progressText.textContent = 'Complete!';
-
-                    // Update project data with new video info
-                    if (data.video) {
-                        this.projectData.video = data.video;
-                        await this.saveVideoData(data.video);
-                    }
-
-                    EditUtils.showNotification('Video processed successfully!', 'success');
-
-                    // Return to settings view after a brief pause
-                    setTimeout(() => this.showSettingsView(), 800);
-                }
-
-                if (data.status === 'error') {
-                    clearInterval(this._pollTimer);
-                    this._pollTimer = null;
-                    this.handleProcessingError(data.error || 'Processing failed', processBtn, progressFill.closest('.edit-hero-progress'));
-                }
-            } catch (_) {
-                // Polling error, keep trying
+        } catch (e) {
+            this.handleProcessingError(e.message, processBtn, progressDiv);
+        } finally {
+            if (this._beforeUnloadHandler) {
+                window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+                this._beforeUnloadHandler = null;
             }
-        }, 1000);
+        }
     },
 
     /**
@@ -2779,7 +3018,7 @@ window.ProjectSettings = {
         EditUtils.showNotification(`Video processing failed: ${message}`, 'error');
         if (processBtn) {
             processBtn.disabled = false;
-            processBtn.textContent = 'Upload & Process';
+            processBtn.textContent = 'Confirm & Generate Sprite';
         }
         if (progressDiv) {
             progressDiv.style.display = 'none';
