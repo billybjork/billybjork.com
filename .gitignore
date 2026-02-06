@@ -145,3 +145,6 @@ data/
 Thumbs.db
 
 .zshrc
+
+# Working directory for sprite generation
+workdir/
