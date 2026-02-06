@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
@@ -446,6 +447,8 @@ def process_hero_video(
         if progress_callback:
             progress_callback(stage, progress)
 
+    # Use timestamp in paths to bust CDN cache when video is replaced
+    version = str(int(time.time()))
     results = {}
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -484,9 +487,9 @@ def process_hero_video(
                 else:
                     _report('HLS ready, waiting for sprite sheet...' if completed < 2 else 'Encoding complete!', 10 + completed * 20)
 
-        # Upload HLS files to S3
+        # Upload HLS files to S3 with versioned path
         s3 = get_s3_client()
-        hls_prefix = hero_hls_prefix(project_slug)
+        hls_prefix = hero_hls_prefix(project_slug, version)
         hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
         total_hls = len(hls_files)
         for i, file_path in enumerate(hls_files):
@@ -509,9 +512,9 @@ def process_hero_video(
 
         results['hls'] = f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
 
-        # Upload sprite sheet to S3
+        # Upload sprite sheet to S3 with versioned filename
         _report('Uploading sprite sheet...', 78)
-        sprite_key = hero_sprite_key(project_slug)
+        sprite_key = hero_sprite_key(project_slug, version)
         with open(sprite_path, 'rb') as f:
             s3.upload_fileobj(
                 f,
@@ -526,7 +529,7 @@ def process_hero_video(
         results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
         results['spriteMeta'] = sprite_meta
 
-        # Generate and upload thumbnail
+        # Generate and upload thumbnail with versioned filename
         _report('Generating thumbnail...', 85)
         thumb_path = os.path.join(temp_dir, 'thumb.webp')
         generate_thumbnail(
@@ -535,7 +538,7 @@ def process_hero_video(
             time=trim_start + sprite_start
         )
 
-        thumbnail_key = hero_thumbnail_key(project_slug)
+        thumbnail_key = hero_thumbnail_key(project_slug, version)
         with open(thumb_path, 'rb') as f:
             s3.upload_fileobj(
                 f,
@@ -581,15 +584,18 @@ def generate_hls_only(
         if progress_callback:
             progress_callback(stage, progress)
 
+    # Use timestamp in path to bust CDN cache when video is replaced
+    version = str(int(time.time()))
+
     with tempfile.TemporaryDirectory() as temp_dir:
         hls_dir = os.path.join(temp_dir, 'hls')
 
         _report('Generating HLS streams...', 10)
         generate_hls(video_path, hls_dir, start_time=trim_start)
 
-        # Upload HLS files to S3
+        # Upload HLS files to S3 with versioned path
         s3 = get_s3_client()
-        hls_prefix = hero_hls_prefix(project_slug)
+        hls_prefix = hero_hls_prefix(project_slug, version)
         hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
         total_hls = len(hls_files)
 
@@ -645,6 +651,8 @@ def generate_sprite_and_thumbnail(
         if progress_callback:
             progress_callback(stage, progress)
 
+    # Use timestamp in filename to bust CDN cache when assets are replaced
+    version = str(int(time.time()))
     results = {}
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -659,10 +667,10 @@ def generate_sprite_and_thumbnail(
             duration=sprite_duration,
         )
 
-        # Upload sprite sheet to S3
+        # Upload sprite sheet to S3 with versioned filename
         _report('Uploading sprite sheet...', 40)
         s3 = get_s3_client()
-        sprite_key = hero_sprite_key(project_slug)
+        sprite_key = hero_sprite_key(project_slug, version)
         with open(sprite_path, 'rb') as f:
             s3.upload_fileobj(
                 f,
@@ -686,7 +694,8 @@ def generate_sprite_and_thumbnail(
             time=sprite_start
         )
 
-        thumbnail_key = hero_thumbnail_key(project_slug)
+        # Upload thumbnail with versioned filename
+        thumbnail_key = hero_thumbnail_key(project_slug, version)
         with open(thumb_path, 'rb') as f:
             s3.upload_fileobj(
                 f,

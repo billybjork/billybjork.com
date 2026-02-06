@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from dependencies import require_dev_mode
 from utils.assets import (
+    cleanup_old_hls_versions,
     cleanup_orphans,
     compute_hash,
     delete_video_prefix,
@@ -131,6 +132,9 @@ async def save_project_endpoint(request: Request):
     keys_to_check = {extract_s3_key(url) for url in removed_urls if extract_s3_key(url)}
     if keys_to_check:
         cleanup_orphans(keys_to_check)
+
+    # Clean up old HLS versions (keeps only the current version)
+    cleanup_old_hls_versions(slug, video.get("hls"))
 
     return {"success": True, "slug": slug}
 
@@ -403,10 +407,8 @@ async def video_thumbnails(request: Request):
                         _hls_sessions[hls_session_id]["progress"] = progress
 
                 try:
-                    # Clean up old HLS files first
-                    progress_callback("Cleaning up old video files...", 2)
-                    delete_video_prefix(project_slug)
-
+                    # Note: Don't delete old files here - they're cleaned up after save
+                    # to prevent data loss if user cancels mid-upload
                     hls_url = generate_hls_only(
                         temp_path,
                         project_slug,
@@ -660,12 +662,8 @@ async def process_hero_video(request: Request):
         from utils.video import process_hero_video as process_video
 
         try:
-            # Delete old HLS segments before generating new ones.
-            # The HLS prefix is based on slug, so old .ts/.m3u8 files
-            # would otherwise accumulate across replacements.
-            progress_callback("Cleaning up old video files...", 2)
-            delete_video_prefix(project_slug)
-
+            # Note: Don't delete old files here - they're cleaned up after save
+            # to prevent data loss if user cancels mid-upload
             result = process_video(
                 temp_path,
                 project_slug,
@@ -804,11 +802,15 @@ def cleanup_old_temp_videos():
     for session_id, session in _hls_sessions.items():
         age = now - session["timestamp"]
         if age > timedelta(hours=1):
-            # If HLS completed but sprite was never requested, clean up S3 files
+            # If HLS completed but sprite was never requested, clean up orphaned version
+            # We use cleanup_old_hls_versions to preserve any currently-saved video
             if session["status"] == "complete" and session.get("slug"):
                 try:
-                    delete_video_prefix(session["slug"])
-                    logger.info(f"Cleaned up orphaned HLS files for slug: {session['slug']}")
+                    # Load project to get currently saved HLS URL
+                    project = load_project(session["slug"])
+                    current_hls = project.get("video_link") if project else None
+                    cleanup_old_hls_versions(session["slug"], current_hls)
+                    logger.info(f"Cleaned up orphaned HLS versions for slug: {session['slug']}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up HLS files for {session['slug']}: {e}")
             expired_hls_ids.append(session_id)

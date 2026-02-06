@@ -22,6 +22,7 @@ __all__ = [
     "extract_cloudfront_urls",
     "cleanup_orphans",
     "delete_video_prefix",
+    "cleanup_old_hls_versions",
 ]
 
 # Asset registry file
@@ -261,4 +262,74 @@ def delete_video_prefix(project_slug: str) -> list[str]:
         return deleted
     except Exception as e:
         logger.exception("Error deleting video prefix: %s", prefix)
+        return []
+
+
+def cleanup_old_hls_versions(project_slug: str, current_hls_url: Optional[str]) -> list[str]:
+    """
+    Delete old HLS versions, keeping only the current one.
+
+    With versioned HLS paths (videos/{slug}/{version}/), this function
+    deletes all versions except the one referenced by current_hls_url.
+
+    Args:
+        project_slug: Project slug
+        current_hls_url: The current HLS URL to keep (or None to delete all)
+
+    Returns:
+        List of keys that were deleted
+    """
+    from .content import validate_slug
+    import re
+
+    if not validate_slug(project_slug):
+        raise ValueError(f"Invalid slug: {project_slug}")
+
+    # Extract current version from URL if provided
+    # URL format: https://domain/videos/{slug}/{version}/master.m3u8
+    current_version = None
+    if current_hls_url:
+        match = re.search(rf'/videos/{re.escape(project_slug)}/(\d+)/', current_hls_url)
+        if match:
+            current_version = match.group(1)
+
+    prefix = f"videos/{project_slug}/"
+
+    try:
+        s3 = get_s3_client()
+        deleted = []
+        continuation_token = None
+
+        while True:
+            kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+            if continuation_token:
+                kwargs["ContinuationToken"] = continuation_token
+
+            response = s3.list_objects_v2(**kwargs)
+
+            for obj in response.get("Contents", []):
+                key = obj["Key"]
+                # Extract version from key: videos/{slug}/{version}/...
+                key_match = re.match(rf'videos/{re.escape(project_slug)}/(\d+)/', key)
+                if key_match:
+                    key_version = key_match.group(1)
+                    if key_version != current_version:
+                        # This is an old version, delete it
+                        if delete_file(key):
+                            deleted.append(key)
+                            logger.info("Deleted old HLS version: %s", key)
+                elif current_version is None:
+                    # No current version specified and this is a non-versioned file
+                    # (legacy format: videos/{slug}/master.m3u8)
+                    if delete_file(key):
+                        deleted.append(key)
+                        logger.info("Deleted legacy HLS file: %s", key)
+
+            if not response.get("IsTruncated"):
+                break
+            continuation_token = response.get("NextContinuationToken")
+
+        return deleted
+    except Exception as e:
+        logger.exception("Error cleaning up old HLS versions for: %s", project_slug)
         return []
