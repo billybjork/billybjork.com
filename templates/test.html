@@ -1,164 +1,933 @@
 {% extends "base.html" %}
 
-{% block main_class %}test-page{% endblock %}
+{% block main_class %}test-depth-3d{% endblock %}
 
 {% block additional_head %}
-<link rel="stylesheet" href="{{ static_url(request, 'css/depth-test.css') }}">
+<style>
+    body {
+        background: #0a0a0a;
+        margin: 0;
+        overflow-x: hidden;
+    }
+
+    .page-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    .spacer {
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #333;
+        font-size: 1.2rem;
+    }
+
+    .spacer.top { color: #555; }
+    .spacer.bottom { color: #555; }
+
+    /* Simulated project item - matches homepage structure */
+    .project-item {
+        margin-bottom: 3rem;
+    }
+
+    .project-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .thumbnail-container {
+        flex-shrink: 0;
+        width: 100%;
+        max-width: 640px;
+        aspect-ratio: 16/9;
+        background: #111;
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .thumbnail-container canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+
+    .thumbnail-debug {
+        position: absolute;
+        bottom: 0.5rem;
+        left: 0.5rem;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 0.35rem 0.6rem;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.7rem;
+        color: #888;
+        pointer-events: none;
+    }
+
+    .thumbnail-debug .value {
+        color: #fff;
+        font-weight: bold;
+    }
+
+    .thumbnail-label {
+        position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 0.35rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        color: #fff;
+        font-weight: 500;
+        pointer-events: none;
+    }
+
+    .project-info {
+        padding-top: 0.5rem;
+    }
+
+    .project-title {
+        font-size: 1.1rem;
+        color: #fff;
+        margin: 0 0 0.25rem 0;
+    }
+
+    .project-meta {
+        font-size: 0.85rem;
+        color: #666;
+    }
+
+    /* Fixed controls */
+    .controls {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: monospace;
+        color: #fff;
+        z-index: 100;
+        font-size: 0.8rem;
+    }
+
+    .controls label {
+        display: block;
+        margin-bottom: 0.75rem;
+    }
+
+    .controls input[type="range"] {
+        width: 120px;
+        margin-top: 0.25rem;
+        display: block;
+    }
+
+    .global-stats {
+        position: fixed;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-family: monospace;
+        color: #fff;
+        z-index: 100;
+        font-size: 0.8rem;
+        display: flex;
+        gap: 2rem;
+    }
+
+    .global-stats .stat-label {
+        color: #666;
+        margin-right: 0.5rem;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="test-container">
-    <h1>Depth-Layered Sprite Sheets</h1>
-    <p class="intro">
-        Stacked sprite sheets with one per depth layer (from SharpML Gaussian splats).
-        Scroll advances frames on all layers simultaneously. Mouse/tilt controls parallax between layers.
-    </p>
+<div class="page-container">
+    <div class="spacer top">↓ Scroll down to see depth thumbnails ↓</div>
 
-    <!-- Main Experiment -->
-    <section class="experiment" id="exp-stacked">
-        <h2>Stacked Depth Layers</h2>
-        <p>
-            Each depth layer has its own sprite sheet. Scroll velocity drives frame advance with momentum.
-            Mouse/tilt controls parallax offset &mdash; far layers move less, near layers move more.
-        </p>
-
-        <div class="experiment-viewport" id="viewport-stacked">
-            <div class="stacked-container" id="stacked-layers">
-                <div class="stacked-layer" data-layer="0"></div>
-                <div class="stacked-layer" data-layer="1"></div>
-                <div class="stacked-layer" data-layer="2"></div>
-                <div class="stacked-layer" data-layer="3"></div>
-                <div class="stacked-layer" data-layer="4"></div>
+    <!-- Each project item shows a different sprite set -->
+    <div class="project-item" data-sprite="somewhere-in-space">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Somewhere in Space</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">21</span>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div class="status-bar">
-            <span>Frame: <strong id="frame-display">0</strong>/<span id="frame-total">-</span></span>
-            <span>Parallax X: <strong id="parallax-x">0</strong>px</span>
-            <span>Parallax Y: <strong id="parallax-y">0</strong>px</span>
-            <div class="resolution-picker" id="resolution-picker">
-                <span class="label">Res:</span>
+    <div class="project-item" data-sprite="gravity">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Gravity</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">15</span>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div class="controls">
-            <div class="control-group">
-                <label>
-                    Parallax Intensity
-                    <input type="range" id="parallax-intensity" min="0" max="100" value="30">
-                    <span id="parallax-val">30</span>px
-                </label>
-            </div>
-            <div class="control-group">
-                <label>
-                    Temporal Speed
-                    <input type="range" id="temporal-speed" min="0" max="30" step="1" value="10">
-                    <span id="temporal-val">1.00</span>x
-                </label>
-            </div>
-            <div class="control-group">
-                <label>
-                    Layer Spread (Z)
-                    <input type="range" id="layer-spread" min="0" max="100" value="20">
-                    <span id="spread-val">20</span>px
-                </label>
-            </div>
-            <div class="control-group">
-                <label>
-                    Perspective
-                    <input type="range" id="perspective" min="200" max="2000" value="800">
-                    <span id="perspective-val">800</span>px
-                </label>
+    <div class="project-item" data-sprite="lead-me-home">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Lead Me Home</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">19</span>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div class="controls">
-            <div class="control-group">
-                <label>
-                    DOF Blur
-                    <input type="range" id="dof-blur" min="0" max="10" step="0.5" value="0">
-                    <span id="dof-val">0</span>px
-                </label>
-            </div>
-            <div class="control-group">
-                <label>
-                    Focal Layer
-                    <input type="range" id="focal-layer" min="0" max="4" step="1" value="2">
-                    <span id="focal-val">2 (mid)</span>
-                </label>
-            </div>
-            <div class="control-group">
-                <label>
-                    Scroll Parallax
-                    <input type="range" id="scroll-parallax" min="0" max="100" step="1" value="50">
-                </label>
-            </div>
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="show-layers">
-                    Show individual layers
-                </label>
+    <div class="project-item" data-sprite="surf">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Surf</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">27</span>
+                </div>
             </div>
         </div>
-    </section>
+    </div>
 
-    <!-- Layer Preview (toggled via "show layers" checkbox) -->
-    <section class="experiment layer-preview" id="layer-preview" style="display: none;">
-        <h2>Individual Layer Preview</h2>
-        <div class="layer-grid">
-            <div class="layer-preview-item">
-                <div class="layer-thumb" data-layer="0"></div>
-                <span>Layer 0 (far)</span>
-            </div>
-            <div class="layer-preview-item">
-                <div class="layer-thumb" data-layer="1"></div>
-                <span>Layer 1</span>
-            </div>
-            <div class="layer-preview-item">
-                <div class="layer-thumb" data-layer="2"></div>
-                <span>Layer 2</span>
-            </div>
-            <div class="layer-preview-item">
-                <div class="layer-thumb" data-layer="3"></div>
-                <span>Layer 3</span>
-            </div>
-            <div class="layer-preview-item">
-                <div class="layer-thumb" data-layer="4"></div>
-                <span>Layer 4 (near)</span>
-            </div>
-        </div>
-    </section>
+    <div class="spacer bottom">↑ End of thumbnails ↑</div>
+</div>
 
-    <!-- Pipeline Instructions -->
-    <section class="experiment" id="instructions">
-        <h2>Reproduce This Pipeline</h2>
-        <pre>
-# Full pipeline: HLS → frames → SharpML → depth sprite sheets
-python tools/generate_depth_sprite_sheets.py \
-    --input "https://d17y8p6t5eu2ht.cloudfront.net/videos/somewhere_in_space/master.m3u8" \
-    --output ./static/test/layered-sprites \
-    --start 0 --duration 3 --fps 5 \
-    --resolutions 320x180,640x360 \
-    --depth-layers 5
+<div class="controls">
+    <div style="border-bottom: 1px solid #333; padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+        <strong>Base Settings</strong>
+    </div>
+    <label>
+        Depth: <span id="depth-val">25</span>
+        <input type="range" id="depth-amount" min="0" max="60" value="25">
+    </label>
+    <label>
+        Tilt Range: <span id="tilt-val">20</span>°
+        <input type="range" id="tilt-range" min="5" max="45" value="20">
+    </label>
+    <label>
+        <input type="checkbox" id="show-wireframe"> Wireframe
+    </label>
 
-# With a persistent work directory (keeps frames + PLY files):
-python tools/generate_depth_sprite_sheets.py \
-    --input "https://d17y8p6t5eu2ht.cloudfront.net/videos/somewhere_in_space/master.m3u8" \
-    --output ./static/test/layered-sprites \
-    --work-dir ./workdir \
-    --start 0 --duration 3 --fps 5
+    <div style="border-bottom: 1px solid #333; padding-bottom: 0.5rem; margin-bottom: 0.5rem; margin-top: 1rem;">
+        <strong>Edge Handling</strong>
+    </div>
+    <label>
+        <input type="checkbox" id="edge-extrusion"> Edge-aware extrusion
+    </label>
+    <label>
+        <input type="checkbox" id="edge-fade"> Edge fade/darken
+    </label>
+    <label>
+        <input type="checkbox" id="normal-shading"> Normal shading
+    </label>
+    <label>
+        Edge Threshold: <span id="edge-thresh-val">0.15</span>
+        <input type="range" id="edge-threshold" min="0.01" max="0.5" step="0.01" value="0.15">
+    </label>
+    <label>
+        Edge Softness: <span id="edge-soft-val">2.0</span>
+        <input type="range" id="edge-softness" min="0.5" max="5" step="0.1" value="2.0">
+    </label>
 
-# Re-run assembly only (skip download + SharpML):
-python tools/generate_depth_sprite_sheets.py \
-    --input dummy --output ./static/test/layered-sprites \
-    --work-dir ./workdir \
-    --skip-download --skip-sharp \
-    --resolutions 320x180,640x360
-        </pre>
-    </section>
+    <div style="border-bottom: 1px solid #333; padding-bottom: 0.5rem; margin-bottom: 0.5rem; margin-top: 1rem;">
+        <strong>Debug Views</strong>
+    </div>
+    <label>
+        <input type="checkbox" id="show-depth"> Show depth
+    </label>
+    <label>
+        <input type="checkbox" id="show-edges"> Show edges
+    </label>
+    <label>
+        <input type="checkbox" id="show-normals"> Show normals
+    </label>
+</div>
+
+<div class="global-stats">
+    <div><span class="stat-label">Scroll Speed:</span><span id="global-speed">0.0</span></div>
 </div>
 {% endblock %}
 
 {% block additional_scripts %}
-<script src="{{ static_url(request, 'js/depth-test.js') }}" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    // =============================================
+    // Shaders with Edge Handling
+    // =============================================
+    const vertexShader = `
+        uniform sampler2D depthAtlas;
+        uniform float frameIndex;
+        uniform vec2 atlasSize;
+        uniform vec2 frameSize;
+        uniform float columns;
+        uniform float extrusionAmount;
+        uniform float edgeThreshold;
+        uniform bool edgeAwareExtrusion;
+
+        varying vec2 vUv;
+        varying float vDepth;
+        varying float vEdgeMask;
+        varying vec3 vNormal;
+
+        vec2 getAtlasUV(vec2 localUV, float frame) {
+            float col = mod(frame, columns);
+            float row = floor(frame / columns);
+            vec2 flippedLocalUV = vec2(localUV.x, 1.0 - localUV.y);
+            vec2 frameOffset = vec2(col * frameSize.x, row * frameSize.y);
+            return (frameOffset + flippedLocalUV * frameSize) / atlasSize;
+        }
+
+        float sampleDepth(vec2 localUV) {
+            vec2 depthUV = getAtlasUV(localUV, frameIndex);
+            return texture2D(depthAtlas, depthUV).r;
+        }
+
+        void main() {
+            vUv = uv;
+
+            // Sample depth at this vertex
+            float depth = sampleDepth(uv);
+            vDepth = depth;
+
+            // Calculate depth gradient using neighboring samples
+            vec2 texelSize = 1.0 / frameSize;
+            float depthL = sampleDepth(uv + vec2(-texelSize.x, 0.0));
+            float depthR = sampleDepth(uv + vec2(texelSize.x, 0.0));
+            float depthU = sampleDepth(uv + vec2(0.0, -texelSize.y));
+            float depthD = sampleDepth(uv + vec2(0.0, texelSize.y));
+
+            // Gradient magnitude (Sobel-like)
+            float gradX = (depthR - depthL) * 0.5;
+            float gradY = (depthD - depthU) * 0.5;
+            float gradMag = sqrt(gradX * gradX + gradY * gradY);
+
+            // Edge mask: 1 = smooth area, 0 = edge
+            vEdgeMask = 1.0 - smoothstep(edgeThreshold * 0.5, edgeThreshold, gradMag);
+
+            // Reconstruct normal from depth gradient
+            vNormal = normalize(vec3(-gradX * 10.0, -gradY * 10.0, 1.0));
+
+            // Calculate extrusion (optionally reduced at edges)
+            float extrusion = depth * extrusionAmount;
+            if (edgeAwareExtrusion) {
+                extrusion *= vEdgeMask;
+            }
+
+            vec3 displaced = position;
+            displaced.z = extrusion;
+
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+        }
+    `;
+
+    const fragmentShader = `
+        uniform sampler2D rgbAtlas;
+        uniform sampler2D depthAtlas;
+        uniform float frameIndex;
+        uniform vec2 atlasSize;
+        uniform vec2 frameSize;
+        uniform float columns;
+        uniform float edgeThreshold;
+        uniform float edgeSoftness;
+        uniform bool edgeFade;
+        uniform bool normalShading;
+        uniform bool showDepth;
+        uniform bool showEdges;
+        uniform bool showNormals;
+        uniform vec3 lightDir;
+
+        varying vec2 vUv;
+        varying float vDepth;
+        varying float vEdgeMask;
+        varying vec3 vNormal;
+
+        vec2 getAtlasUV(vec2 localUV, float frame) {
+            float col = mod(frame, columns);
+            float row = floor(frame / columns);
+            vec2 flippedLocalUV = vec2(localUV.x, 1.0 - localUV.y);
+            vec2 frameOffset = vec2(col * frameSize.x, row * frameSize.y);
+            return (frameOffset + flippedLocalUV * frameSize) / atlasSize;
+        }
+
+        void main() {
+            vec2 rgbUV = getAtlasUV(vUv, frameIndex);
+            vec4 color = texture2D(rgbAtlas, rgbUV);
+
+            // Recalculate edge in fragment for smoother result
+            vec2 texelSize = 1.0 / frameSize;
+            vec2 depthUV = getAtlasUV(vUv, frameIndex);
+
+            float depthC = texture2D(depthAtlas, depthUV).r;
+            float depthL = texture2D(depthAtlas, getAtlasUV(vUv + vec2(-texelSize.x, 0.0), frameIndex)).r;
+            float depthR = texture2D(depthAtlas, getAtlasUV(vUv + vec2(texelSize.x, 0.0), frameIndex)).r;
+            float depthU = texture2D(depthAtlas, getAtlasUV(vUv + vec2(0.0, -texelSize.y), frameIndex)).r;
+            float depthD = texture2D(depthAtlas, getAtlasUV(vUv + vec2(0.0, texelSize.y), frameIndex)).r;
+
+            float gradX = (depthR - depthL) * 0.5;
+            float gradY = (depthD - depthU) * 0.5;
+            float gradMag = sqrt(gradX * gradX + gradY * gradY);
+
+            // Edge mask with softness control
+            float edgeMask = 1.0 - smoothstep(edgeThreshold * 0.5, edgeThreshold * edgeSoftness, gradMag);
+
+            // Reconstruct normal
+            vec3 normal = normalize(vec3(-gradX * 10.0, -gradY * 10.0, 1.0));
+
+            // Debug views
+            if (showDepth) {
+                gl_FragColor = vec4(vec3(depthC), 1.0);
+                return;
+            }
+
+            if (showEdges) {
+                float edge = 1.0 - edgeMask;
+                gl_FragColor = vec4(edge, edge * 0.5, 0.0, 1.0);
+                return;
+            }
+
+            if (showNormals) {
+                gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+                return;
+            }
+
+            // Apply edge fade (darken edges)
+            if (edgeFade) {
+                color.rgb *= mix(0.3, 1.0, edgeMask);
+            }
+
+            // Apply normal-based shading
+            if (normalShading) {
+                float diffuse = max(dot(normal, lightDir), 0.0);
+                diffuse = mix(0.5, 1.0, diffuse);
+
+                float rim = 1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0);
+                rim = pow(rim, 2.0) * 0.3;
+
+                color.rgb *= diffuse;
+                color.rgb += rim * vec3(0.4, 0.5, 0.6);
+            }
+
+            gl_FragColor = color;
+        }
+    `;
+
+    const wireframeFragmentShader = `
+        varying float vEdgeMask;
+
+        void main() {
+            // Color wireframe by edge detection
+            vec3 color = mix(vec3(1.0, 0.3, 0.0), vec3(0.0, 1.0, 0.0), vEdgeMask);
+            gl_FragColor = vec4(color, 0.5);
+        }
+    `;
+
+    // =============================================
+    // Configuration
+    // =============================================
+    const config = {
+        depthAmount: 25,
+        tiltRange: 20,
+        meshSegments: 150,
+        // Edge handling
+        edgeThreshold: 0.15,
+        edgeSoftness: 2.0,
+        edgeAwareExtrusion: false,
+        edgeFade: false,
+        normalShading: false,
+        // Debug
+        showDepth: false,
+        showEdges: false,
+        showNormals: false,
+    };
+
+    const SPRITE_BASE_PATH = '/static/test/rgbd-sprites';
+    const RESOLUTION = '640x360';
+
+    // =============================================
+    // Global State
+    // =============================================
+    // Each sprite set has its own metadata and textures
+    const spriteSets = {}; // { spriteId: { metadata, rgbTexture, depthTexture } }
+
+    // Animation state (shared across all thumbnails, like homepage)
+    let animationProgress = 0;
+    let animationSpeed = 0;
+    let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    let lastScrollEventTime = Date.now();
+    let lastAnimationFrameTime = Date.now();
+    let animationFrameId = null;
+    let showWireframe = false;
+
+    // Per-thumbnail instances
+    const thumbnails = [];
+
+    // =============================================
+    // Thumbnail Instance Class
+    // =============================================
+    class DepthThumbnail {
+        constructor(canvas, spriteId) {
+            this.canvas = canvas;
+            this.container = canvas.parentElement;
+            this.spriteId = spriteId;
+            this.currentTilt = 0;
+            this.viewportPosition = 0.5;
+
+            // Get debug elements
+            const debug = this.container.querySelector('.thumbnail-debug');
+            this.debugElements = {
+                tiltAngle: debug.querySelector('.tilt-angle'),
+                frameNum: debug.querySelector('.frame-num'),
+                frameTotal: debug.querySelector('.frame-total'),
+            };
+
+            this.initThree();
+        }
+
+        get spriteData() {
+            return spriteSets[this.spriteId];
+        }
+
+        initThree() {
+            // Scene
+            this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color(0x000000);
+
+            // Renderer
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: this.canvas,
+                antialias: true,
+            });
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            // Camera
+            const aspect = this.container.clientWidth / this.container.clientHeight;
+            this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+            this.camera.position.set(0, 0, 100);
+
+            this.updateSize();
+        }
+
+        createMesh() {
+            const { metadata, rgbTexture, depthTexture } = this.spriteData;
+            const res = metadata.resolutions[RESOLUTION];
+
+            const aspect = res.frame_width / res.frame_height;
+            const segmentsX = config.meshSegments;
+            const segmentsY = Math.round(segmentsX / aspect);
+
+            const planeWidth = 80;
+            const planeHeight = planeWidth / aspect;
+            const geometry = new THREE.PlaneGeometry(
+                planeWidth, planeHeight, segmentsX, segmentsY
+            );
+
+            // Main material with all uniforms
+            this.material = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader,
+                uniforms: {
+                    rgbAtlas: { value: rgbTexture },
+                    depthAtlas: { value: depthTexture },
+                    frameIndex: { value: 0.0 },
+                    atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
+                    frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
+                    columns: { value: metadata.columns },
+                    extrusionAmount: { value: config.depthAmount },
+                    // Edge handling
+                    edgeThreshold: { value: config.edgeThreshold },
+                    edgeSoftness: { value: config.edgeSoftness },
+                    edgeAwareExtrusion: { value: config.edgeAwareExtrusion },
+                    edgeFade: { value: config.edgeFade },
+                    normalShading: { value: config.normalShading },
+                    lightDir: { value: new THREE.Vector3(0.3, 0.5, 1.0).normalize() },
+                    // Debug
+                    showDepth: { value: config.showDepth },
+                    showEdges: { value: config.showEdges },
+                    showNormals: { value: config.showNormals },
+                },
+                side: THREE.DoubleSide,
+            });
+
+            this.mesh = new THREE.Mesh(geometry, this.material);
+            this.scene.add(this.mesh);
+
+            // Wireframe with edge visualization
+            this.wireframeMaterial = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader: wireframeFragmentShader,
+                uniforms: {
+                    depthAtlas: { value: depthTexture },
+                    frameIndex: { value: 0.0 },
+                    atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
+                    frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
+                    columns: { value: metadata.columns },
+                    extrusionAmount: { value: config.depthAmount },
+                    edgeThreshold: { value: config.edgeThreshold },
+                    edgeAwareExtrusion: { value: config.edgeAwareExtrusion },
+                },
+                wireframe: true,
+                transparent: true,
+                depthTest: false,
+            });
+            this.wireframeMesh = new THREE.Mesh(geometry.clone(), this.wireframeMaterial);
+            this.wireframeMesh.visible = false;
+            this.scene.add(this.wireframeMesh);
+
+            // Update frame total in debug
+            this.debugElements.frameTotal.textContent = metadata.frames;
+        }
+
+        updateViewportPosition() {
+            const rect = this.container.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+
+            // Calculate position: 0 = element center at bottom of viewport
+            //                     0.5 = element center at center of viewport
+            //                     1 = element center at top of viewport
+            const elementCenter = rect.top + rect.height / 2;
+            this.viewportPosition = 1 - (elementCenter / viewportHeight);
+
+            // Clamp to reasonable range (allow some overshoot for smooth edges)
+            this.viewportPosition = Math.max(-0.2, Math.min(1.2, this.viewportPosition));
+        }
+
+        update(globalProgress) {
+            if (!this.material) return;
+
+            const { metadata } = this.spriteData;
+
+            // Calculate frame index for THIS sprite's frame count
+            let frameIndex = Math.floor(globalProgress) % metadata.frames;
+            if (frameIndex < 0) frameIndex += metadata.frames;
+
+            // Update viewport position
+            this.updateViewportPosition();
+
+            // Calculate tilt based on THIS element's viewport position
+            // viewportPosition: 0 = bottom (look from below), 0.5 = center, 1 = top (look from above)
+            const targetTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
+            this.currentTilt += (targetTilt - this.currentTilt) * 0.12;
+
+            // Update all uniforms
+            const u = this.material.uniforms;
+            u.frameIndex.value = frameIndex;
+            u.extrusionAmount.value = config.depthAmount;
+            u.edgeThreshold.value = config.edgeThreshold;
+            u.edgeSoftness.value = config.edgeSoftness;
+            u.edgeAwareExtrusion.value = config.edgeAwareExtrusion;
+            u.edgeFade.value = config.edgeFade;
+            u.normalShading.value = config.normalShading;
+            // Debug
+            u.showDepth.value = config.showDepth;
+            u.showEdges.value = config.showEdges;
+            u.showNormals.value = config.showNormals;
+
+            const wu = this.wireframeMaterial.uniforms;
+            wu.frameIndex.value = frameIndex;
+            wu.extrusionAmount.value = config.depthAmount;
+            wu.edgeThreshold.value = config.edgeThreshold;
+            wu.edgeAwareExtrusion.value = config.edgeAwareExtrusion;
+            this.wireframeMesh.visible = showWireframe;
+
+            // Position camera based on tilt
+            const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
+            const distance = 100;
+            this.camera.position.y = Math.sin(tiltRad) * distance * 0.5;
+            this.camera.position.z = Math.cos(tiltRad) * distance;
+            this.camera.lookAt(0, 0, config.depthAmount / 2);
+
+            // Update debug display
+            this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
+            this.debugElements.frameNum.textContent = frameIndex + 1;
+
+            // Render
+            this.renderer.render(this.scene, this.camera);
+        }
+
+        updateSize() {
+            const width = this.container.clientWidth;
+            const height = this.container.clientHeight;
+            this.renderer.setSize(width, height);
+            this.camera.aspect = width / height;
+            this.camera.updateProjectionMatrix();
+        }
+    }
+
+    // =============================================
+    // Initialization
+    // =============================================
+    async function loadSpriteSet(spriteId) {
+        const spritePath = `${SPRITE_BASE_PATH}/${spriteId}`;
+
+        // Load metadata
+        let metadata;
+        try {
+            const response = await fetch(`${spritePath}/metadata.json`);
+            metadata = await response.json();
+        } catch (err) {
+            console.error(`Failed to load metadata for ${spriteId}:`, err);
+            return null;
+        }
+
+        // Load textures
+        const loader = new THREE.TextureLoader();
+        const res = metadata.resolutions[RESOLUTION];
+
+        const [rgbTexture, depthTexture] = await Promise.all([
+            loadTexture(loader, `${spritePath}/${res.rgb_file}`),
+            loadTexture(loader, `${spritePath}/${res.depth_file}`),
+        ]);
+
+        [rgbTexture, depthTexture].forEach(tex => {
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.generateMipmaps = false;
+            tex.flipY = false;
+        });
+
+        console.log(`Loaded sprite set: ${spriteId} (${metadata.frames} frames)`);
+        return { metadata, rgbTexture, depthTexture };
+    }
+
+    async function init() {
+        // Find all project items and their sprite IDs
+        const projectItems = document.querySelectorAll('.project-item[data-sprite]');
+        const spriteIds = [...new Set([...projectItems].map(el => el.dataset.sprite))];
+
+        // Load all sprite sets in parallel
+        console.log(`Loading ${spriteIds.length} sprite sets...`);
+        const loadPromises = spriteIds.map(async id => {
+            const data = await loadSpriteSet(id);
+            if (data) spriteSets[id] = data;
+        });
+        await Promise.all(loadPromises);
+
+        console.log(`Loaded ${Object.keys(spriteSets).length} sprite sets`);
+
+        // Create thumbnail instances, each with its own sprite set
+        projectItems.forEach((item) => {
+            const canvas = item.querySelector('.depth-canvas');
+            const spriteId = item.dataset.sprite;
+
+            if (!spriteSets[spriteId]) {
+                console.warn(`Sprite set not loaded: ${spriteId}`);
+                return;
+            }
+
+            const thumbnail = new DepthThumbnail(canvas, spriteId);
+            thumbnail.createMesh();
+            thumbnails.push(thumbnail);
+        });
+
+        console.log(`Created ${thumbnails.length} depth thumbnails`);
+
+        // Event listeners
+        setupControls();
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('scroll', handleScroll);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAnimationLoop();
+            } else if (Math.abs(animationSpeed) > 0.01) {
+                startAnimationLoop();
+            }
+        });
+
+        // Start render loop
+        animate();
+    }
+
+    function loadTexture(loader, url) {
+        return new Promise((resolve, reject) => {
+            loader.load(url, resolve, undefined, reject);
+        });
+    }
+
+    // =============================================
+    // Scroll Handling (same as homepage)
+    // =============================================
+    function handleScroll() {
+        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const now = Date.now();
+        const deltaTime = (now - lastScrollEventTime) / 1000;
+
+        if (deltaTime > 0) {
+            const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime;
+
+            // Higher than homepage (3) because 3D depth makes frame changes more perceptible
+            // Tune this value: higher = slower frame advancement
+            const pixelsPerFrame = 15;
+            animationSpeed = scrollVelocity / pixelsPerFrame;
+
+            // Cap at 30 fps
+            animationSpeed = Math.max(-30, Math.min(30, animationSpeed));
+        }
+
+        lastScrollTop = currentScrollTop;
+        lastScrollEventTime = now;
+
+        if (Math.abs(animationSpeed) > 0.01) {
+            startAnimationLoop();
+        }
+    }
+
+    // =============================================
+    // Animation Loop
+    // =============================================
+    function startAnimationLoop() {
+        if (animationFrameId !== null || document.hidden) return;
+        lastAnimationFrameTime = Date.now();
+        animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    function stopAnimationLoop() {
+        if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    }
+
+    function animationLoop() {
+        if (document.hidden) {
+            stopAnimationLoop();
+            return;
+        }
+
+        const now = Date.now();
+        const deltaTime = (now - lastAnimationFrameTime) / 1000;
+        lastAnimationFrameTime = now;
+
+        // Deceleration (same as homepage)
+        const baseDeceleration = 15;
+        const speedFactor = Math.abs(animationSpeed) * 0.1;
+        const dynamicDeceleration = baseDeceleration + speedFactor;
+
+        if (animationSpeed > 0) {
+            animationSpeed = Math.max(0, animationSpeed - dynamicDeceleration * deltaTime);
+        } else if (animationSpeed < 0) {
+            animationSpeed = Math.min(0, animationSpeed + dynamicDeceleration * deltaTime);
+        }
+
+        // Update progress
+        animationProgress += animationSpeed * deltaTime;
+        if (animationProgress > 1e6) animationProgress -= 1e6;
+        if (animationProgress < -1e6) animationProgress += 1e6;
+
+        // Continue or stop
+        if (Math.abs(animationSpeed) > 0.01) {
+            animationFrameId = requestAnimationFrame(animationLoop);
+        } else {
+            animationSpeed = 0;
+            stopAnimationLoop();
+        }
+    }
+
+    // Continuous render loop
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (thumbnails.length === 0) return;
+
+        // Update all thumbnails with global progress (each calculates its own frame index)
+        thumbnails.forEach(thumb => thumb.update(animationProgress));
+
+        // Update global stats
+        document.getElementById('global-speed').textContent =
+            animationSpeed.toFixed(1);
+    }
+
+    function handleResize() {
+        thumbnails.forEach(thumb => thumb.updateSize());
+    }
+
+    // =============================================
+    // Controls
+    // =============================================
+    function setupControls() {
+        // Base settings
+        document.getElementById('depth-amount').addEventListener('input', (e) => {
+            config.depthAmount = parseInt(e.target.value);
+            document.getElementById('depth-val').textContent = config.depthAmount;
+        });
+
+        document.getElementById('tilt-range').addEventListener('input', (e) => {
+            config.tiltRange = parseInt(e.target.value);
+            document.getElementById('tilt-val').textContent = config.tiltRange;
+        });
+
+        document.getElementById('show-wireframe').addEventListener('change', (e) => {
+            showWireframe = e.target.checked;
+        });
+
+        // Edge handling
+        document.getElementById('edge-extrusion').addEventListener('change', (e) => {
+            config.edgeAwareExtrusion = e.target.checked;
+        });
+
+        document.getElementById('edge-fade').addEventListener('change', (e) => {
+            config.edgeFade = e.target.checked;
+        });
+
+        document.getElementById('normal-shading').addEventListener('change', (e) => {
+            config.normalShading = e.target.checked;
+        });
+
+        document.getElementById('edge-threshold').addEventListener('input', (e) => {
+            config.edgeThreshold = parseFloat(e.target.value);
+            document.getElementById('edge-thresh-val').textContent = config.edgeThreshold.toFixed(2);
+        });
+
+        document.getElementById('edge-softness').addEventListener('input', (e) => {
+            config.edgeSoftness = parseFloat(e.target.value);
+            document.getElementById('edge-soft-val').textContent = config.edgeSoftness.toFixed(1);
+        });
+
+        // Debug views (mutually exclusive)
+        const debugCheckboxes = ['show-depth', 'show-edges', 'show-normals'];
+        debugCheckboxes.forEach(id => {
+            document.getElementById(id).addEventListener('change', (e) => {
+                // Turn off other debug views
+                if (e.target.checked) {
+                    debugCheckboxes.forEach(otherId => {
+                        if (otherId !== id) {
+                            document.getElementById(otherId).checked = false;
+                            config[toCamelCase(otherId)] = false;
+                        }
+                    });
+                }
+                config[toCamelCase(id)] = e.target.checked;
+            });
+        });
+    }
+
+    function toCamelCase(str) {
+        return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+    }
+
+    // Start
+    init();
+})();
+</script>
 {% endblock %}
