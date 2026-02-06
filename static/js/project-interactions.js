@@ -252,8 +252,10 @@
      * @returns {Promise}
      */
     const setupHLSPlayer = (videoElement, autoplay = false) => {
+        console.log('[HLS] setupHLSPlayer called', { autoplay });
         return new Promise((resolve, reject) => {
             const streamUrl = videoElement.dataset.hlsUrl;
+            console.log('[HLS] Stream URL:', streamUrl);
             if (!streamUrl) {
                 console.error('No HLS URL provided for video element');
                 reject('No HLS URL provided');
@@ -276,6 +278,9 @@
             };
 
             const canPlayNative = videoElement.canPlayType('application/vnd.apple.mpegurl');
+            console.log('[HLS] Native HLS support:', canPlayNative ? 'yes' : 'no');
+            console.log('[HLS] HLS.js loaded:', !!window.Hls);
+            console.log('[HLS] HLS.js supported:', window.Hls ? Hls.isSupported() : 'n/a');
 
             const initializeHls = () => {
                 if (!window.Hls || !Hls.isSupported()) {
@@ -295,12 +300,30 @@
                     videoElement.hlsInstance.destroy();
                 }
 
-                const hls = new Hls();
+                const hls = new Hls({
+                    // Assume 5 Mbps bandwidth initially (enough for 1080p)
+                    // This starts playback at higher quality instead of lowest
+                    abrEwmaDefaultEstimate: 5000000,
+                    // Don't load 4K/1440p for small player viewports
+                    capLevelToPlayerSize: true,
+                });
                 videoElement.hlsInstance = hls;  // Store instance for cleanup
                 hls.loadSource(streamUrl);
                 hls.attachMedia(videoElement);
                 hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-                    hls.on(Hls.Events.MANIFEST_PARSED, initializeVideo);
+                    hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                        console.log('[HLS] Available quality levels:');
+                        hls.levels.forEach((level, i) => {
+                            console.log(`  [${i}] ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
+                        });
+                        console.log(`[HLS] Starting level: ${hls.startLevel} (auto: ${hls.autoLevelEnabled})`);
+                        console.log(`[HLS] Current level: ${hls.currentLevel}, Next level: ${hls.nextLevel}`);
+                        initializeVideo();
+                    });
+                });
+                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    const level = hls.levels[data.level];
+                    console.log(`[HLS] Switched to level ${data.level}: ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
                 });
                 hls.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
@@ -335,21 +358,32 @@
                 });
             };
 
+            // Always try to load HLS.js first (gives us quality control)
+            // Only fall back to native if HLS.js isn't supported
             if (window.Hls && Hls.isSupported()) {
+                console.log('[HLS] Using HLS.js (already loaded)');
                 initializeHls();
                 return;
             }
 
-            if (!window.Hls && canPlayNative) {
-                videoElement.src = streamUrl;
-                videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
-                return;
-            }
-
+            console.log('[HLS] Loading HLS.js script...');
             loadHlsScript()
-                .then(initializeHls)
+                .then(() => {
+                    if (Hls.isSupported()) {
+                        console.log('[HLS] HLS.js loaded and supported, using HLS.js');
+                        initializeHls();
+                    } else if (canPlayNative) {
+                        console.log('[HLS] HLS.js not supported, falling back to native');
+                        videoElement.src = streamUrl;
+                        videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
+                    } else {
+                        console.error('HLS is not supported in this browser');
+                        reject('HLS is not supported');
+                    }
+                })
                 .catch(err => {
                     if (canPlayNative) {
+                        console.log('[HLS] HLS.js failed to load, falling back to native');
                         videoElement.src = streamUrl;
                         videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
                         return;
