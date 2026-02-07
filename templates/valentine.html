@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <meta name="description" content="{{ page_meta_description }}">
+    <meta property="og:title" content="{{ page_title }}">
+    <meta property="og:description" content="{{ page_meta_description }}">
+    <meta property="og:type" content="website">
+    <link rel="icon" type="image/x-icon" href="/static/assets/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Pacifico&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/valentine/valentine.css">
+</head>
+<body>
+    <div class="floating-hearts-bg" id="floatingHearts"></div>
+
+    <div class="page">
+        <section class="text-section hero">
+            <h1>Will You Be My Valentine?</h1>
+            <div class="scroll-hint">
+                <span class="scroll-arrow">↓</span>
+            </div>
+        </section>
+    </div>
+
+    <div id="collage" class="collage-container"></div>
+
+    <div class="page">
+        <section class="text-section finale">
+            <h2>So... what do you say?</h2>
+            <div class="button-container">
+                <button class="yes-btn" id="yesBtn">Yes!</button>
+                <button class="no-btn" id="noBtn">Let me think...</button>
+            </div>
+            <p id="response" class="response-text"></p>
+        </section>
+    </div>
+
+    <script src="/static/valentine/valentine.js"></script>
+</body>
+</html>

@@ -11,7 +11,7 @@ from config import templates
 from middleware.cache_control import CacheControlMiddleware
 from middleware.forwarded_proto import ForwardedProtoMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
-from routers import admin, api, feed, pages, test
+from routers import admin, api, feed, pages, test, valentine
 from utils.analytics import init_db
 
 load_dotenv()
@@ -34,6 +34,7 @@ app.include_router(api.router)
 app.include_router(admin.router)
 app.include_router(feed.router)
 app.include_router(test.router)
+app.include_router(valentine.router)
 app.include_router(pages.router)
 
 
