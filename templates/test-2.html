@@ -1,0 +1,1318 @@
+{% extends "base.html" %}
+
+{% block main_class %}test-depth-pointcloud{% endblock %}
+
+{% block additional_head %}
+<style>
+    body {
+        background: #0a0a0a;
+        margin: 0;
+        overflow-x: hidden;
+    }
+
+    .page-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    .spacer {
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #333;
+        font-size: 1.2rem;
+    }
+
+    .spacer.top { color: #555; }
+    .spacer.bottom { color: #555; }
+
+    .project-item {
+        margin-bottom: 3rem;
+    }
+
+    .project-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .thumbnail-container {
+        flex-shrink: 0;
+        width: 100%;
+        max-width: 640px;
+        aspect-ratio: 16/9;
+        background: #111;
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .thumbnail-container canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+
+    .thumbnail-debug {
+        position: absolute;
+        bottom: 0.5rem;
+        left: 0.5rem;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 0.35rem 0.6rem;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.7rem;
+        color: #888;
+        pointer-events: none;
+    }
+
+    .thumbnail-debug .value {
+        color: #fff;
+        font-weight: bold;
+    }
+
+    .thumbnail-label {
+        position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 0.35rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        color: #fff;
+        font-weight: 500;
+        pointer-events: none;
+    }
+
+    .project-info {
+        padding-top: 0.5rem;
+    }
+
+    .project-title {
+        font-size: 1.1rem;
+        color: #fff;
+        margin: 0 0 0.25rem 0;
+    }
+
+    .project-meta {
+        font-size: 0.85rem;
+        color: #666;
+    }
+
+    /* Fixed controls */
+    .controls {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: monospace;
+        color: #fff;
+        z-index: 100;
+        font-size: 0.8rem;
+        max-height: 90vh;
+        overflow-y: auto;
+        transition: width 0.2s ease, padding 0.2s ease;
+    }
+
+    .controls.collapsed {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .controls-toggle {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 0.25rem;
+        line-height: 1;
+        transition: color 0.15s ease;
+    }
+
+    .controls-toggle:hover {
+        color: #fff;
+    }
+
+    .controls.collapsed .controls-toggle {
+        position: static;
+        display: block;
+        width: 100%;
+        padding: 0.75rem;
+        text-align: center;
+        color: #666;
+    }
+
+    .controls.collapsed .controls-toggle:hover {
+        color: #fff;
+    }
+
+    .controls-content {
+        padding-right: 1.5rem;
+    }
+
+    .controls.collapsed .controls-content {
+        display: none;
+    }
+
+    .controls label {
+        display: block;
+        margin-bottom: 0.75rem;
+    }
+
+    .controls input[type="range"] {
+        width: 120px;
+        margin-top: 0.25rem;
+        display: block;
+    }
+
+    .controls-section {
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .controls-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .controls-section strong {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    .global-stats {
+        position: fixed;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.9);
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-family: monospace;
+        color: #fff;
+        z-index: 100;
+        font-size: 0.8rem;
+        display: flex;
+        gap: 2rem;
+    }
+
+    .global-stats .stat-label {
+        color: #666;
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="spacer top">↓ Scroll down to see point cloud depth thumbnails ↓</div>
+
+    <div class="project-item" data-sprite="somewhere-in-space">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Somewhere in Space</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">21</span> |
+                    <span class="value coherence-val">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="project-item" data-sprite="gravity">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Gravity</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">15</span> |
+                    <span class="value coherence-val">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="project-item" data-sprite="lead-me-home">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Lead Me Home</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">19</span> |
+                    <span class="value coherence-val">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="project-item" data-sprite="surf">
+        <div class="project-header">
+            <div class="thumbnail-container">
+                <canvas class="depth-canvas"></canvas>
+                <div class="thumbnail-label">Surf</div>
+                <div class="thumbnail-debug">
+                    Tilt: <span class="value tilt-angle">0°</span> |
+                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">27</span> |
+                    <span class="value coherence-val">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="spacer bottom">↑ End of thumbnails ↑</div>
+</div>
+
+<div class="controls" id="controls-panel">
+    <button class="controls-toggle" id="controls-toggle" title="Hide controls">×</button>
+    <div class="controls-content">
+        <div class="controls-section">
+            <strong>Base Settings</strong>
+            <label>
+                Point Density: <span id="density-val">0.5</span>
+                <input type="range" id="point-density" min="0.1" max="1.0" step="0.05" value="0.5">
+            </label>
+            <label>
+                Point Size: <span id="size-val">2.0</span>
+                <input type="range" id="point-size" min="0.5" max="8.0" step="0.25" value="2.0">
+            </label>
+            <label>
+                Depth (Edge): <span id="depth-val">25</span>
+                <input type="range" id="depth-amount" min="0" max="60" value="25">
+            </label>
+            <label>
+                Tilt Range: <span id="tilt-val">20</span>°
+                <input type="range" id="tilt-range" min="5" max="45" value="20">
+            </label>
+            <label>
+                Mouse Parallax: <span id="parallax-val">12</span>
+                <input type="range" id="mouse-parallax" min="0" max="30" value="12">
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Viewport Coherence</strong>
+            <label>
+                Depth (Center): <span id="depth-center-val">8</span>
+                <input type="range" id="depth-center" min="0" max="30" value="8">
+            </label>
+            <label>
+                Scatter (Center): <span id="scatter-center-val">0.0</span>
+                <input type="range" id="scatter-center" min="0" max="1.0" step="0.05" value="0">
+            </label>
+            <label>
+                Transition Curve: <span id="transition-curve-val">0.6</span>
+                <input type="range" id="transition-curve" min="0.2" max="2.0" step="0.1" value="0.6">
+            </label>
+            <label>
+                Opacity (Edge): <span id="opacity-edge-val">0.85</span>
+                <input type="range" id="opacity-edge" min="0.3" max="1.0" step="0.05" value="0.85">
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Point Cloud Style</strong>
+            <label>
+                Point Shape:
+                <select id="point-shape">
+                    <option value="soft" selected>Soft/Gaussian</option>
+                    <option value="circle">Circle</option>
+                    <option value="square">Square</option>
+                </select>
+            </label>
+            <label>
+                <input type="checkbox" id="size-attenuation" checked> Size attenuation
+            </label>
+            <label>
+                Depth Sizing: <span id="depth-sizing-val">1.2</span>
+                <input type="range" id="depth-sizing" min="1.0" max="2.0" step="0.05" value="1.2">
+            </label>
+            <label>
+                Opacity (Center): <span id="opacity-val">1.0</span>
+                <input type="range" id="opacity" min="0.1" max="1.0" step="0.05" value="1.0">
+            </label>
+            <label>
+                <input type="checkbox" id="depth-opacity"> Depth-based opacity
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Creative Effects</strong>
+            <label>
+                Scatter (Edge): <span id="scatter-val">0.8</span>
+                <input type="range" id="edge-scatter" min="0" max="2.0" step="0.1" value="0.8">
+            </label>
+            <label>
+                Scatter Threshold: <span id="edge-thresh-val">0.15</span>
+                <input type="range" id="edge-threshold" min="0.01" max="0.5" step="0.01" value="0.15">
+            </label>
+            <label>
+                <input type="checkbox" id="dof-enable"> Depth of field
+            </label>
+            <label>
+                DOF Focal Depth: <span id="dof-focal-val">0.5</span>
+                <input type="range" id="dof-focal" min="0" max="1.0" step="0.05" value="0.5">
+            </label>
+            <label>
+                DOF Strength: <span id="dof-strength-val">1.0</span>
+                <input type="range" id="dof-strength" min="0.1" max="3.0" step="0.1" value="1.0">
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Color Mode</strong>
+            <label>
+                <select id="color-mode">
+                    <option value="original" selected>Original RGB</option>
+                    <option value="depth">Depth Colorized</option>
+                    <option value="normal">Normal Colorized</option>
+                    <option value="blend">Blend</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Debug Views</strong>
+            <label>
+                <input type="checkbox" id="show-depth"> Show depth
+            </label>
+            <label>
+                <input type="checkbox" id="show-edges"> Show edges
+            </label>
+            <label>
+                <input type="checkbox" id="show-density"> Show point density
+            </label>
+        </div>
+    </div>
+</div>
+
+<div class="global-stats">
+    <div><span class="stat-label">Scroll Speed:</span><span id="global-speed">0.0</span></div>
+</div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    // =============================================
+    // Point Cloud Shaders
+    // =============================================
+    const vertexShader = `
+        uniform sampler2D depthAtlas;
+        uniform sampler2D rgbAtlas;
+        uniform float frameIndex;
+        uniform vec2 atlasSize;
+        uniform vec2 frameSize;
+        uniform float columns;
+        uniform float depthAmount;
+        uniform float pointSize;
+        uniform float depthSizing;
+        uniform bool sizeAttenuation;
+        uniform float edgeScatter;
+        uniform float edgeThreshold;
+        uniform float time;
+
+        attribute vec2 pixelUV;
+
+        varying vec2 vUv;
+        varying float vDepth;
+        varying float vEdgeMask;
+        varying vec3 vNormal;
+        varying vec3 vColor;
+
+        // Simple hash for noise
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+
+        vec2 getAtlasUV(vec2 localUV, float frame) {
+            float col = mod(frame, columns);
+            float row = floor(frame / columns);
+            vec2 flippedLocalUV = vec2(localUV.x, 1.0 - localUV.y);
+            vec2 frameOffset = vec2(col * frameSize.x, row * frameSize.y);
+            return (frameOffset + flippedLocalUV * frameSize) / atlasSize;
+        }
+
+        float sampleDepth(vec2 localUV) {
+            vec2 depthUV = getAtlasUV(localUV, frameIndex);
+            return texture2D(depthAtlas, depthUV).r;
+        }
+
+        void main() {
+            vUv = pixelUV;
+
+            // Sample depth at this point
+            float depth = sampleDepth(pixelUV);
+            vDepth = depth;
+
+            // Sample color
+            vec2 rgbUV = getAtlasUV(pixelUV, frameIndex);
+            vColor = texture2D(rgbAtlas, rgbUV).rgb;
+
+            // Calculate depth gradient for edge detection
+            vec2 texelSize = 1.0 / frameSize;
+            float depthL = sampleDepth(pixelUV + vec2(-texelSize.x, 0.0));
+            float depthR = sampleDepth(pixelUV + vec2(texelSize.x, 0.0));
+            float depthU = sampleDepth(pixelUV + vec2(0.0, -texelSize.y));
+            float depthD = sampleDepth(pixelUV + vec2(0.0, texelSize.y));
+
+            // Gradient magnitude (Sobel-like)
+            float gradX = (depthR - depthL) * 0.5;
+            float gradY = (depthD - depthU) * 0.5;
+            float gradMag = sqrt(gradX * gradX + gradY * gradY);
+
+            // Edge mask: 1 = smooth area, 0 = edge
+            vEdgeMask = 1.0 - smoothstep(edgeThreshold * 0.5, edgeThreshold, gradMag);
+
+            // Reconstruct normal from depth gradient
+            vNormal = normalize(vec3(-gradX * 10.0, -gradY * 10.0, 1.0));
+
+            // Calculate 3D position from UV and depth
+            // Map UV (0-1) to plane coordinates (-40 to 40 for 16:9 aspect)
+            float planeWidth = 80.0;
+            float planeHeight = 45.0;
+            vec3 pos;
+            pos.x = (pixelUV.x - 0.5) * planeWidth;
+            pos.y = (pixelUV.y - 0.5) * planeHeight;
+            pos.z = depth * depthAmount;
+
+            // Edge scatter effect - disperse points at depth discontinuities
+            if (edgeScatter > 0.0) {
+                float edgeFactor = 1.0 - vEdgeMask;
+                float noiseX = hash(pixelUV + frameIndex * 0.1) * 2.0 - 1.0;
+                float noiseY = hash(pixelUV.yx + frameIndex * 0.1 + 100.0) * 2.0 - 1.0;
+                float noiseZ = hash(pixelUV * 2.0 + frameIndex * 0.1 + 200.0) * 2.0 - 1.0;
+
+                float scatterAmount = edgeFactor * edgeScatter;
+                pos.x += noiseX * scatterAmount * 3.0;
+                pos.y += noiseY * scatterAmount * 2.0;
+                pos.z += noiseZ * scatterAmount * depthAmount * 0.3;
+            }
+
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+
+            // Point size calculation
+            float size = pointSize;
+
+            // Depth-based sizing (closer points slightly larger)
+            size *= mix(1.0, depthSizing, depth);
+
+            // Size attenuation based on distance from camera
+            if (sizeAttenuation) {
+                size *= (300.0 / -mvPosition.z);
+            }
+
+            gl_PointSize = size;
+        }
+    `;
+
+    const fragmentShader = `
+        uniform float opacity;
+        uniform bool depthOpacity;
+        uniform int pointShape; // 0 = soft, 1 = circle, 2 = square
+        uniform int colorMode; // 0 = original, 1 = depth, 2 = normal, 3 = blend
+        uniform bool showDepth;
+        uniform bool showEdges;
+        uniform bool showDensity;
+        uniform bool dofEnable;
+        uniform float dofFocal;
+        uniform float dofStrength;
+
+        varying vec2 vUv;
+        varying float vDepth;
+        varying float vEdgeMask;
+        varying vec3 vNormal;
+        varying vec3 vColor;
+
+        // Viridis-like colormap for depth visualization
+        vec3 viridis(float t) {
+            const vec3 c0 = vec3(0.267, 0.004, 0.329);
+            const vec3 c1 = vec3(0.282, 0.140, 0.457);
+            const vec3 c2 = vec3(0.253, 0.265, 0.529);
+            const vec3 c3 = vec3(0.191, 0.407, 0.556);
+            const vec3 c4 = vec3(0.127, 0.566, 0.550);
+            const vec3 c5 = vec3(0.267, 0.678, 0.480);
+            const vec3 c6 = vec3(0.478, 0.761, 0.363);
+            const vec3 c7 = vec3(0.741, 0.843, 0.215);
+            const vec3 c8 = vec3(0.993, 0.906, 0.144);
+
+            t = clamp(t, 0.0, 1.0);
+            float idx = t * 7.0;
+            int i = int(floor(idx));
+            float f = fract(idx);
+
+            if (i == 0) return mix(c0, c1, f);
+            if (i == 1) return mix(c1, c2, f);
+            if (i == 2) return mix(c2, c3, f);
+            if (i == 3) return mix(c3, c4, f);
+            if (i == 4) return mix(c4, c5, f);
+            if (i == 5) return mix(c5, c6, f);
+            if (i == 6) return mix(c6, c7, f);
+            return mix(c7, c8, f);
+        }
+
+        void main() {
+            vec2 pc = gl_PointCoord - 0.5;
+            float dist = length(pc);
+
+            // Point shape
+            float alpha = 1.0;
+            if (pointShape == 0) {
+                // Soft/Gaussian falloff
+                alpha = exp(-dist * dist * 8.0);
+            } else if (pointShape == 1) {
+                // Circle - hard edge
+                if (dist > 0.5) discard;
+            }
+            // pointShape == 2 is square, no modification needed
+
+            // Debug views
+            if (showDepth) {
+                gl_FragColor = vec4(vec3(vDepth), alpha * opacity);
+                return;
+            }
+
+            if (showEdges) {
+                float edge = 1.0 - vEdgeMask;
+                gl_FragColor = vec4(edge, edge * 0.5, 0.0, alpha * opacity);
+                return;
+            }
+
+            if (showDensity) {
+                // Visualize as grid pattern
+                vec2 grid = fract(vUv * 20.0);
+                float g = step(0.1, grid.x) * step(0.1, grid.y);
+                gl_FragColor = vec4(vec3(g * 0.5 + 0.5), alpha * opacity);
+                return;
+            }
+
+            // Color modes
+            vec3 color;
+            if (colorMode == 0) {
+                // Original RGB
+                color = vColor;
+            } else if (colorMode == 1) {
+                // Depth colorized
+                color = viridis(vDepth);
+            } else if (colorMode == 2) {
+                // Normal colorized
+                color = vNormal * 0.5 + 0.5;
+            } else {
+                // Blend - mix original with depth color
+                color = mix(vColor, viridis(vDepth), 0.3);
+            }
+
+            // Opacity adjustments
+            float finalOpacity = opacity * alpha;
+
+            // Depth-based opacity (fade distant points)
+            if (depthOpacity) {
+                finalOpacity *= mix(0.3, 1.0, vDepth);
+            }
+
+            // Depth of field effect
+            if (dofEnable) {
+                float dofDist = abs(vDepth - dofFocal);
+                float blur = dofDist * dofStrength;
+                // Simulate bokeh by making out-of-focus points larger but more transparent
+                finalOpacity *= 1.0 / (1.0 + blur * 2.0);
+            }
+
+            gl_FragColor = vec4(color, finalOpacity);
+        }
+    `;
+
+    // =============================================
+    // Configuration
+    // =============================================
+    const config = {
+        // Base settings (these are the "edge" / exploded values)
+        pointDensity: 0.5,
+        pointSize: 2.0,
+        depthAmount: 25,          // Depth at edges (exploded)
+        tiltRange: 20,
+        mouseParallax: 12,
+        // Viewport coherence - interpolation between edge (exploded) and center (coherent)
+        depthAmountCenter: 8,     // Depth at center (coherent) - flatter, clearer
+        edgeScatterCenter: 0,     // Scatter at center (coherent) - no scatter, clean
+        opacityEdge: 0.85,        // Opacity at edges - slightly transparent/ethereal
+        transitionCurve: 0.6,     // Power curve: <1 = wider center zone, >1 = narrower
+        // Point cloud style
+        pointShape: 0, // 0 = soft, 1 = circle, 2 = square
+        sizeAttenuation: true,
+        depthSizing: 1.2,
+        opacity: 1.0,             // Opacity at center (coherent) - full opacity
+        depthOpacity: false,
+        // Creative effects (these are the "edge" / exploded values)
+        edgeScatter: 0.8,         // Scatter at edges (exploded) - high dispersion
+        edgeThreshold: 0.15,
+        dofEnable: false,
+        dofFocal: 0.5,
+        dofStrength: 1.0,
+        // Color mode
+        colorMode: 0, // 0 = original, 1 = depth, 2 = normal, 3 = blend
+        // Debug
+        showDepth: false,
+        showEdges: false,
+        showDensity: false,
+    };
+
+    const SPRITE_BASE_PATH = '/static/test/rgbd-sprites';
+    const RESOLUTION = '640x360';
+
+    // =============================================
+    // Global State
+    // =============================================
+    const spriteSets = {};
+    let animationProgress = 0;
+    let animationSpeed = 0;
+    let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    let lastScrollEventTime = Date.now();
+    let lastAnimationFrameTime = Date.now();
+    let animationFrameId = null;
+
+    // Global mouse position (normalized -1 to 1 across viewport)
+    let globalMouseX = 0;
+    let globalMouseY = 0;
+
+    // Device orientation
+    let deviceX = 0;
+    let deviceY = 0;
+    let hasDeviceOrientation = false;
+
+    const thumbnails = [];
+
+    // Track mouse globally across the entire page
+    function setupGlobalMouseTracking() {
+        window.addEventListener('mousemove', (e) => {
+            globalMouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            globalMouseY = (e.clientY / window.innerHeight) * 2 - 1;
+        });
+
+        window.addEventListener('mouseleave', () => {
+            // Smoothly return to center when mouse leaves window
+            globalMouseX = 0;
+            globalMouseY = 0;
+        });
+    }
+
+    // =============================================
+    // Point Cloud Thumbnail Class
+    // =============================================
+    class PointCloudThumbnail {
+        constructor(canvas, spriteId) {
+            this.canvas = canvas;
+            this.container = canvas.parentElement;
+            this.spriteId = spriteId;
+            this.currentTilt = 0;
+            this.currentPanX = 0;
+            this.currentPanY = 0;
+            this.viewportPosition = 0.5;
+            this.pointCount = 0;
+
+            const debug = this.container.querySelector('.thumbnail-debug');
+            this.debugElements = {
+                tiltAngle: debug.querySelector('.tilt-angle'),
+                frameNum: debug.querySelector('.frame-num'),
+                frameTotal: debug.querySelector('.frame-total'),
+                coherenceVal: debug.querySelector('.coherence-val'),
+            };
+
+            // Track current coherence for smooth transitions
+            this.currentCoherence = 0;
+
+            this.initThree();
+        }
+
+        get spriteData() {
+            return spriteSets[this.spriteId];
+        }
+
+        initThree() {
+            this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color(0x000000);
+
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: this.canvas,
+                antialias: true,
+            });
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            const aspect = this.container.clientWidth / this.container.clientHeight;
+            this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+            this.camera.position.set(0, 0, 100);
+
+            this.updateSize();
+        }
+
+        createPointCloud() {
+            const { metadata, rgbTexture, depthTexture } = this.spriteData;
+            const res = metadata.resolutions[RESOLUTION];
+
+            // Generate UV grid based on density
+            const density = config.pointDensity;
+            const stride = Math.max(1, Math.round(1 / density));
+            const pointsX = Math.ceil(res.frame_width / stride);
+            const pointsY = Math.ceil(res.frame_height / stride);
+            this.pointCount = pointsX * pointsY;
+
+            // Create UV coordinates for each point
+            const uvs = new Float32Array(this.pointCount * 2);
+            let idx = 0;
+            for (let y = 0; y < pointsY; y++) {
+                for (let x = 0; x < pointsX; x++) {
+                    uvs[idx++] = (x * stride + stride / 2) / res.frame_width;
+                    uvs[idx++] = (y * stride + stride / 2) / res.frame_height;
+                }
+            }
+
+            // Create geometry
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('pixelUV', new THREE.BufferAttribute(uvs, 2));
+            // Need a position attribute for Three.js, but we compute actual positions in shader
+            const positions = new Float32Array(this.pointCount * 3);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            // Material
+            this.material = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader,
+                uniforms: {
+                    rgbAtlas: { value: rgbTexture },
+                    depthAtlas: { value: depthTexture },
+                    frameIndex: { value: 0.0 },
+                    atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
+                    frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
+                    columns: { value: metadata.columns },
+                    depthAmount: { value: config.depthAmount },
+                    pointSize: { value: config.pointSize },
+                    depthSizing: { value: config.depthSizing },
+                    sizeAttenuation: { value: config.sizeAttenuation },
+                    edgeScatter: { value: config.edgeScatter },
+                    edgeThreshold: { value: config.edgeThreshold },
+                    time: { value: 0.0 },
+                    opacity: { value: config.opacity },
+                    depthOpacity: { value: config.depthOpacity },
+                    pointShape: { value: config.pointShape },
+                    colorMode: { value: config.colorMode },
+                    showDepth: { value: config.showDepth },
+                    showEdges: { value: config.showEdges },
+                    showDensity: { value: config.showDensity },
+                    dofEnable: { value: config.dofEnable },
+                    dofFocal: { value: config.dofFocal },
+                    dofStrength: { value: config.dofStrength },
+                },
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.NormalBlending,
+            });
+
+            this.points = new THREE.Points(geometry, this.material);
+            this.scene.add(this.points);
+
+            // Update debug
+            this.debugElements.frameTotal.textContent = metadata.frames;
+        }
+
+        rebuildPointCloud() {
+            // Remove old points
+            if (this.points) {
+                this.scene.remove(this.points);
+                this.points.geometry.dispose();
+                this.material.dispose();
+            }
+            this.createPointCloud();
+        }
+
+        updateViewportPosition() {
+            const rect = this.container.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const elementCenter = rect.top + rect.height / 2;
+            this.viewportPosition = 1 - (elementCenter / viewportHeight);
+            this.viewportPosition = Math.max(-0.2, Math.min(1.2, this.viewportPosition));
+        }
+
+        update(globalProgress, time) {
+            if (!this.material) return;
+
+            const { metadata } = this.spriteData;
+
+            let frameIndex = Math.floor(globalProgress) % metadata.frames;
+            if (frameIndex < 0) frameIndex += metadata.frames;
+
+            this.updateViewportPosition();
+
+            // =============================================
+            // Viewport-aware coherence calculation
+            // =============================================
+            // distanceFromCenter: 0 at center, 1 at edges
+            const distanceFromCenter = Math.abs((this.viewportPosition - 0.5) * 2);
+            // Clamp to 0-1 range
+            const clampedDistance = Math.min(1, Math.max(0, distanceFromCenter));
+            // Apply power curve: <1 = wider center zone, >1 = narrower center zone
+            const curvedDistance = Math.pow(clampedDistance, config.transitionCurve);
+            // coherence: 1 at center (coherent), 0 at edges (exploded)
+            const targetCoherence = 1 - curvedDistance;
+            // Smooth the coherence transition
+            this.currentCoherence += (targetCoherence - this.currentCoherence) * 0.1;
+
+            // Interpolate parameters based on coherence
+            // coherence = 1 → center values (coherent)
+            // coherence = 0 → edge values (exploded)
+            const effectiveDepth = config.depthAmountCenter +
+                (config.depthAmount - config.depthAmountCenter) * (1 - this.currentCoherence);
+            const effectiveScatter = config.edgeScatterCenter +
+                (config.edgeScatter - config.edgeScatterCenter) * (1 - this.currentCoherence);
+            const effectiveOpacity = config.opacityEdge +
+                (config.opacity - config.opacityEdge) * this.currentCoherence;
+
+            // =============================================
+            // Camera positioning
+            // =============================================
+            const scrollTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
+
+            // Use global mouse position (or device orientation on mobile)
+            let inputX = globalMouseX;
+            let inputY = -globalMouseY; // Invert Y for natural feel
+
+            if (hasDeviceOrientation) {
+                inputX = deviceX;
+                inputY = deviceY;
+            }
+
+            const targetPanX = inputX * config.mouseParallax;
+            const targetPanY = inputY * config.mouseParallax * 0.6;
+            const targetTilt = scrollTilt;
+
+            // Smooth interpolation - faster response for mouse, slower for scroll tilt
+            this.currentTilt += (targetTilt - this.currentTilt) * 0.12;
+            this.currentPanX += (targetPanX - this.currentPanX) * 0.15;
+            this.currentPanY += (targetPanY - this.currentPanY) * 0.15;
+
+            // =============================================
+            // Update uniforms with viewport-aware values
+            // =============================================
+            const u = this.material.uniforms;
+            u.frameIndex.value = frameIndex;
+            u.depthAmount.value = effectiveDepth;
+            u.pointSize.value = config.pointSize;
+            u.depthSizing.value = config.depthSizing;
+            u.sizeAttenuation.value = config.sizeAttenuation;
+            u.edgeScatter.value = effectiveScatter;
+            u.edgeThreshold.value = config.edgeThreshold;
+            u.time.value = time;
+            u.opacity.value = effectiveOpacity;
+            u.depthOpacity.value = config.depthOpacity;
+            u.pointShape.value = config.pointShape;
+            u.colorMode.value = config.colorMode;
+            u.showDepth.value = config.showDepth;
+            u.showEdges.value = config.showEdges;
+            u.showDensity.value = config.showDensity;
+            u.dofEnable.value = config.dofEnable;
+            u.dofFocal.value = config.dofFocal;
+            u.dofStrength.value = config.dofStrength;
+
+            // Position camera based on tilt and mouse pan
+            const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
+            const distance = 100;
+            // X: mouse left/right panning
+            this.camera.position.x = this.currentPanX;
+            // Y: scroll-based tilt + mouse up/down offset
+            this.camera.position.y = Math.sin(tiltRad) * distance * 0.5 + this.currentPanY;
+            // Z: maintain distance based on tilt angle
+            this.camera.position.z = Math.cos(tiltRad) * distance;
+            // Look at center of the depth volume, offset by mouse pan for true parallax
+            this.camera.lookAt(this.currentPanX * 0.3, this.currentPanY * 0.3, effectiveDepth / 2);
+
+            // Update debug display
+            this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
+            this.debugElements.frameNum.textContent = frameIndex + 1;
+            this.debugElements.coherenceVal.textContent = Math.round(this.currentCoherence * 100) + '%';
+
+            this.renderer.render(this.scene, this.camera);
+        }
+
+        updateSize() {
+            const width = this.container.clientWidth;
+            const height = this.container.clientHeight;
+            this.renderer.setSize(width, height);
+            this.camera.aspect = width / height;
+            this.camera.updateProjectionMatrix();
+        }
+    }
+
+    // =============================================
+    // Initialization
+    // =============================================
+    async function loadSpriteSet(spriteId) {
+        const spritePath = `${SPRITE_BASE_PATH}/${spriteId}`;
+
+        let metadata;
+        try {
+            const response = await fetch(`${spritePath}/metadata.json`);
+            metadata = await response.json();
+        } catch (err) {
+            console.error(`Failed to load metadata for ${spriteId}:`, err);
+            return null;
+        }
+
+        const loader = new THREE.TextureLoader();
+        const res = metadata.resolutions[RESOLUTION];
+
+        const [rgbTexture, depthTexture] = await Promise.all([
+            loadTexture(loader, `${spritePath}/${res.rgb_file}`),
+            loadTexture(loader, `${spritePath}/${res.depth_file}`),
+        ]);
+
+        [rgbTexture, depthTexture].forEach(tex => {
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.generateMipmaps = false;
+            tex.flipY = false;
+        });
+
+        console.log(`Loaded sprite set: ${spriteId} (${metadata.frames} frames)`);
+        return { metadata, rgbTexture, depthTexture };
+    }
+
+    function loadTexture(loader, url) {
+        return new Promise((resolve, reject) => {
+            loader.load(url, resolve, undefined, reject);
+        });
+    }
+
+    async function init() {
+        const projectItems = document.querySelectorAll('.project-item[data-sprite]');
+        const spriteIds = [...new Set([...projectItems].map(el => el.dataset.sprite))];
+
+        console.log(`Loading ${spriteIds.length} sprite sets...`);
+        const loadPromises = spriteIds.map(async id => {
+            const data = await loadSpriteSet(id);
+            if (data) spriteSets[id] = data;
+        });
+        await Promise.all(loadPromises);
+
+        console.log(`Loaded ${Object.keys(spriteSets).length} sprite sets`);
+
+        projectItems.forEach((item) => {
+            const canvas = item.querySelector('.depth-canvas');
+            const spriteId = item.dataset.sprite;
+
+            if (!spriteSets[spriteId]) {
+                console.warn(`Sprite set not loaded: ${spriteId}`);
+                return;
+            }
+
+            const thumbnail = new PointCloudThumbnail(canvas, spriteId);
+            thumbnail.createPointCloud();
+            thumbnails.push(thumbnail);
+        });
+
+        console.log(`Created ${thumbnails.length} point cloud thumbnails`);
+
+        setupGlobalMouseTracking();
+        setupControls();
+        setupDeviceOrientation();
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('scroll', handleScroll);
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAnimationLoop();
+            } else if (Math.abs(animationSpeed) > 0.01) {
+                startAnimationLoop();
+            }
+        });
+
+        animate();
+    }
+
+    function setupDeviceOrientation() {
+        // Only attempt device orientation on touch devices (mobile/tablet)
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (!isTouchDevice) return;
+
+        if (window.DeviceOrientationEvent) {
+            // Request permission on iOS 13+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // Need user gesture to request permission
+                document.body.addEventListener('click', function requestPermission() {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(response => {
+                            if (response === 'granted') {
+                                enableDeviceOrientation();
+                            }
+                        })
+                        .catch(console.error);
+                    document.body.removeEventListener('click', requestPermission);
+                }, { once: true });
+            } else {
+                enableDeviceOrientation();
+            }
+        }
+    }
+
+    function enableDeviceOrientation() {
+        window.addEventListener('deviceorientation', (e) => {
+            // Only enable device orientation if we get meaningful values
+            // This prevents desktop browsers from overriding mouse input
+            if (e.gamma !== null && e.beta !== null && (Math.abs(e.gamma) > 1 || Math.abs(e.beta) > 1)) {
+                hasDeviceOrientation = true;
+                // gamma = left/right tilt (-90 to 90)
+                // beta = front/back tilt (-180 to 180)
+                deviceX = (e.gamma || 0) / 45; // Normalize to roughly -1..1
+                deviceY = (e.beta || 0) / 45;
+                // Clamp
+                deviceX = Math.max(-1, Math.min(1, deviceX));
+                deviceY = Math.max(-1, Math.min(1, deviceY));
+            }
+        });
+    }
+
+    // =============================================
+    // Scroll Handling
+    // =============================================
+    function handleScroll() {
+        const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const now = Date.now();
+        const deltaTime = (now - lastScrollEventTime) / 1000;
+
+        if (deltaTime > 0) {
+            const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime;
+            const pixelsPerFrame = 15;
+            animationSpeed = scrollVelocity / pixelsPerFrame;
+            animationSpeed = Math.max(-30, Math.min(30, animationSpeed));
+        }
+
+        lastScrollTop = currentScrollTop;
+        lastScrollEventTime = now;
+
+        if (Math.abs(animationSpeed) > 0.01) {
+            startAnimationLoop();
+        }
+    }
+
+    // =============================================
+    // Animation Loop
+    // =============================================
+    function startAnimationLoop() {
+        if (animationFrameId !== null || document.hidden) return;
+        lastAnimationFrameTime = Date.now();
+        animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    function stopAnimationLoop() {
+        if (animationFrameId !== null) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+    }
+
+    function animationLoop() {
+        if (document.hidden) {
+            stopAnimationLoop();
+            return;
+        }
+
+        const now = Date.now();
+        const deltaTime = (now - lastAnimationFrameTime) / 1000;
+        lastAnimationFrameTime = now;
+
+        const baseDeceleration = 15;
+        const speedFactor = Math.abs(animationSpeed) * 0.1;
+        const dynamicDeceleration = baseDeceleration + speedFactor;
+
+        if (animationSpeed > 0) {
+            animationSpeed = Math.max(0, animationSpeed - dynamicDeceleration * deltaTime);
+        } else if (animationSpeed < 0) {
+            animationSpeed = Math.min(0, animationSpeed + dynamicDeceleration * deltaTime);
+        }
+
+        animationProgress += animationSpeed * deltaTime;
+        if (animationProgress > 1e6) animationProgress -= 1e6;
+        if (animationProgress < -1e6) animationProgress += 1e6;
+
+        if (Math.abs(animationSpeed) > 0.01) {
+            animationFrameId = requestAnimationFrame(animationLoop);
+        } else {
+            animationSpeed = 0;
+            stopAnimationLoop();
+        }
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        if (thumbnails.length === 0) return;
+
+        const time = performance.now() / 1000;
+        thumbnails.forEach(thumb => thumb.update(animationProgress, time));
+
+        document.getElementById('global-speed').textContent = animationSpeed.toFixed(1);
+    }
+
+    function handleResize() {
+        thumbnails.forEach(thumb => thumb.updateSize());
+    }
+
+
+    // =============================================
+    // Controls
+    // =============================================
+    function setupControls() {
+        // Toggle collapse/expand
+        const controlsPanel = document.getElementById('controls-panel');
+        const toggleBtn = document.getElementById('controls-toggle');
+
+        toggleBtn.addEventListener('click', () => {
+            controlsPanel.classList.toggle('collapsed');
+            toggleBtn.textContent = controlsPanel.classList.contains('collapsed') ? '☰' : '×';
+            toggleBtn.title = controlsPanel.classList.contains('collapsed') ? 'Show controls' : 'Hide controls';
+        });
+
+        // Base settings
+        document.getElementById('point-density').addEventListener('input', (e) => {
+            config.pointDensity = parseFloat(e.target.value);
+            document.getElementById('density-val').textContent = config.pointDensity.toFixed(2);
+            // Rebuild point clouds with new density
+            thumbnails.forEach(t => t.rebuildPointCloud());
+        });
+
+        document.getElementById('point-size').addEventListener('input', (e) => {
+            config.pointSize = parseFloat(e.target.value);
+            document.getElementById('size-val').textContent = config.pointSize.toFixed(1);
+        });
+
+        document.getElementById('depth-amount').addEventListener('input', (e) => {
+            config.depthAmount = parseInt(e.target.value);
+            document.getElementById('depth-val').textContent = config.depthAmount;
+        });
+
+        document.getElementById('tilt-range').addEventListener('input', (e) => {
+            config.tiltRange = parseInt(e.target.value);
+            document.getElementById('tilt-val').textContent = config.tiltRange;
+        });
+
+        document.getElementById('mouse-parallax').addEventListener('input', (e) => {
+            config.mouseParallax = parseInt(e.target.value);
+            document.getElementById('parallax-val').textContent = config.mouseParallax;
+        });
+
+        // Viewport coherence
+        document.getElementById('depth-center').addEventListener('input', (e) => {
+            config.depthAmountCenter = parseInt(e.target.value);
+            document.getElementById('depth-center-val').textContent = config.depthAmountCenter;
+        });
+
+        document.getElementById('scatter-center').addEventListener('input', (e) => {
+            config.edgeScatterCenter = parseFloat(e.target.value);
+            document.getElementById('scatter-center-val').textContent = config.edgeScatterCenter.toFixed(2);
+        });
+
+        document.getElementById('transition-curve').addEventListener('input', (e) => {
+            config.transitionCurve = parseFloat(e.target.value);
+            document.getElementById('transition-curve-val').textContent = config.transitionCurve.toFixed(1);
+        });
+
+        document.getElementById('opacity-edge').addEventListener('input', (e) => {
+            config.opacityEdge = parseFloat(e.target.value);
+            document.getElementById('opacity-edge-val').textContent = config.opacityEdge.toFixed(2);
+        });
+
+        // Point cloud style
+        document.getElementById('point-shape').addEventListener('change', (e) => {
+            const shapes = { 'soft': 0, 'circle': 1, 'square': 2 };
+            config.pointShape = shapes[e.target.value];
+        });
+
+        document.getElementById('size-attenuation').addEventListener('change', (e) => {
+            config.sizeAttenuation = e.target.checked;
+        });
+
+        document.getElementById('depth-sizing').addEventListener('input', (e) => {
+            config.depthSizing = parseFloat(e.target.value);
+            document.getElementById('depth-sizing-val').textContent = config.depthSizing.toFixed(2);
+        });
+
+        document.getElementById('opacity').addEventListener('input', (e) => {
+            config.opacity = parseFloat(e.target.value);
+            document.getElementById('opacity-val').textContent = config.opacity.toFixed(2);
+        });
+
+        document.getElementById('depth-opacity').addEventListener('change', (e) => {
+            config.depthOpacity = e.target.checked;
+        });
+
+        // Creative effects
+        document.getElementById('edge-scatter').addEventListener('input', (e) => {
+            config.edgeScatter = parseFloat(e.target.value);
+            document.getElementById('scatter-val').textContent = config.edgeScatter.toFixed(1);
+        });
+
+        document.getElementById('edge-threshold').addEventListener('input', (e) => {
+            config.edgeThreshold = parseFloat(e.target.value);
+            document.getElementById('edge-thresh-val').textContent = config.edgeThreshold.toFixed(2);
+        });
+
+        document.getElementById('dof-enable').addEventListener('change', (e) => {
+            config.dofEnable = e.target.checked;
+        });
+
+        document.getElementById('dof-focal').addEventListener('input', (e) => {
+            config.dofFocal = parseFloat(e.target.value);
+            document.getElementById('dof-focal-val').textContent = config.dofFocal.toFixed(2);
+        });
+
+        document.getElementById('dof-strength').addEventListener('input', (e) => {
+            config.dofStrength = parseFloat(e.target.value);
+            document.getElementById('dof-strength-val').textContent = config.dofStrength.toFixed(1);
+        });
+
+        // Color mode
+        document.getElementById('color-mode').addEventListener('change', (e) => {
+            const modes = { 'original': 0, 'depth': 1, 'normal': 2, 'blend': 3 };
+            config.colorMode = modes[e.target.value];
+        });
+
+        // Debug views (mutually exclusive)
+        const debugCheckboxes = ['show-depth', 'show-edges', 'show-density'];
+        debugCheckboxes.forEach(id => {
+            document.getElementById(id).addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    debugCheckboxes.forEach(otherId => {
+                        if (otherId !== id) {
+                            document.getElementById(otherId).checked = false;
+                            config[toCamelCase(otherId)] = false;
+                        }
+                    });
+                }
+                config[toCamelCase(id)] = e.target.checked;
+            });
+        });
+    }
+
+    function toCamelCase(str) {
+        return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+    }
+
+    // Start
+    init();
+})();
+</script>
+{% endblock %}
