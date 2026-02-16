@@ -25,6 +25,11 @@ body.editing {
     overflow-x: hidden;
 }
 
+/* Prevent background scrolling when modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+
 /* ========================================
    Toolbar
    ======================================== */
@@ -1010,9 +1015,11 @@ body.editing {
     position: relative;
     width: 90%;
     max-width: 480px;
+    max-height: 90vh;
     background: #1a1a1a;
     border-radius: 12px;
-    overflow: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .edit-create-header,

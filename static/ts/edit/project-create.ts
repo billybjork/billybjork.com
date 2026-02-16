@@ -3,7 +3,7 @@
  * Handles creating new projects with name, slug, date, and draft/pinned options
  */
 
-import { showNotification, fetchJSON, withShowDrafts } from '../core/utils';
+import { showNotification, fetchJSON, withShowDrafts, lockBodyScroll, unlockBodyScroll } from '../core/utils';
 
 interface ProjectCreateState {
   modal: HTMLElement | null;
@@ -68,7 +68,7 @@ const ProjectCreate: ProjectCreateState & {
     `;
 
     document.body.appendChild(this.modal);
-    document.body.classList.add('modal-open');
+    lockBodyScroll();
 
     this.setupEventListeners();
 
@@ -186,7 +186,7 @@ const ProjectCreate: ProjectCreateState & {
       this.modal.remove();
       this.modal = null;
     }
-    document.body.classList.remove('modal-open');
+    unlockBodyScroll();
   },
 };
 

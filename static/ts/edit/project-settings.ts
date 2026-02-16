@@ -3,7 +3,7 @@
  * Handles project metadata editing, hero video upload, and sprite range selection
  */
 
-import { showNotification, fetchJSON, withShowDrafts } from '../core/utils';
+import { showNotification, fetchJSON, withShowDrafts, lockBodyScroll, unlockBodyScroll } from '../core/utils';
 
 const MIN_SPRITE_DURATION = 1;
 const MAX_SPRITE_DURATION = 6;
@@ -184,7 +184,7 @@ const ProjectSettings: ProjectSettingsState & {
     `;
 
     document.body.appendChild(this.modal);
-    document.body.classList.add('modal-open');
+    lockBodyScroll();
 
     this.renderSettingsView();
     this.setupBaseListeners();
@@ -1022,48 +1022,80 @@ const ProjectSettings: ProjectSettingsState & {
     ctx.clearRect(0, 0, trackWidth, trackHeight);
 
     const numThumbs = framesB64.length;
-    const sliceWidth = trackWidth / numThumbs;
-
+    const loadedImages: Array<HTMLImageElement | null> = new Array(numThumbs).fill(null);
     let completed = 0;
+
+    const drawSlice = (img: HTMLImageElement, index: number): void => {
+      // Integer slice boundaries avoid hairline seams.
+      const x0 = Math.floor((index * trackWidth) / numThumbs);
+      const x1 = index === numThumbs - 1
+        ? trackWidth
+        : Math.floor(((index + 1) * trackWidth) / numThumbs);
+      const drawWidth = Math.max(1, x1 - x0);
+
+      // "Cover" crop so each slice fills destination without squish.
+      const srcAspect = img.width / img.height;
+      const dstAspect = drawWidth / trackHeight;
+      let sx = 0;
+      let sy = 0;
+      let sw = img.width;
+      let sh = img.height;
+
+      if (srcAspect > dstAspect) {
+        sw = Math.max(1, Math.round(img.height * dstAspect));
+        sx = Math.max(0, Math.floor((img.width - sw) / 2));
+      } else if (srcAspect < dstAspect) {
+        sh = Math.max(1, Math.round(img.width / dstAspect));
+        sy = Math.max(0, Math.floor((img.height - sh) / 2));
+      }
+
+      // Slight overlap hides anti-aliased seam artifacts between slices.
+      const dstX = Math.max(0, x0 - (index > 0 ? 1 : 0));
+      const dstW = Math.min(trackWidth - dstX, drawWidth + (index > 0 ? 1 : 0));
+      ctx.drawImage(img, sx, sy, sw, sh, dstX, 0, dstW, trackHeight);
+    };
+
+    const finishOne = (): void => {
+      completed++;
+      if (completed !== numThumbs) return;
+
+      ctx.clearRect(0, 0, trackWidth, trackHeight);
+
+      // Fill any failed slots with nearest valid neighbor to avoid visible holes.
+      let lastValid: HTMLImageElement | null = null;
+      for (let i = 0; i < numThumbs; i++) {
+        const current = loadedImages[i] ?? null;
+        if (current) {
+          lastValid = current;
+        } else if (lastValid) {
+          loadedImages[i] = lastValid;
+        }
+      }
+      let nextValid: HTMLImageElement | null = null;
+      for (let i = numThumbs - 1; i >= 0; i--) {
+        const current = loadedImages[i] ?? null;
+        if (current) {
+          nextValid = current;
+        } else if (nextValid) {
+          loadedImages[i] = nextValid;
+        }
+      }
+
+      for (let i = 0; i < numThumbs; i++) {
+        const img = loadedImages[i];
+        if (img) drawSlice(img, i);
+      }
+
+      canvas.classList.add('loaded');
+    };
 
     framesB64.forEach((b64Data, i) => {
       const img = new Image();
-      const finalizeSlice = (): void => {
-        completed++;
-        if (completed === numThumbs) {
-          canvas.classList.add('loaded');
-        }
-      };
-
       img.onload = (): void => {
-        // Use integer slice boundaries to avoid hairline seams between frames.
-        const x0 = Math.round(i * sliceWidth);
-        const x1 = Math.round((i + 1) * sliceWidth);
-        const drawWidth = Math.max(1, x1 - x0);
-
-        // Draw with "cover" behavior to avoid horizontal squish in narrow slices.
-        const srcAspect = img.width / img.height;
-        const dstAspect = drawWidth / trackHeight;
-        let sx = 0;
-        let sy = 0;
-        let sw = img.width;
-        let sh = img.height;
-
-        if (srcAspect > dstAspect) {
-          // Source is wider than destination: crop equally from left/right.
-          sw = Math.max(1, Math.round(img.height * dstAspect));
-          sx = Math.max(0, Math.floor((img.width - sw) / 2));
-        } else if (srcAspect < dstAspect) {
-          // Source is taller than destination: crop equally from top/bottom.
-          sh = Math.max(1, Math.round(img.width / dstAspect));
-          sy = Math.max(0, Math.floor((img.height - sh) / 2));
-        }
-
-        ctx.drawImage(img, sx, sy, sw, sh, x0, 0, drawWidth, trackHeight);
-
-        finalizeSlice();
+        loadedImages[i] = img;
+        finishOne();
       };
-      img.onerror = finalizeSlice;
+      img.onerror = finishOne;
       img.src = 'data:image/jpeg;base64,' + b64Data;
     });
   },
@@ -1526,6 +1558,12 @@ const ProjectSettings: ProjectSettingsState & {
     processBtn.textContent = 'Processing...';
     progressDiv.style.display = 'block';
 
+    // Stop thumbnail polling once processing begins to avoid stale temp_id fetches.
+    if (this._thumbnailPollTimer) {
+      clearTimeout(this._thumbnailPollTimer);
+      this._thumbnailPollTimer = null;
+    }
+
     // Stop the regular HLS polling - we'll start processing-specific polling
     if (this._hlsPollTimer) {
       clearInterval(this._hlsPollTimer);
@@ -1594,8 +1632,12 @@ const ProjectSettings: ProjectSettingsState & {
     window.addEventListener('beforeunload', this._beforeUnloadHandler);
 
     try {
+      const processingTempId = this._tempId;
+      // Detach state so any deferred poll callback exits before issuing requests.
+      this._tempId = null;
+
       const formData = new FormData();
-      if (this._tempId) formData.append('temp_id', this._tempId);
+      if (processingTempId) formData.append('temp_id', processingTempId);
       if (this.projectSlug) formData.append('project_slug', this.projectSlug);
       formData.append('sprite_start', String(this.spriteStart));
       formData.append('sprite_duration', String(this.spriteDuration));
@@ -1809,7 +1851,7 @@ const ProjectSettings: ProjectSettingsState & {
       this.modal.remove();
       this.modal = null;
     }
-    document.body.classList.remove('modal-open');
+    unlockBodyScroll();
   },
 };
 
