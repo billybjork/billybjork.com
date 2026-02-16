@@ -134,9 +134,9 @@ def generate_hls(
     stream_maps = []
 
     for i, (width, height, bitrate) in enumerate(resolutions):
+        # Keep source aspect ratio (no letterbox padding) so portrait videos remain portrait.
         filter_complex.append(
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2[v{i}]"
+            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[v{i}]"
         )
         maps.extend(['-map', f'[v{i}]', '-map', '0:a?'])
         stream_maps.append(f'v:{i},a:{i}')
@@ -377,41 +377,37 @@ def extract_thumbnail_frames(
     if duration <= 0:
         raise ValueError("Invalid video duration")
 
-    # Calculate frame timestamps (evenly distributed)
-    frame_times = [i * duration / max(num_frames - 1, 1) for i in range(num_frames)]
+    if num_frames <= 0:
+        raise ValueError("num_frames must be greater than 0")
 
+    # Single-pass extraction keeps frame ordering stable and avoids repeated seeks.
+    fps = num_frames / duration
     frames_b64 = []
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        for i, timestamp in enumerate(frame_times):
-            output_path = os.path.join(temp_dir, f'thumb_{i:03d}.jpg')
+        output_pattern = os.path.join(temp_dir, 'thumb_%03d.jpg')
+        cmd = [
+            'ffmpeg',
+            '-y',
+            '-i', video_path,
+            '-an',
+            '-vf',
+            f'fps={fps:.6f},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}',
+            '-frames:v', str(num_frames),
+            '-q:v', '5',
+            output_pattern
+        ]
 
-            # Use -ss before -i for fast keyframe seeking
-            cmd = [
-                'ffmpeg',
-                '-y',
-                '-ss', str(timestamp),
-                '-i', video_path,
-                '-vframes', '1',
-                # Use cover-style scaling so each frame fully fills the timeline slice.
-                '-vf', f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}',
-                '-q:v', '5',
-                output_path
-            ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise ValueError(f"Failed to extract timeline thumbnails: {result.stderr}")
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                # Skip failed frames rather than failing entire extraction
-                continue
-
-            # Read and encode as base64
-            try:
-                with open(output_path, 'rb') as f:
-                    frame_data = f.read()
-                    b64_str = base64.b64encode(frame_data).decode('utf-8')
-                    frames_b64.append(b64_str)
-            except Exception:
-                continue
+        frame_paths = sorted(Path(temp_dir).glob('thumb_*.jpg'))
+        for frame_path in frame_paths[:num_frames]:
+            with open(frame_path, 'rb') as f:
+                frame_data = f.read()
+                b64_str = base64.b64encode(frame_data).decode('utf-8')
+                frames_b64.append(b64_str)
 
     if not frames_b64:
         raise ValueError("Failed to extract any frames from video")
