@@ -104,8 +104,3 @@ export function isDividerBlock(block: Block): block is DividerBlock {
 export function isRowBlock(block: Block): block is RowBlock {
   return block.type === 'row';
 }
-
-/**
- * Block creation options (partial block without id)
- */
-export type BlockCreateOptions<T extends Block> = Omit<T, 'id' | 'type'>;

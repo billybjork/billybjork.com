@@ -465,13 +465,6 @@ export async function insertLink(
 }
 
 /**
- * Apply text alignment CSS to element
- */
-export function applyTextAlignment(element: HTMLElement, align: Alignment | undefined): void {
-  element.style.textAlign = align || 'left';
-}
-
-/**
  * Get CSS style string for text alignment
  */
 export function getTextAlignmentStyle(align: Alignment | undefined): string {
@@ -769,7 +762,6 @@ export const EditUtils = {
   handleFormattingShortcuts,
   findLinkAtCursor,
   insertLink,
-  applyTextAlignment,
   getTextAlignmentStyle,
   parseTextAlignmentFromStyle,
   handleListShortcuts,
