@@ -22,8 +22,7 @@
       "@types/*": ["./types/*"],
       "@core/*": ["./core/*"],
       "@edit/*": ["./edit/*"],
-      "@project/*": ["./project/*"],
-      "@visualization/*": ["./visualization/*"]
+      "@project/*": ["./project/*"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },

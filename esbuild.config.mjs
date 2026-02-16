@@ -10,7 +10,6 @@ const isWatch = process.argv.includes('--watch');
 const entryPoints = {
   'project-bundle': 'static/ts/project/index.ts',
   'edit-bundle': 'static/ts/edit/index.ts',
-  'three-bundle': 'static/ts/visualization/index.ts',
 };
 
 // Filter to only existing entry points
@@ -35,12 +34,6 @@ const buildOptions = {
   minify: !isWatch,
   metafile: true,
   logLevel: 'info',
-
-  // Externals - these are loaded via CDN
-  external: ['three'],
-
-  // Global names for externals
-  globalName: undefined,
 
   // Define globals for external libraries
   define: {

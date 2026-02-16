@@ -74,11 +74,8 @@ interface Window {
 
   // Project modules
   ProjectLoader: typeof import('../project/loader').default;
-  ProjectSettings?: unknown;
-  ProjectCreate?: unknown;
-
-  // Three.js visualization module
-  ThreeVisualization?: typeof import('../visualization/index');
+  ProjectSettings: typeof import('../edit/project-settings').default;
+  ProjectCreate: typeof import('../edit/project-create').default;
 
   // Utility functions
   copyToClipboard: (text: string, message?: string) => void;
@@ -90,5 +87,4 @@ interface Window {
   // External libraries
   Hls: typeof Hls;
   Prism: typeof Prism;
-  THREE: typeof import('three');
 }
