@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true,
+    "outDir": "./static/js",
+    "rootDir": "./static/ts",
+    "baseUrl": "./static/ts",
+    "paths": {
+      "@/*": ["./*"],
+      "@types/*": ["./types/*"],
+      "@core/*": ["./core/*"],
+      "@edit/*": ["./edit/*"],
+      "@project/*": ["./project/*"],
+      "@visualization/*": ["./visualization/*"]
+    },
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["static/ts/**/*.ts"],
+  "exclude": ["node_modules", "static/js"]
+}

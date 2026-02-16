@@ -148,3 +148,7 @@ Thumbs.db
 
 # Working directory for sprite generation
 workdir/
+
+# Node.js / TypeScript
+node_modules/
+*.js.map
