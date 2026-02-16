@@ -2927,7 +2927,6 @@ window.ProjectSettings = {
      */
     async processVideo() {
         const processBtn = this.modal.querySelector('#hero-video-process');
-        const cancelBtn = this.modal.querySelector('#hero-video-cancel');
         const progressDiv = this.modal.querySelector('.edit-hero-progress');
         const progressFill = this.modal.querySelector('.edit-hero-progress-fill');
         const progressText = this.modal.querySelector('.edit-hero-progress-text');
@@ -2936,13 +2935,57 @@ window.ProjectSettings = {
         processBtn.textContent = 'Processing...';
         progressDiv.style.display = 'block';
 
-        // Show waiting message if HLS not yet complete
+        // Stop the regular HLS polling - we'll start processing-specific polling
+        if (this._hlsPollTimer) {
+            clearInterval(this._hlsPollTimer);
+            this._hlsPollTimer = null;
+        }
+
+        // Set initial progress based on HLS state
+        // Progress ranges: 20-80% for HLS encoding, 80-95% for sprite generation, 95-100% for saving
         if (this._hlsSessionId && !this._hlsComplete) {
             progressFill.style.width = '20%';
-            progressText.textContent = 'Waiting for HLS encoding to finish...';
+            progressText.textContent = 'Encoding video...';
         } else {
-            progressFill.style.width = '30%';
-            progressText.textContent = 'Generating sprite sheet...';
+            progressFill.style.width = '80%';
+            progressText.textContent = 'Generating sprite sheet & thumbnail...';
+        }
+
+        // Start processing-mode HLS polling if HLS not yet complete
+        // This continues updating progress while the sprite generation request is in flight
+        let processingPollTimer = null;
+        if (this._hlsSessionId && !this._hlsComplete) {
+            processingPollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/hls-progress/${this._hlsSessionId}`);
+                    if (!res.ok) return;
+
+                    const data = await res.json();
+
+                    if (data.status === 'complete') {
+                        clearInterval(processingPollTimer);
+                        processingPollTimer = null;
+                        this._hlsComplete = true;
+                        // HLS done - now show sprite generation progress
+                        progressFill.style.width = '80%';
+                        progressText.textContent = 'Generating sprite sheet & thumbnail...';
+                    } else if (data.status === 'error') {
+                        clearInterval(processingPollTimer);
+                        processingPollTimer = null;
+                        // Error will be handled by the server response
+                    } else {
+                        // Map HLS progress (0-100) to bar progress (20-80)
+                        const hlsProgress = data.progress || 0;
+                        const barProgress = 20 + (hlsProgress * 0.6);
+                        progressFill.style.width = `${barProgress}%`;
+                        // Show stage info from server, or fallback message
+                        const stageText = data.stage || `Encoding video... ${Math.round(hlsProgress)}%`;
+                        progressText.textContent = stageText;
+                    }
+                } catch (_) {
+                    // Polling error, keep trying
+                }
+            }, 1000);
         }
 
         // beforeunload warning
@@ -2961,19 +3004,16 @@ window.ProjectSettings = {
                 formData.append('hls_session_id', this._hlsSessionId);
             }
 
-            // Stop HLS polling since the server will handle waiting
-            if (this._hlsPollTimer) {
-                clearInterval(this._hlsPollTimer);
-                this._hlsPollTimer = null;
-            }
-
-            progressFill.style.width = '50%';
-            progressText.textContent = 'Generating sprite sheet & thumbnail...';
-
             const response = await fetch('/api/generate-sprite-sheet', {
                 method: 'POST',
                 body: formData,
             });
+
+            // Stop processing poll once we have a response
+            if (processingPollTimer) {
+                clearInterval(processingPollTimer);
+                processingPollTimer = null;
+            }
 
             if (!response.ok) {
                 const error = await response.json();
@@ -2983,12 +3023,15 @@ window.ProjectSettings = {
             const result = await response.json();
 
             if (result.success && result.video) {
-                progressFill.style.width = '100%';
-                progressText.textContent = 'Complete!';
+                progressFill.style.width = '95%';
+                progressText.textContent = 'Saving...';
 
                 // Update project data with new video info
                 this.projectData.video = result.video;
                 await this.saveVideoData(result.video);
+
+                progressFill.style.width = '100%';
+                progressText.textContent = 'Complete!';
 
                 EditUtils.showNotification('Video processed successfully!', 'success');
 
@@ -2998,6 +3041,10 @@ window.ProjectSettings = {
                 throw new Error(result.detail || 'Processing failed');
             }
         } catch (e) {
+            // Ensure poll is stopped on error
+            if (processingPollTimer) {
+                clearInterval(processingPollTimer);
+            }
             this.handleProcessingError(e.message, processBtn, progressDiv);
         } finally {
             if (this._beforeUnloadHandler) {
