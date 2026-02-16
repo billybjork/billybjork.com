@@ -60,6 +60,7 @@ interface HlsLevel {
 // Extend HTMLVideoElement with HLS instance
 interface HTMLVideoElement {
   hlsInstance?: Hls | null;
+  videoLayoutCleanup?: (() => void) | null;
 }
 
 // Window extensions for our modules

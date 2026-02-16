@@ -4,6 +4,7 @@
  */
 
 import type { ProjectEventDetail, ProjectsLoadedEventDetail } from '../types/events';
+import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
 
 // ========== UTILITY FUNCTIONS ==========
 
@@ -45,6 +46,21 @@ function showNotification(message: string, isError: boolean = false): void {
       document.body.removeChild(notification);
     }
   }, 4000);
+}
+
+function closeLightboxOverlay(overlay: HTMLElement): void {
+  if (overlay.dataset.closing === 'true') return;
+  overlay.dataset.closing = 'true';
+  unlockBodyScroll();
+  overlay.classList.remove('visible');
+  overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+}
+
+function closeActiveLightbox(): boolean {
+  const lightbox = document.querySelector<HTMLElement>('.image-lightbox');
+  if (!lightbox) return false;
+  closeLightboxOverlay(lightbox);
+  return true;
 }
 
 /**
@@ -191,6 +207,76 @@ function initializeLazyThumbnails(root: ParentNode = document): void {
 
 const HLS_JS_SRC = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
 let hlsScriptPromise: Promise<void> | null = null;
+const MOBILE_BREAKPOINT = 768;
+const VIDEO_VIEWPORT_PADDING_MOBILE = 12;
+const VIDEO_VIEWPORT_PADDING_DESKTOP = 24;
+const VIDEO_MIN_RENDER_HEIGHT = 180;
+
+function getVideoContainer(videoElement: HTMLVideoElement): HTMLElement | null {
+  return videoElement.closest<HTMLElement>('.video-container');
+}
+
+function updateVideoContainerLayout(videoElement: HTMLVideoElement): void {
+  const container = getVideoContainer(videoElement);
+  if (!container) return;
+
+  const nativeWidth = videoElement.videoWidth;
+  const nativeHeight = videoElement.videoHeight;
+  if (!nativeWidth || !nativeHeight) return;
+  const aspectRatio = nativeWidth / nativeHeight;
+
+  const viewportPadding = window.innerWidth <= MOBILE_BREAKPOINT
+    ? VIDEO_VIEWPORT_PADDING_MOBILE
+    : VIDEO_VIEWPORT_PADDING_DESKTOP;
+  const containerRect = container.getBoundingClientRect();
+  const topOffset = Math.max(containerRect.top, viewportPadding);
+  const availableHeight = window.innerHeight - topOffset - viewportPadding;
+  const maxHeight = Math.max(VIDEO_MIN_RENDER_HEIGHT, Math.floor(availableHeight));
+
+  container.style.setProperty('--video-aspect-ratio', aspectRatio.toString());
+  container.style.setProperty('--video-max-height', `${maxHeight}px`);
+  container.classList.add('video-dimensions-ready');
+}
+
+function bindVideoLayout(videoElement: HTMLVideoElement): void {
+  if (videoElement.videoLayoutCleanup) {
+    videoElement.videoLayoutCleanup();
+  }
+
+  const refreshLayout = () => updateVideoContainerLayout(videoElement);
+  let scrollRafId: number | null = null;
+  const handleScroll = () => {
+    if (scrollRafId !== null) return;
+    scrollRafId = window.requestAnimationFrame(() => {
+      scrollRafId = null;
+      refreshLayout();
+    });
+  };
+
+  videoElement.addEventListener('loadedmetadata', refreshLayout);
+  videoElement.addEventListener('resize', refreshLayout);
+  window.addEventListener('resize', refreshLayout);
+  window.addEventListener('scroll', handleScroll, { passive: true });
+  refreshLayout();
+
+  videoElement.videoLayoutCleanup = () => {
+    videoElement.removeEventListener('loadedmetadata', refreshLayout);
+    videoElement.removeEventListener('resize', refreshLayout);
+    window.removeEventListener('resize', refreshLayout);
+    window.removeEventListener('scroll', handleScroll);
+    if (scrollRafId !== null) {
+      window.cancelAnimationFrame(scrollRafId);
+      scrollRafId = null;
+    }
+
+    const container = getVideoContainer(videoElement);
+    if (!container) return;
+
+    container.classList.remove('video-dimensions-ready');
+    container.style.removeProperty('--video-aspect-ratio');
+    container.style.removeProperty('--video-max-height');
+  };
+}
 
 /**
  * Lazy-load HLS.js only when needed.
@@ -230,8 +316,10 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
     }
 
     videoElement.classList.add('hls-video');
+    bindVideoLayout(videoElement);
 
     const initializeVideo = () => {
+      updateVideoContainerLayout(videoElement);
       if (autoplay && !document.body.classList.contains('editing')) {
         videoElement.play().catch(e => {
           if (e.name !== 'AbortError') {
@@ -357,6 +445,11 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
  * Destroys the HLS player instance and revokes the blob URL.
  */
 function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
+  if (videoElement.videoLayoutCleanup) {
+    videoElement.videoLayoutCleanup();
+    videoElement.videoLayoutCleanup = null;
+  }
+
   if (videoElement.hlsInstance) {
     videoElement.hlsInstance.destroy();
     videoElement.hlsInstance = null;
@@ -378,7 +471,7 @@ async function handleProjectContent(
   smoothScroll: boolean = true
 ): Promise<void> {
   try {
-    const video = projectItem.querySelector<HTMLVideoElement>('video.project-video, video.lazy-video');
+    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
     const thumbnail = projectItem.querySelector<HTMLElement>('.thumbnail');
 
     if (projectItem.classList.contains('active')) {
@@ -416,7 +509,7 @@ function closeAllOpenProjects(): void {
   openProjectItems.forEach(projectItem => {
     projectItem.classList.remove('active');
 
-    const video = projectItem.querySelector<HTMLVideoElement>('video.project-video');
+    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
     if (video) {
       video.pause();
       destroyHLSPlayer(video);
@@ -566,7 +659,7 @@ function initializeThumbnails(): void {
  * Initializes lazy loading for video elements within a given root.
  */
 function initializeLazyVideos(root: ParentNode = document): void {
-  const lazyVideos = root.querySelectorAll<HTMLVideoElement>('video.lazy-video, video.project-video');
+  const lazyVideos = root.querySelectorAll<HTMLVideoElement>('video.lazy-video');
 
   if ('IntersectionObserver' in window) {
     const videoObserver = new IntersectionObserver((entries, observer) => {
@@ -650,7 +743,7 @@ function handleProjectAfterSwap(event: CustomEvent<ProjectEventDetail>): void {
   if (!projectItem) return;
 
   if (isOpen) {
-    const video = element.querySelector<HTMLVideoElement>('video.project-video');
+    const video = element.querySelector<HTMLVideoElement>('video.lazy-video');
     if (video) {
       setupHLSPlayer(video, true).catch(err => {
         console.error('Failed to initialize HLS player:', err);
@@ -662,7 +755,7 @@ function handleProjectAfterSwap(event: CustomEvent<ProjectEventDetail>): void {
       scrollToProjectHeader(projectHeader);
     }
   } else {
-    const video = projectItem.querySelector<HTMLVideoElement>('video.project-video');
+    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
     if (video) {
       video.pause();
       destroyHLSPlayer(video);
@@ -720,7 +813,7 @@ function closeProject(button: HTMLElement): void {
   } else {
     projectItem.classList.remove('active');
 
-    const video = projectItem.querySelector<HTMLVideoElement>('video.project-video');
+    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
     if (video) {
       video.pause();
       destroyHLSPlayer(video);
@@ -798,13 +891,11 @@ function initializeEventListeners(): void {
     overlay.appendChild(closeBtn);
     overlay.appendChild(enlargedImg);
     document.body.appendChild(overlay);
+    lockBodyScroll();
 
     requestAnimationFrame(() => overlay.classList.add('visible'));
 
-    const closeLightbox = () => {
-      overlay.classList.remove('visible');
-      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
-    };
+    const closeLightbox = () => closeLightboxOverlay(overlay);
 
     closeBtn.addEventListener('click', closeLightbox);
     overlay.addEventListener('click', function(e) {
@@ -819,10 +910,7 @@ function initializeEventListeners(): void {
         return;
       }
 
-      const lightbox = document.querySelector<HTMLElement>('.image-lightbox');
-      if (lightbox) {
-        lightbox.classList.remove('visible');
-        lightbox.addEventListener('transitionend', () => lightbox.remove(), { once: true });
+      if (closeActiveLightbox()) {
         return;
       }
 

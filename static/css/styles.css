@@ -588,10 +588,17 @@ footer {
    ========================= */
 
 .video-container {
+    --video-aspect-ratio: 1.7777777778;
+    --video-max-height: calc(100vh - 4rem);
+    --video-inline-padding: clamp(0.75rem, 2vw, 1.5rem);
     position: relative;
-    width: 100%;
-    max-width: 100%;
+    width: min(
+        100%,
+        calc(var(--video-max-height) * var(--video-aspect-ratio))
+    );
+    max-width: calc(100vw - (var(--video-inline-padding) * 2));
     min-height: 200px; /* Provide minimum height while loading */
+    margin: 0 auto;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -599,12 +606,17 @@ footer {
     overflow: hidden;
 }
 
+.video-container.video-dimensions-ready {
+    min-height: 0;
+}
+
 .video-container video {
+    display: block;
     width: 100%;
     height: auto;
-    max-height: 90vh;
+    max-width: 100%;
+    max-height: var(--video-max-height);
     object-fit: contain;
-    padding: var(--spacing-medium) 0 var(--spacing-medium) 0
 }
 
 /* =========================
