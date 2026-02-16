@@ -10,6 +10,50 @@
     // AbortController for cancelling pending requests
     let currentAbortController = null;
 
+    // Track if code-highlighting.js has been loaded
+    let codeHighlightingLoaded = false;
+    let codeHighlightingLoading = false;
+
+    /**
+     * Dynamically load code-highlighting.js if content has code blocks.
+     * Once loaded, the script handles future project:afterSwap events itself.
+     */
+    const loadCodeHighlightingIfNeeded = (targetElement) => {
+        if (codeHighlightingLoaded || !targetElement.querySelector('pre code')) {
+            return; // Already loaded (will handle via event) or no code blocks
+        }
+
+        if (codeHighlightingLoading) {
+            // Currently loading, queue this element for highlighting
+            document.addEventListener('codeHighlightingReady', function handler() {
+                document.removeEventListener('codeHighlightingReady', handler);
+                if (typeof checkAndHighlightCode === 'function') {
+                    checkAndHighlightCode(targetElement);
+                }
+            });
+            return;
+        }
+
+        // Load the script
+        codeHighlightingLoading = true;
+        const script = document.createElement('script');
+        script.src = document.body.dataset.codeHighlightingUrl || '/static/js/code-highlighting.js';
+        script.onload = function() {
+            codeHighlightingLoaded = true;
+            codeHighlightingLoading = false;
+            document.dispatchEvent(new CustomEvent('codeHighlightingReady'));
+            // Trigger highlighting - the script's DOMContentLoaded won't fire since DOM is ready
+            if (typeof checkAndHighlightCode === 'function') {
+                checkAndHighlightCode(targetElement);
+            }
+        };
+        script.onerror = function() {
+            codeHighlightingLoading = false;
+            console.error('Failed to load code-highlighting.js');
+        };
+        document.head.appendChild(script);
+    };
+
     /**
      * Check if show_drafts is active (from URL or sessionStorage)
      */
@@ -151,6 +195,9 @@
                 isOpen: true,
                 smoothScroll: smoothScroll
             });
+
+            // Load code highlighting if this content has code blocks
+            loadCodeHighlightingIfNeeded(detailsContainer);
 
             // Dispatch loaded event
             dispatchEvent('project:loaded', {
@@ -417,6 +464,9 @@
                 history.replaceState({ slug: null, isOpen: false }, '');
             }
         }
+
+        // Check for code blocks on initial page load (isolation mode)
+        loadCodeHighlightingIfNeeded(document.body);
     };
 
     // Initialize on DOMContentLoaded

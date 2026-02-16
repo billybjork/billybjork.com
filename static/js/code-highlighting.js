@@ -49,14 +49,9 @@ function checkAndHighlightCode(targetElement) {
     }
 }
 
-// Listen for the project:afterSwap event
+// Listen for the project:afterSwap event (handles subsequent project opens)
 document.addEventListener("project:afterSwap", function(evt) {
     if (evt.detail.element) {
         checkAndHighlightCode(evt.detail.element);
     }
-});
-
-// Check on initial page load
-document.addEventListener("DOMContentLoaded", function() {
-    checkAndHighlightCode(document.body);
 });
