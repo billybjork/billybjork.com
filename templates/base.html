@@ -48,8 +48,7 @@
     {% block additional_head %}{% endblock %}
 </head>
 <body data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}"
-      data-hls-js-src="https://cdn.jsdelivr.net/npm/hls.js@1.5.12"
-      data-code-highlighting-url="{{ static_url(request, 'js/code-highlighting.js') }}">
+      data-hls-js-src="https://cdn.jsdelivr.net/npm/hls.js@1.5.12">
     <header id="main-header">
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>
@@ -66,11 +65,10 @@
 
     {% include "footer.html" %}
 
-    <!-- Deferred scripts -->
-    <script src="{{ static_url(request, 'js/project-loader.js') }}" defer></script>
-    <script src="{{ static_url(request, 'js/project-interactions.js') }}" defer></script>
+    <!-- Deferred scripts (TypeScript bundles) -->
+    <script src="{{ static_url(request, 'js/project-bundle.js') }}" defer></script>
     {% if is_dev_mode %}
-    <script src="{{ static_url(request, 'js/edit-bootstrap.js') }}" defer></script>
+    <script src="{{ static_url(request, 'js/edit-bundle.js') }}" defer></script>
     {% endif %}
 
     {% block additional_scripts %}{% endblock %}
