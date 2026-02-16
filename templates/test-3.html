@@ -37,28 +37,63 @@
     .spacer.top { color: #555; }
     .spacer.bottom { color: #555; }
 
-    .project-item {
-        margin-bottom: 3rem;
+    .pc-project {
+        width: 100%;
+        max-width: 920px;
+        margin: 0 auto 4.25rem;
+        opacity: 1;
+        transform: none;
+        position: relative;
+        z-index: 25;
     }
 
-    .project-header {
+    .pc-project-header {
         display: flex;
-        align-items: flex-start;
-        gap: 1.5rem;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        cursor: pointer;
     }
 
-    .thumbnail-container {
+    .pc-header-main {
+        min-width: 0;
+    }
+
+    .pc-thumbnail-container {
         flex-shrink: 0;
         width: 100%;
-        max-width: 640px;
-        aspect-ratio: 16/9;
+        max-width: none;
+        aspect-ratio: 16 / 9;
         background: transparent;
         border-radius: 0;
         overflow: visible;
         position: relative;
     }
 
-    .thumbnail-debug {
+    .pc-thumbnail-container.transition-overlay {
+        position: fixed !important;
+        margin: 0 !important;
+        max-width: none !important;
+        z-index: 70;
+        pointer-events: none;
+        will-change: left, top, width, height, opacity;
+    }
+
+    .pc-thumbnail-container.thumb-hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .pc-project .pc-project-details {
+        position: relative;
+        z-index: 30;
+    }
+
+    .pc-project .pc-close-project {
+        z-index: 35;
+    }
+
+    .pc-thumbnail-debug {
         position: absolute;
         bottom: 0.5rem;
         left: 0.5rem;
@@ -72,38 +107,132 @@
         z-index: 21;
     }
 
-    .thumbnail-debug .value {
+    .pc-thumbnail-debug .value {
         color: #fff;
         font-weight: bold;
     }
 
-    .thumbnail-label {
-        position: absolute;
-        top: 0.5rem;
-        left: 0.5rem;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 0.35rem 0.6rem;
-        border-radius: 4px;
-        font-size: 0.85rem;
-        color: #fff;
-        font-weight: 500;
-        pointer-events: none;
-        z-index: 21;
-    }
-
-    .project-info {
-        padding-top: 0.5rem;
-    }
-
-    .project-title {
+    .pc-project-title {
         font-size: 1.1rem;
         color: #fff;
         margin: 0 0 0.25rem 0;
+        line-height: 1.15;
     }
 
-    .project-meta {
+    .pc-project-meta {
         font-size: 0.85rem;
         color: #666;
+    }
+
+    .pc-close-project {
+        font-size: 1.9rem;
+        border: none;
+        background: none;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.95);
+        transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+    }
+
+    .pc-project.pc-open .pc-close-project {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scale(1);
+    }
+
+    .pc-close-project:hover {
+        color: #fff;
+    }
+
+    .pc-thumb-placeholder {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        pointer-events: none;
+    }
+
+    .pc-stage {
+        position: relative;
+        width: 100%;
+        max-width: 640px;
+        aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
+        margin-top: 0.75rem;
+    }
+
+    .pc-project.pc-hero-expanded .pc-stage {
+        --pc-hero-max-height: calc(100vh - clamp(120px, 18vh, 180px));
+        width: min(100%, calc(var(--pc-hero-max-height) * var(--pc-stage-aspect-ratio, 1.7777777778)));
+        max-width: none;
+    }
+
+    .pc-hero-slot {
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background:
+            var(--fallback-poster, none) center / cover no-repeat,
+            #040404;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: none;
+    }
+
+    .pc-hero-slot.slot-visible {
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .pc-hero-slot > .video-container {
+        position: relative;
+        inset: 0;
+        margin: 0;
+        max-width: none;
+        min-height: 0;
+        background: transparent;
+    }
+
+    .pc-hero-slot > .video-container video {
+        width: 100%;
+        height: 100%;
+        max-height: none;
+        object-fit: cover;
+        padding: 0;
+        opacity: 0;
+        transform: none;
+        transition: none;
+    }
+
+    .pc-hero-slot.video-visible > .video-container video {
+        opacity: 1;
+    }
+
+    .pc-project-details {
+        display: none;
+        opacity: 0;
+        transform: translateY(16px);
+        transition: opacity 0.35s ease, transform 0.35s ease;
+        margin-top: 1rem;
+    }
+
+    .pc-project.pc-open .pc-project-details {
+        display: block;
+    }
+
+    .pc-project.pc-content-visible .pc-project-details {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .pc-project-details .project-content {
+        overflow: visible;
+    }
+
+    .pc-project-details .video-container {
+        display: none;
     }
 
     /* Fixed controls */
@@ -219,8 +348,9 @@
         display: none;
     }
 
-    body.no-webgl .thumbnail-container {
+    body.no-webgl .pc-thumbnail-container {
         background:
+            var(--fallback-poster, none) center / cover no-repeat,
             radial-gradient(120% 100% at 30% 20%, rgba(90, 90, 90, 0.25), rgba(20, 20, 20, 0.95)),
             #111;
     }
@@ -232,57 +362,49 @@
 <div class="page-container">
     <div class="spacer top">↓ Scroll down to see point cloud depth thumbnails ↓</div>
 
-    <div class="project-item" data-sprite="somewhere-in-space">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <div class="thumbnail-label">Somewhere in Space</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">21</span> |
-                    <span class="value coherence-val">0%</span>
+    {% if projects %}
+        {% for project in projects %}
+        <article
+            class="pc-project no-fade"
+            data-slug="{{ project.slug }}"
+            data-sprite="{{ project.sprite_id }}"
+            {% if project.video_link %}
+            data-hls-url="{{ project.video_link }}"
+            {% endif %}>
+            <header class="pc-project-header">
+                <div class="pc-header-main">
+                    <h2 class="pc-project-title">{{ project.name }}</h2>
+                    <div class="pc-project-meta">{{ project.formatted_date }}</div>
                 </div>
-            </div>
-        </div>
-    </div>
+                <button class="pc-close-project" aria-label="Close project">&times;</button>
+            </header>
 
-    <div class="project-item" data-sprite="gravity">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <div class="thumbnail-label">Gravity</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">15</span> |
-                    <span class="value coherence-val">0%</span>
+            <div class="pc-stage">
+                <div
+                    class="pc-thumbnail-container"
+                    {% if project.thumbnail_link %}
+                    style="--fallback-poster: url('{{ project.thumbnail_link }}');"
+                    {% endif %}>
+                    <div class="pc-thumbnail-debug">
+                        Tilt: <span class="value tilt-angle">0°</span> |
+                        Frame: <span class="value frame-num">1</span>/<span class="value frame-total">0</span> |
+                        <span class="value coherence-val">0%</span>
+                    </div>
                 </div>
+                <section
+                    class="pc-hero-slot"
+                    id="hero-{{ project.slug }}"
+                    aria-hidden="true"
+                    {% if project.thumbnail_link %}
+                    style="--fallback-poster: url('{{ project.thumbnail_link }}');"
+                    {% endif %}></section>
             </div>
-        </div>
-    </div>
-
-    <div class="project-item" data-sprite="lead-me-home">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <div class="thumbnail-label">Lead Me Home</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">19</span> |
-                    <span class="value coherence-val">0%</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="project-item" data-sprite="surf">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <div class="thumbnail-label">Surf</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">27</span> |
-                    <span class="value coherence-val">0%</span>
-                </div>
-            </div>
-        </div>
-    </div>
+            <section id="details-{{ project.slug }}" class="pc-project-details" hidden></section>
+        </article>
+        {% endfor %}
+    {% else %}
+        <p class="pc-project-meta">No RGBD-ready projects are currently configured for /test-3.</p>
+    {% endif %}
 
     <div class="spacer bottom">↑ End of thumbnails ↑</div>
 </div>
@@ -707,6 +829,7 @@
     const spriteSets = {};
     const thumbnails = [];
     const thumbnailByContainer = new Map();
+    const thumbnailBySlug = new Map();
     const geometryCache = new Map();
     const managedListeners = [];
 
@@ -743,6 +866,8 @@
     let hasDeviceOrientation = false;
     let lastGlobalStatsUpdateMs = 0;
     let densityRebuildTimer = null;
+    let transitionRectRefreshUntilMs = 0;
+    let projectTransitionManager = null;
 
     function addManagedEventListener(target, type, handler, options) {
         target.addEventListener(type, handler, options);
@@ -815,6 +940,11 @@
         const viewportWidth = window.innerWidth;
 
         thumbnails.forEach((thumb) => {
+            if (thumb.renderSuppressed) {
+                thumb.isRenderable = false;
+                return;
+            }
+
             if (intersectionObserver && !thumb.isInViewportMargin) {
                 thumb.isRenderable = false;
                 return;
@@ -895,6 +1025,11 @@
     function setGlobalStat(id, value) {
         const el = document.getElementById(id);
         if (el) el.textContent = value;
+    }
+
+    function bumpTransitionRectRefresh(durationMs = 700) {
+        transitionRectRefreshUntilMs = Math.max(transitionRectRefreshUntilMs, Date.now() + durationMs);
+        rectsNeedUpdate = true;
     }
 
     function syncMotionControlledInputs() {
@@ -1029,6 +1164,9 @@
             this.viewportPosition = 0.5;
             this.pointCount = 0;
             this.currentCoherence = prefersReducedMotion ? 1 : 0;
+            this.coherenceOverride = null;
+            this.motionFrozen = false;
+            this.renderSuppressed = false;
             this.lastDebugUpdateMs = 0;
             this.geometryKey = null;
             this.cachedRect = null;
@@ -1041,7 +1179,7 @@
             this.lastLayoutCanvasWidth = -1;
             this.lastLayoutCanvasHeight = -1;
 
-            const debug = this.container.querySelector('.thumbnail-debug');
+            const debug = this.container.querySelector('.pc-thumbnail-debug');
             this.debugElements = debug ? {
                 tiltAngle: debug.querySelector('.tilt-angle'),
                 frameNum: debug.querySelector('.frame-num'),
@@ -1157,6 +1295,31 @@
             }
         }
 
+        setCoherenceOverride(value) {
+            if (value === null || value === undefined) {
+                this.coherenceOverride = null;
+                return;
+            }
+            this.coherenceOverride = Math.max(0, Math.min(1, value));
+        }
+
+        setMotionFrozen(frozen) {
+            this.motionFrozen = !!frozen;
+        }
+
+        resetTransitionState() {
+            this.coherenceOverride = null;
+            this.motionFrozen = false;
+        }
+
+        setRenderSuppressed(suppressed) {
+            this.renderSuppressed = !!suppressed;
+            if (this.renderSuppressed) {
+                this.isRenderable = false;
+                this.setVisible(false);
+            }
+        }
+
         syncLayout(rect) {
             if (!this.group) return;
 
@@ -1247,9 +1410,10 @@
             // Apply power curve: <1 = wider center zone, >1 = narrower center zone
             const curvedDistance = Math.pow(clampedDistance, config.transitionCurve);
             // coherence: 1 at center (coherent), 0 at edges (exploded)
-            const targetCoherence = prefersReducedMotion ? 1 : (1 - curvedDistance);
+            const autoCoherence = prefersReducedMotion ? 1 : (1 - curvedDistance);
+            const targetCoherence = this.coherenceOverride !== null ? this.coherenceOverride : autoCoherence;
             // Smooth the coherence transition
-            const coherenceLerp = prefersReducedMotion ? 1 : 0.1;
+            const coherenceLerp = prefersReducedMotion ? 1 : (this.coherenceOverride !== null ? 0.22 : 0.1);
             this.currentCoherence += (targetCoherence - this.currentCoherence) * coherenceLerp;
 
             // Interpolate parameters based on coherence
@@ -1276,13 +1440,18 @@
                 inputY = deviceY;
             }
 
-            const targetPanX = inputX * config.mouseParallax;
-            const targetPanY = inputY * config.mouseParallax * 0.6;
-            const targetTilt = scrollTilt;
+            let targetPanX = inputX * config.mouseParallax;
+            let targetPanY = inputY * config.mouseParallax * 0.6;
+            let targetTilt = scrollTilt;
+            if (this.motionFrozen || this.coherenceOverride !== null) {
+                targetPanX = 0;
+                targetPanY = 0;
+                targetTilt = 0;
+            }
 
             // Smooth interpolation - faster response for mouse, slower for scroll tilt
-            const tiltLerp = prefersReducedMotion ? 1 : 0.12;
-            const panLerp = prefersReducedMotion ? 1 : 0.15;
+            const tiltLerp = prefersReducedMotion ? 1 : (this.motionFrozen ? 0.25 : 0.12);
+            const panLerp = prefersReducedMotion ? 1 : (this.motionFrozen ? 0.25 : 0.15);
             this.currentTilt += (targetTilt - this.currentTilt) * tiltLerp;
             this.currentPanX += (targetPanX - this.currentPanX) * panLerp;
             this.currentPanY += (targetPanY - this.currentPanY) * panLerp;
@@ -1405,6 +1574,1011 @@
         });
     }
 
+    function enableNoWebGLLegacyBehavior() {
+        document.querySelectorAll('.pc-project[data-slug]').forEach((item) => {
+            item.classList.add('project-item', 'no-fade');
+            const header = item.querySelector('.pc-project-header');
+            if (header) header.classList.add('project-header');
+            const container = item.querySelector('.pc-thumbnail-container');
+            if (container) container.classList.add('thumbnail');
+            const closeButton = item.querySelector('.pc-close-project');
+            if (closeButton) closeButton.classList.add('close-project');
+            const details = item.querySelector('.pc-project-details');
+            if (details) details.classList.add('project-details');
+        });
+    }
+
+    class ProjectTransitionManager {
+        constructor() {
+            this.contextBySlug = new Map();
+            this.promotedStates = new Map();
+            this.currentOpenSlug = null;
+            this.transitionToken = 0;
+            this.transitionInFlight = false;
+            this.fetchController = null;
+            this.hlsScriptPromise = null;
+            this.prefetchBySlug = new Map();
+            this.prefetchAbortBySlug = new Map();
+            this.detailsHtmlCache = new Map();
+            this.manifestWarmupByUrl = new Map();
+            this.preconnectedOrigins = new Set();
+            this.hlsWarmupRequested = false;
+            this.boundCaptureClick = this.handleCaptureClick.bind(this);
+            this.boundKeyDown = this.handleKeyDown.bind(this);
+            this.boundPrefetchIntent = this.handlePrefetchIntent.bind(this);
+        }
+
+        init() {
+            this.rebuildContextMap();
+            addManagedEventListener(document, 'click', this.boundCaptureClick, true);
+            addManagedEventListener(document, 'keydown', this.boundKeyDown);
+            addManagedEventListener(document, 'pointerover', this.boundPrefetchIntent, true);
+            addManagedEventListener(document, 'pointerdown', this.boundPrefetchIntent, true);
+            addManagedEventListener(document, 'focusin', this.boundPrefetchIntent, true);
+            addManagedEventListener(document, 'touchstart', this.boundPrefetchIntent, { passive: true, capture: true });
+            this.warmHlsScript();
+            document.querySelectorAll('.pc-project[data-hls-url]').forEach((item) => {
+                this.ensurePreconnectForUrl(item.dataset.hlsUrl || '');
+            });
+        }
+
+        destroy() {
+            this.abortPendingFetch();
+            this.prefetchAbortBySlug.forEach((controller) => controller.abort());
+            this.prefetchAbortBySlug.clear();
+            this.prefetchBySlug.clear();
+            this.detailsHtmlCache.clear();
+            this.manifestWarmupByUrl.clear();
+            this.preconnectedOrigins.clear();
+            this.promotedStates.forEach((_state, slug) => {
+                const context = this.contextBySlug.get(slug);
+                if (context) {
+                    this.restoreContainer(context, false);
+                    context.thumbnail.setRenderSuppressed(false);
+                    this.destroyVideoInContext(context);
+                }
+            });
+            this.promotedStates.clear();
+            this.contextBySlug.clear();
+            this.currentOpenSlug = null;
+            this.transitionInFlight = false;
+        }
+
+        destroyVideosExcept(keepSlug = null) {
+            this.contextBySlug.forEach((context, slug) => {
+                if (keepSlug && slug === keepSlug) return;
+                this.destroyVideoInContext(context);
+                context.heroSlot.classList.remove('video-visible');
+                context.heroSlot.classList.remove('slot-visible');
+                context.heroSlot.setAttribute('aria-hidden', 'true');
+                context.heroSlot.innerHTML = '';
+                context.item.classList.remove('pc-has-hero-video');
+                context.item.classList.remove('pc-hero-expanded');
+                context.item.style.removeProperty('--pc-stage-aspect-ratio');
+                context.container.classList.remove('thumb-hidden');
+                context.thumbnail.setRenderSuppressed(false);
+            });
+        }
+
+        rebuildContextMap() {
+            this.contextBySlug.clear();
+            document.querySelectorAll('.pc-project[data-slug]').forEach((item) => {
+                const slug = item.dataset.slug;
+                if (!slug) return;
+                const container = item.querySelector('.pc-thumbnail-container');
+                const heroSlot = item.querySelector(`#hero-${slug}`);
+                const details = item.querySelector(`#details-${slug}`);
+                const closeButton = item.querySelector('.pc-close-project');
+                const thumbnail = thumbnailBySlug.get(slug);
+                if (!container || !heroSlot || !details || !closeButton || !thumbnail) return;
+                this.contextBySlug.set(slug, {
+                    slug,
+                    item,
+                    container,
+                    heroSlot,
+                    details,
+                    closeButton,
+                    thumbnail,
+                });
+            });
+        }
+
+        async toggleProject(slug) {
+            if (!slug || this.transitionInFlight) return;
+            this.transitionInFlight = true;
+            try {
+                if (this.currentOpenSlug && this.currentOpenSlug !== slug) {
+                    await this.closeProject(this.currentOpenSlug);
+                }
+
+                if (this.currentOpenSlug === slug) {
+                    await this.closeProject(slug);
+                } else {
+                    await this.openProject(slug);
+                }
+            } finally {
+                this.transitionInFlight = false;
+            }
+        }
+
+        async openProject(slug) {
+            const ctx = this.contextBySlug.get(slug);
+            if (!ctx) return;
+            const token = this.beginTransition();
+            const prefersInstant = prefersReducedMotion;
+            this.destroyVideosExcept(slug);
+            this.destroyVideoInContext(ctx);
+            const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
+
+            ctx.thumbnail.setRenderSuppressed(false);
+            ctx.item.classList.add('pc-open');
+            ctx.item.classList.remove('pc-has-hero-video');
+            ctx.item.classList.remove('pc-content-visible');
+            ctx.item.classList.remove('pc-hero-expanded');
+            ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+            ctx.details.hidden = true;
+            ctx.details.innerHTML = '';
+            ctx.heroSlot.classList.remove('slot-visible');
+            ctx.heroSlot.classList.remove('video-visible');
+            ctx.heroSlot.setAttribute('aria-hidden', 'true');
+            ctx.heroSlot.innerHTML = '';
+            ctx.closeButton.disabled = true;
+            ctx.container.classList.remove('thumb-hidden');
+
+            ctx.thumbnail.setMotionFrozen(true);
+
+            let html = '';
+            try {
+                html = await detailsHtmlPromise;
+            } catch (err) {
+                if (!this.isTokenActive(token)) return;
+                console.error(`Failed to load ${slug}:`, err);
+                ctx.item.classList.remove('pc-open');
+                ctx.closeButton.disabled = false;
+                ctx.thumbnail.resetTransitionState();
+                return;
+            }
+
+            if (!this.isTokenActive(token)) return;
+            const hasHeroVideo = this.populateProjectContent(ctx, html);
+            if (hasHeroVideo) {
+                ctx.item.classList.add('pc-has-hero-video');
+                this.syncStageAspectRatioFromHero(ctx);
+            }
+
+            const headerY = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+            window.scrollTo({ top: headerY, behavior: prefersInstant ? 'auto' : 'smooth' });
+
+            if (!hasHeroVideo) {
+                await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 320, token, { easing: 'inOut' });
+                if (!this.isTokenActive(token)) return;
+
+                if (!ctx.details.hidden) {
+                    requestAnimationFrame(() => {
+                        if (!this.isTokenActive(token)) return;
+                        ctx.item.classList.add('pc-content-visible');
+                    });
+                }
+                ctx.closeButton.disabled = false;
+                this.currentOpenSlug = slug;
+                ctx.thumbnail.resetTransitionState();
+                ctx.thumbnail.setRenderSuppressed(false);
+                ctx.heroSlot.classList.remove('slot-visible');
+                ctx.heroSlot.classList.remove('video-visible');
+                ctx.heroSlot.setAttribute('aria-hidden', 'true');
+                return;
+            }
+
+            if (prefersInstant) {
+                const heroVideo = ctx.heroSlot.querySelector('video');
+                ctx.item.classList.add('pc-hero-expanded');
+                ctx.heroSlot.classList.add('slot-visible');
+                ctx.heroSlot.setAttribute('aria-hidden', 'false');
+                ctx.thumbnail.setCoherenceOverride(1);
+                ctx.container.classList.add('thumb-hidden');
+                ctx.thumbnail.setRenderSuppressed(true);
+                if (!ctx.details.hidden) {
+                    ctx.item.classList.add('pc-content-visible');
+                }
+                ctx.closeButton.disabled = false;
+                this.currentOpenSlug = slug;
+                ctx.thumbnail.resetTransitionState();
+
+                if (heroVideo) {
+                    this.prepareHeroVideoReady(heroVideo, token)
+                        .then((ready) => {
+                            if (!this.isTokenActive(token)) return;
+                            if (ready) {
+                                ctx.heroSlot.classList.add('video-visible');
+                            }
+                        })
+                        .catch(() => {});
+                }
+                return;
+            }
+
+            const heroVideo = ctx.heroSlot.querySelector('video');
+            const heroVideoReadyPromise = heroVideo
+                ? this.prepareHeroVideoReady(heroVideo, token)
+                : Promise.resolve(false);
+
+            const startRect = ctx.container.getBoundingClientRect();
+            this.promoteContainer(ctx);
+            this.setContainerRect(ctx.container, startRect);
+            ctx.item.classList.add('pc-hero-expanded');
+
+            const targetRect = ctx.heroSlot.getBoundingClientRect();
+            const hasTarget = targetRect.width > 0 && targetRect.height > 0;
+            const morphDuration = prefersInstant ? 0 : 640;
+            const flattenPromise = this.animateCoherence(ctx.thumbnail, 1, morphDuration, token, { easing: 'inOut' });
+            const rectPromise = hasTarget
+                ? this.animateRect(ctx.container, startRect, targetRect, morphDuration, token, {
+                    getTargetRect: () => ctx.heroSlot.getBoundingClientRect(),
+                })
+                : Promise.resolve();
+            await Promise.all([flattenPromise, rectPromise]);
+            if (!this.isTokenActive(token)) return;
+
+            const videoIsReady = await heroVideoReadyPromise;
+
+            if (videoIsReady) {
+                ctx.heroSlot.classList.add('slot-visible');
+                ctx.heroSlot.classList.add('video-visible');
+                ctx.heroSlot.setAttribute('aria-hidden', 'false');
+                this.restoreContainer(ctx, true);
+                ctx.thumbnail.setRenderSuppressed(true);
+            } else {
+                ctx.heroSlot.classList.remove('slot-visible');
+                ctx.heroSlot.classList.remove('video-visible');
+                ctx.heroSlot.setAttribute('aria-hidden', 'true');
+                ctx.item.classList.remove('pc-hero-expanded');
+                this.restoreContainer(ctx, false);
+                ctx.thumbnail.setRenderSuppressed(false);
+            }
+
+            if (!ctx.details.hidden) {
+                requestAnimationFrame(() => {
+                    if (!this.isTokenActive(token)) return;
+                    ctx.item.classList.add('pc-content-visible');
+                });
+            }
+
+            ctx.closeButton.disabled = false;
+            this.currentOpenSlug = slug;
+        }
+
+        async closeProject(slug) {
+            const ctx = this.contextBySlug.get(slug);
+            if (!ctx) return;
+
+            const token = this.beginTransition();
+            const prefersInstant = prefersReducedMotion;
+            ctx.closeButton.disabled = true;
+            const hadHeroVideo = ctx.item.classList.contains('pc-has-hero-video');
+
+            ctx.thumbnail.setRenderSuppressed(false);
+            ctx.thumbnail.setMotionFrozen(true);
+
+            if (prefersInstant) {
+                this.restoreContainer(ctx, false);
+                ctx.container.classList.remove('thumb-hidden');
+                ctx.heroSlot.classList.remove('video-visible');
+                ctx.heroSlot.classList.remove('slot-visible');
+                ctx.heroSlot.setAttribute('aria-hidden', 'true');
+                this.destroyVideoInContext(ctx);
+                ctx.heroSlot.innerHTML = '';
+                ctx.details.innerHTML = '';
+                ctx.details.hidden = true;
+                ctx.item.classList.remove('pc-content-visible');
+                ctx.item.classList.remove('pc-open');
+                ctx.item.classList.remove('pc-has-hero-video');
+                ctx.item.classList.remove('pc-hero-expanded');
+                ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+                ctx.thumbnail.setCoherenceOverride(0);
+                ctx.thumbnail.resetTransitionState();
+                ctx.closeButton.disabled = false;
+                this.currentOpenSlug = null;
+                this.destroyVideosExcept(null);
+                return;
+            }
+
+            ctx.thumbnail.setCoherenceOverride(1);
+            await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 120, token);
+            if (!this.isTokenActive(token)) return;
+
+            const heroRect = hadHeroVideo
+                ? ctx.heroSlot.getBoundingClientRect()
+                : ctx.container.getBoundingClientRect();
+            // Hide the visible hero immediately so only the promoted thumbnail drives close animation.
+            ctx.heroSlot.classList.remove('video-visible');
+            ctx.heroSlot.classList.remove('slot-visible');
+            ctx.heroSlot.setAttribute('aria-hidden', 'true');
+
+            // Collapse stage sizing before measuring target so close animates to the true thumbnail footprint.
+            ctx.item.classList.remove('pc-hero-expanded');
+            const targetRect = this.measureContainerOriginRect(ctx);
+
+            this.promoteContainer(ctx);
+            this.setContainerRect(ctx.container, heroRect);
+            ctx.container.classList.remove('thumb-hidden');
+            ctx.container.style.opacity = '1';
+
+            ctx.item.classList.remove('pc-content-visible');
+            await this.animateRect(ctx.container, heroRect, targetRect, prefersInstant ? 0 : 420, token);
+            if (!this.isTokenActive(token)) return;
+
+            this.restoreContainer(ctx, false);
+            this.destroyVideoInContext(ctx);
+            ctx.heroSlot.innerHTML = '';
+            ctx.details.innerHTML = '';
+            ctx.details.hidden = true;
+            ctx.item.classList.remove('pc-open');
+            ctx.item.classList.remove('pc-has-hero-video');
+            ctx.item.classList.remove('pc-hero-expanded');
+            ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+            ctx.closeButton.disabled = false;
+
+            await this.animateCoherence(ctx.thumbnail, 0, prefersInstant ? 0 : 260, token);
+            if (!this.isTokenActive(token)) return;
+            ctx.thumbnail.resetTransitionState();
+            this.currentOpenSlug = null;
+            this.destroyVideosExcept(null);
+        }
+
+        handleCaptureClick(event) {
+            const closeBtn = event.target.closest('.pc-close-project');
+            if (closeBtn) {
+                const item = closeBtn.closest('.pc-project[data-slug]');
+                const slug = item?.dataset.slug;
+                if (!slug) return;
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleProject(slug);
+                return;
+            }
+
+            const trigger = event.target.closest('.pc-project-header, .pc-thumbnail-container, .pc-stage');
+            if (!trigger) return;
+
+            const item = trigger.closest('.pc-project[data-slug]');
+            const slug = item?.dataset.slug;
+            if (!slug) return;
+
+            if (slug === this.currentOpenSlug) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            this.prefetchProject(slug, item.dataset.hlsUrl || '');
+            this.toggleProject(slug);
+        }
+
+        handleKeyDown(event) {
+            if (event.key !== 'Escape') return;
+            if (!this.currentOpenSlug || this.transitionInFlight) return;
+            event.preventDefault();
+            this.toggleProject(this.currentOpenSlug);
+        }
+
+        handlePrefetchIntent(event) {
+            const target = event.target instanceof Element ? event.target : null;
+            if (!target) return;
+
+            const item = target.closest('.pc-project[data-slug]');
+            if (!item) return;
+
+            if (event.type === 'pointerover') {
+                const from = event.relatedTarget;
+                if (from instanceof Element && item.contains(from)) {
+                    return;
+                }
+            }
+
+            const slug = item.dataset.slug;
+            if (!slug) return;
+            this.prefetchProject(slug, item.dataset.hlsUrl || '');
+        }
+
+        beginTransition() {
+            this.transitionToken += 1;
+            this.abortPendingFetch();
+            return this.transitionToken;
+        }
+
+        isTokenActive(token) {
+            return token === this.transitionToken;
+        }
+
+        buildProjectURL(slug) {
+            const url = new URL(`/${slug}`, window.location.origin);
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('show_drafts') === 'true' || sessionStorage.getItem('bb_show_drafts') === 'true') {
+                url.searchParams.set('show_drafts', 'true');
+            }
+            return url.toString();
+        }
+
+        async fetchProjectDetailsHTML(slug, token) {
+            if (this.detailsHtmlCache.has(slug)) {
+                return this.detailsHtmlCache.get(slug);
+            }
+
+            const pendingPrefetch = this.prefetchBySlug.get(slug);
+            if (pendingPrefetch) {
+                try {
+                    const prefetched = await pendingPrefetch;
+                    if (prefetched) {
+                        return prefetched;
+                    }
+                } catch {
+                    // Fall through to direct fetch.
+                }
+            }
+
+            this.fetchController = new AbortController();
+            const response = await fetch(this.buildProjectURL(slug), {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'text/html',
+                },
+                signal: this.fetchController.signal,
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const html = await response.text();
+            if (!this.isTokenActive(token)) {
+                throw new Error('Stale transition token');
+            }
+            this.detailsHtmlCache.set(slug, html);
+            return html;
+        }
+
+        abortPendingFetch() {
+            if (!this.fetchController) return;
+            this.fetchController.abort();
+            this.fetchController = null;
+        }
+
+        prefetchProject(slug, hlsUrl) {
+            if (!slug) return;
+
+            this.ensurePreconnectForUrl(hlsUrl);
+            this.warmHlsScript();
+            if (hlsUrl) {
+                this.warmHlsManifest(hlsUrl);
+            }
+
+            if (this.detailsHtmlCache.has(slug) || this.prefetchBySlug.has(slug)) return;
+
+            const controller = new AbortController();
+            this.prefetchAbortBySlug.set(slug, controller);
+            const request = fetch(this.buildProjectURL(slug), {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'text/html',
+                },
+                signal: controller.signal,
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.text();
+                })
+                .then((html) => {
+                    this.detailsHtmlCache.set(slug, html);
+                    return html;
+                })
+                .catch((err) => {
+                    if (err && err.name === 'AbortError') {
+                        return '';
+                    }
+                    console.warn(`Prefetch failed for ${slug}:`, err);
+                    return '';
+                })
+                .finally(() => {
+                    this.prefetchBySlug.delete(slug);
+                    this.prefetchAbortBySlug.delete(slug);
+                });
+
+            this.prefetchBySlug.set(slug, request);
+        }
+
+        warmHlsScript() {
+            if (window.Hls || this.hlsScriptPromise || this.hlsWarmupRequested) return;
+            this.hlsWarmupRequested = true;
+            const trigger = () => {
+                if (window.Hls || this.hlsScriptPromise) return;
+                this.loadHlsScript().catch(() => {});
+            };
+
+            if (document.visibilityState === 'visible') {
+                window.setTimeout(trigger, 80);
+            } else if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(trigger, { timeout: 400 });
+            } else {
+                window.setTimeout(trigger, 180);
+            }
+        }
+
+        warmHlsManifest(hlsUrl) {
+            if (!hlsUrl || this.manifestWarmupByUrl.has(hlsUrl)) return;
+            this.ensurePreconnectForUrl(hlsUrl);
+            const controller = new AbortController();
+            const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+            const request = fetch(hlsUrl, {
+                method: 'GET',
+                mode: 'no-cors',
+                credentials: 'omit',
+                signal: controller.signal,
+            })
+                .catch(() => {})
+                .finally(() => {
+                    clearTimeout(timeoutId);
+                });
+            this.manifestWarmupByUrl.set(hlsUrl, request);
+        }
+
+        ensurePreconnectForUrl(resourceUrl) {
+            if (!resourceUrl) return;
+            let origin = '';
+            try {
+                origin = new URL(resourceUrl, window.location.origin).origin;
+            } catch {
+                return;
+            }
+            if (!origin || this.preconnectedOrigins.has(origin)) return;
+            this.preconnectedOrigins.add(origin);
+
+            const preconnect = document.createElement('link');
+            preconnect.rel = 'preconnect';
+            preconnect.href = origin;
+            preconnect.crossOrigin = 'anonymous';
+            document.head.appendChild(preconnect);
+        }
+
+        syncStageAspectRatioFromHero(ctx) {
+            const heroVideo = ctx.heroSlot.querySelector('video');
+            const rawRatio = heroVideo?.dataset?.videoAspectRatio;
+            const parsedRatio = Number.parseFloat(rawRatio || '');
+            if (Number.isFinite(parsedRatio) && parsedRatio > 0.35 && parsedRatio < 4.5) {
+                ctx.item.style.setProperty('--pc-stage-aspect-ratio', parsedRatio.toString());
+            } else {
+                ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+            }
+        }
+
+        populateProjectContent(ctx, html) {
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+
+            const videoContainer = temp.querySelector('.video-container');
+            const projectContent = temp.querySelector('.project-content');
+
+            ctx.heroSlot.innerHTML = '';
+            ctx.details.innerHTML = '';
+
+            if (videoContainer) {
+                ctx.heroSlot.appendChild(videoContainer);
+                ctx.heroSlot.setAttribute('aria-hidden', 'true');
+            }
+            if (projectContent) {
+                ctx.details.appendChild(projectContent);
+                ctx.details.hidden = false;
+            } else {
+                ctx.details.hidden = true;
+            }
+            return !!videoContainer;
+        }
+
+        promoteContainer(ctx) {
+            if (this.promotedStates.has(ctx.slug)) return;
+
+            const parent = ctx.container.parentElement;
+            if (!parent) return;
+
+            const nextSibling = ctx.container.nextSibling;
+            const rect = ctx.container.getBoundingClientRect();
+
+            const placeholder = document.createElement('div');
+            placeholder.className = 'pc-thumb-placeholder';
+            placeholder.style.width = `${rect.width}px`;
+            placeholder.style.height = `${rect.height}px`;
+
+            parent.insertBefore(placeholder, ctx.container);
+            document.body.appendChild(ctx.container);
+            ctx.container.classList.add('transition-overlay');
+
+            this.promotedStates.set(ctx.slug, {
+                parent,
+                nextSibling,
+                placeholder,
+            });
+            this.setContainerRect(ctx.container, rect);
+            bumpTransitionRectRefresh(700);
+        }
+
+        restoreContainer(ctx, hidden) {
+            const promoted = this.promotedStates.get(ctx.slug);
+            if (promoted) {
+                if (promoted.nextSibling && promoted.nextSibling.parentNode === promoted.parent) {
+                    promoted.parent.insertBefore(ctx.container, promoted.nextSibling);
+                } else {
+                    promoted.parent.appendChild(ctx.container);
+                }
+                promoted.placeholder.remove();
+                this.promotedStates.delete(ctx.slug);
+            }
+
+            ctx.container.classList.remove('transition-overlay');
+            ctx.container.style.position = '';
+            ctx.container.style.left = '';
+            ctx.container.style.top = '';
+            ctx.container.style.width = '';
+            ctx.container.style.height = '';
+            ctx.container.style.opacity = '';
+            ctx.container.style.zIndex = '';
+            ctx.container.style.transform = '';
+            if (hidden) {
+                ctx.container.classList.add('thumb-hidden');
+            } else {
+                ctx.container.classList.remove('thumb-hidden');
+            }
+            bumpTransitionRectRefresh(260);
+        }
+
+        measureContainerOriginRect(ctx) {
+            const rect = ctx.container.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                return rect;
+            }
+
+            const header = ctx.item.querySelector('.pc-project-header');
+            if (!header) return rect;
+            const fallback = header.getBoundingClientRect();
+            return new DOMRect(fallback.left, fallback.top, Math.max(1, fallback.width), Math.max(1, fallback.height));
+        }
+
+        setContainerRect(container, rect) {
+            container.style.left = `${rect.left}px`;
+            container.style.top = `${rect.top}px`;
+            container.style.width = `${rect.width}px`;
+            container.style.height = `${rect.height}px`;
+            bumpTransitionRectRefresh(180);
+        }
+
+        animateRect(container, fromRect, toRect, durationMs, token, options = {}) {
+            if (durationMs <= 0 || prefersReducedMotion) {
+                this.setContainerRect(container, toRect);
+                return Promise.resolve();
+            }
+
+            const getTargetRect = () => {
+                if (typeof options.getTargetRect === 'function') {
+                    const next = options.getTargetRect();
+                    if (next && next.width > 0 && next.height > 0) {
+                        return next;
+                    }
+                }
+                return toRect;
+            };
+
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = 1 - Math.pow(1 - t, 3);
+                    const targetRect = getTargetRect();
+                    const interpolated = new DOMRect(
+                        fromRect.left + (targetRect.left - fromRect.left) * eased,
+                        fromRect.top + (targetRect.top - fromRect.top) * eased,
+                        fromRect.width + (targetRect.width - fromRect.width) * eased,
+                        fromRect.height + (targetRect.height - fromRect.height) * eased
+                    );
+                    this.setContainerRect(container, interpolated);
+
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        animateCoherence(thumbnail, targetValue, durationMs, token, options = {}) {
+            if (durationMs <= 0 || prefersReducedMotion) {
+                thumbnail.setCoherenceOverride(targetValue);
+                return Promise.resolve();
+            }
+
+            const easing = options.easing || 'out';
+            const easeValue = (t) => {
+                if (easing === 'inOut') {
+                    return t < 0.5
+                        ? 4 * t * t * t
+                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                return 1 - Math.pow(1 - t, 3);
+            };
+            const startValue = thumbnail.coherenceOverride !== null ? thumbnail.coherenceOverride : thumbnail.currentCoherence;
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = easeValue(t);
+                    const value = startValue + (targetValue - startValue) * eased;
+                    thumbnail.setCoherenceOverride(value);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        thumbnail.setCoherenceOverride(targetValue);
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        async prepareHeroVideoReady(video, token) {
+            if (!video) return false;
+
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = 'auto';
+            video.setAttribute('playsinline', '');
+            video.setAttribute('muted', '');
+
+            try {
+                await this.setupHeroVideo(video, true, token);
+                if (!this.isTokenActive(token)) return false;
+                await this.waitForFirstVideoFrame(video, token, 7000);
+                if (!this.isTokenActive(token)) return false;
+                return true;
+            } catch (err) {
+                if (this.isTokenActive(token)) {
+                    console.warn('Hero video was not ready before reveal window:', err);
+                }
+                return false;
+            }
+        }
+
+        async setupHeroVideo(video, autoplay, token) {
+            if (!this.isTokenActive(token)) {
+                throw new Error('Transition cancelled');
+            }
+            const streamUrl = video.dataset.hlsUrl;
+            if (!streamUrl) return;
+
+            const canPlayNative = !!video.canPlayType('application/vnd.apple.mpegurl');
+            const startPlayback = async () => {
+                if (!autoplay || !this.isTokenActive(token)) return;
+                try {
+                    await video.play();
+                } catch {
+                    // Ignore autoplay failures (browser policy/network races).
+                }
+            };
+
+            const attachNative = async () => {
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Transition cancelled');
+                }
+                video.src = streamUrl;
+                await startPlayback();
+            };
+
+            const attachHlsJs = async () => {
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Transition cancelled');
+                }
+                if (!window.Hls || !Hls.isSupported()) {
+                    throw new Error('HLS.js is not supported in this browser');
+                }
+
+                if (video.hlsInstance) {
+                    video.hlsInstance.destroy();
+                    video.hlsInstance = null;
+                }
+
+                await new Promise((resolve, reject) => {
+                    if (!this.isTokenActive(token)) {
+                        reject(new Error('Transition cancelled'));
+                        return;
+                    }
+                    const hls = new Hls({
+                        abrEwmaDefaultEstimate: 1800000,
+                        startLevel: 0,
+                        capLevelToPlayerSize: true,
+                    });
+
+                    video.hlsInstance = hls;
+                    hls.loadSource(streamUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                        startPlayback();
+                    });
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        if (!this.isTokenActive(token)) {
+                            if (video.hlsInstance) {
+                                video.hlsInstance.destroy();
+                                video.hlsInstance = null;
+                            }
+                            reject(new Error('Transition cancelled'));
+                            return;
+                        }
+                        resolve();
+                    });
+                    hls.on(Hls.Events.ERROR, (_event, data) => {
+                        if (data?.fatal) {
+                            reject(new Error(data.details || 'Fatal HLS.js error'));
+                        }
+                    });
+                });
+
+                if (!this.isTokenActive(token)) {
+                    if (video.hlsInstance) {
+                        video.hlsInstance.destroy();
+                        video.hlsInstance = null;
+                    }
+                    throw new Error('Transition cancelled');
+                }
+
+                await startPlayback();
+            };
+
+            if (window.Hls && Hls.isSupported()) {
+                await attachHlsJs();
+                return;
+            }
+
+            try {
+                await this.loadHlsScript();
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Transition cancelled');
+                }
+                if (window.Hls && Hls.isSupported()) {
+                    await attachHlsJs();
+                    return;
+                }
+            } catch (err) {
+                console.warn('Failed to load HLS.js for /test-3 transition:', err);
+            }
+
+            if (canPlayNative) {
+                await attachNative();
+                return;
+            }
+
+            throw new Error('No supported HLS playback path for hero video');
+        }
+
+        loadHlsScript() {
+            if (window.Hls) {
+                return Promise.resolve();
+            }
+            if (this.hlsScriptPromise) {
+                return this.hlsScriptPromise;
+            }
+
+            const src = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
+            this.hlsScriptPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('Failed to load HLS.js'));
+                document.head.appendChild(script);
+            });
+            return this.hlsScriptPromise;
+        }
+
+        waitForFirstVideoFrame(video, token, timeoutMs = 7000) {
+            return new Promise((resolve, reject) => {
+                let done = false;
+                let frameCallbackId = null;
+                let tokenWatcherId = null;
+
+                const finish = (ok, error) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timeoutId);
+                    if (tokenWatcherId !== null) {
+                        clearInterval(tokenWatcherId);
+                    }
+                    video.removeEventListener('loadeddata', onMaybeReady);
+                    video.removeEventListener('canplay', onMaybeReady);
+                    video.removeEventListener('playing', onMaybeReady);
+                    video.removeEventListener('timeupdate', onMaybeReady);
+                    video.removeEventListener('error', onError);
+                    if (frameCallbackId !== null && typeof video.cancelVideoFrameCallback === 'function') {
+                        video.cancelVideoFrameCallback(frameCallbackId);
+                    }
+                    if (ok) {
+                        resolve();
+                    } else {
+                        reject(error || new Error('Video did not render a first frame in time'));
+                    }
+                };
+
+                const onMaybeReady = () => {
+                    if (!this.isTokenActive(token)) {
+                        finish(false, new Error('Transition cancelled'));
+                        return;
+                    }
+                    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+                        finish(true);
+                    }
+                };
+
+                const onError = () => {
+                    finish(false, new Error('Video error before first frame'));
+                };
+
+                const timeoutId = window.setTimeout(() => {
+                    finish(false, new Error('Timed out waiting for first video frame'));
+                }, timeoutMs);
+
+                tokenWatcherId = window.setInterval(() => {
+                    if (!this.isTokenActive(token)) {
+                        finish(false, new Error('Transition cancelled'));
+                    }
+                }, 80);
+
+                video.addEventListener('loadeddata', onMaybeReady);
+                video.addEventListener('canplay', onMaybeReady);
+                video.addEventListener('playing', onMaybeReady);
+                video.addEventListener('timeupdate', onMaybeReady);
+                video.addEventListener('error', onError, { once: true });
+
+                if (typeof video.requestVideoFrameCallback === 'function') {
+                    frameCallbackId = video.requestVideoFrameCallback(() => {
+                        if (!this.isTokenActive(token)) {
+                            finish(false, new Error('Transition cancelled'));
+                            return;
+                        }
+                        finish(true);
+                    });
+                }
+
+                onMaybeReady();
+            });
+        }
+
+        destroyVideoInContext(ctx) {
+            const video = ctx.heroSlot.querySelector('video');
+            if (!video) return;
+
+            if (video.hlsInstance) {
+                video.hlsInstance.destroy();
+                video.hlsInstance = null;
+            }
+
+            video.pause();
+            if (video.src && video.src.startsWith('blob:')) {
+                URL.revokeObjectURL(video.src);
+            }
+            video.removeAttribute('src');
+            video.load();
+        }
+    }
+
     function cleanup() {
         if (isDisposed) return;
         isDisposed = true;
@@ -1443,6 +2617,12 @@
         thumbnails.forEach((thumb) => thumb.destroy());
         thumbnails.length = 0;
         thumbnailByContainer.clear();
+        thumbnailBySlug.clear();
+
+        if (projectTransitionManager) {
+            projectTransitionManager.destroy();
+            projectTransitionManager = null;
+        }
 
         Object.values(spriteSets).forEach((set) => {
             if (set.rgbTexture) set.rgbTexture.dispose();
@@ -1478,6 +2658,7 @@
             setGlobalStat('global-speed', 'n/a');
             setGlobalStat('render-count', '0');
             setGlobalStat('gl-context-count', '0');
+            enableNoWebGLLegacyBehavior();
             console.warn('WebGL is unavailable. Falling back to static thumbnail containers.');
             return;
         }
@@ -1491,11 +2672,12 @@
             setGlobalStat('global-speed', 'n/a');
             setGlobalStat('render-count', '0');
             setGlobalStat('gl-context-count', '0');
+            enableNoWebGLLegacyBehavior();
             console.error('Failed to initialize shared WebGL renderer:', err);
             return;
         }
 
-        const projectItems = document.querySelectorAll('.project-item[data-sprite]');
+        const projectItems = document.querySelectorAll('.pc-project[data-sprite]');
         const spriteIds = [...new Set([...projectItems].map(el => el.dataset.sprite))];
 
         console.log(`Loading ${spriteIds.length} sprite sets...`);
@@ -1508,8 +2690,9 @@
         console.log(`Loaded ${Object.keys(spriteSets).length} sprite sets`);
 
         projectItems.forEach((item) => {
-            const container = item.querySelector('.thumbnail-container');
+            const container = item.querySelector('.pc-thumbnail-container');
             const spriteId = item.dataset.sprite;
+            const slug = item.dataset.slug;
 
             if (!spriteSets[spriteId]) {
                 console.warn(`Sprite set not loaded: ${spriteId}`);
@@ -1520,6 +2703,9 @@
             thumbnail.createPointCloud();
             thumbnails.push(thumbnail);
             thumbnailByContainer.set(container, thumbnail);
+            if (slug) {
+                thumbnailBySlug.set(slug, thumbnail);
+            }
         });
 
         console.log(`Created ${thumbnails.length} point cloud thumbnails`);
@@ -1529,6 +2715,9 @@
         setupDeviceOrientation();
         setupThumbnailObservers();
         refreshRenderableThumbnails();
+
+        projectTransitionManager = new ProjectTransitionManager();
+        projectTransitionManager.init();
 
         addManagedEventListener(window, 'resize', handleResize);
         addManagedEventListener(window, 'scroll', handleScroll, { passive: true });
@@ -1690,7 +2879,8 @@
         const now = Date.now();
         const shouldForceRectRefresh =
             now < startupStabilizeUntilMs ||
-            (now - lastScrollEventTime) < ACTIVE_SCROLL_RECT_REFRESH_MS;
+            (now - lastScrollEventTime) < ACTIVE_SCROLL_RECT_REFRESH_MS ||
+            now < transitionRectRefreshUntilMs;
 
         if (rectsNeedUpdate || shouldForceRectRefresh) {
             refreshRenderableThumbnails();
