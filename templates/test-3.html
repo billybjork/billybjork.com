@@ -455,9 +455,13 @@
         }
 
         vec2 getAtlasUV(vec2 localUV, float frame) {
-            vec2 clampedUV = clamp(localUV, vec2(0.001), vec2(0.999));
+            // Clamp to half-texel from edges to avoid bleeding into adjacent frames.
+            vec2 halfTexel = vec2(0.5) / frameSize;
+            vec2 clampedUV = clamp(localUV, halfTexel, vec2(1.0) - halfTexel);
             float col = mod(frame, columns);
             float row = floor(frame / columns);
+            // localUV is generated in bottom-up space; atlas rows are top-down.
+            // With texture.flipY = false, this is the same convention used in test/test-2.
             vec2 flippedLocalUV = vec2(clampedUV.x, 1.0 - clampedUV.y);
             vec2 frameOffset = vec2(col * frameSize.x, row * frameSize.y);
             return (frameOffset + flippedLocalUV * frameSize) / atlasSize;
@@ -693,6 +697,7 @@
     const ACTIVE_SCROLL_RECT_REFRESH_MS = 140;
     const STARTUP_STABILIZE_MS = 900;
     const SCROLL_SPEED_SMOOTHING = 0.35;
+    const SPRITE_REQUEST_VERSION = Date.now().toString(36);
     const prefersReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
     let prefersReducedMotion = prefersReducedMotionMedia.matches;
 
@@ -766,8 +771,9 @@
         let idx = 0;
         for (let y = 0; y < pointsY; y++) {
             for (let x = 0; x < pointsX; x++) {
-                uvs[idx++] = (x * stride + stride / 2) / frameWidth;
-                uvs[idx++] = (y * stride + stride / 2) / frameHeight;
+                // Sample at texel centers (+ 0.5) to avoid boundary interpolation
+                uvs[idx++] = (x * stride + 0.5) / frameWidth;
+                uvs[idx++] = (y * stride + 0.5) / frameHeight;
             }
         }
 
@@ -956,6 +962,7 @@
                 alpha: true,
                 powerPreference: 'high-performance',
             });
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
             this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             this.renderer.setClearColor(0x000000, 0);
             this.renderer.autoClear = false;
@@ -1324,12 +1331,19 @@
     // =============================================
     // Initialization
     // =============================================
+    function withVersion(url, version) {
+        if (!version) return url;
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}v=${encodeURIComponent(version)}`;
+    }
+
     async function loadSpriteSet(spriteId) {
         const spritePath = `${SPRITE_BASE_PATH}/${spriteId}`;
 
         let metadata;
         try {
-            const response = await fetch(`${spritePath}/metadata.json`);
+            const metadataUrl = withVersion(`${spritePath}/metadata.json`, `${spriteId}-${SPRITE_REQUEST_VERSION}`);
+            const response = await fetch(metadataUrl, { cache: 'no-store' });
             metadata = await response.json();
         } catch (err) {
             console.error(`Failed to load metadata for ${spriteId}:`, err);
@@ -1339,9 +1353,13 @@
         const loader = new THREE.TextureLoader();
         const res = metadata.resolutions[RESOLUTION];
 
+        const atlasVersion = String(
+            metadata.atlas_version ||
+            `${spriteId}-${metadata.frames}-${metadata.columns}-${metadata.rows}-${res.sheet_width}x${res.sheet_height}`
+        );
         const [rgbTexture, depthTexture] = await Promise.all([
-            loadTexture(loader, `${spritePath}/${res.rgb_file}`),
-            loadTexture(loader, `${spritePath}/${res.depth_file}`),
+            loadTexture(loader, withVersion(`${spritePath}/${res.rgb_file}`, atlasVersion)),
+            loadTexture(loader, withVersion(`${spritePath}/${res.depth_file}`, atlasVersion)),
         ]);
 
         [rgbTexture, depthTexture].forEach(tex => {
@@ -1349,7 +1367,33 @@
             tex.magFilter = THREE.LinearFilter;
             tex.generateMipmaps = false;
             tex.flipY = false;
+            tex.wrapS = THREE.ClampToEdgeWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
         });
+        rgbTexture.encoding = THREE.sRGBEncoding;
+        depthTexture.encoding = THREE.LinearEncoding;
+
+        const expectedWidth = res.sheet_width;
+        const expectedHeight = res.sheet_height;
+        const rgbWidth = rgbTexture.image?.width;
+        const rgbHeight = rgbTexture.image?.height;
+        const depthWidth = depthTexture.image?.width;
+        const depthHeight = depthTexture.image?.height;
+        if (
+            rgbWidth !== expectedWidth ||
+            rgbHeight !== expectedHeight ||
+            depthWidth !== expectedWidth ||
+            depthHeight !== expectedHeight
+        ) {
+            console.warn(`Atlas dimension mismatch for ${spriteId}`, {
+                expectedWidth,
+                expectedHeight,
+                rgbWidth,
+                rgbHeight,
+                depthWidth,
+                depthHeight,
+            });
+        }
 
         console.log(`Loaded sprite set: ${spriteId} (${metadata.frames} frames)`);
         return { metadata, rgbTexture, depthTexture };
