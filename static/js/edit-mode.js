@@ -2117,16 +2117,18 @@ window.ProjectSettings = {
     _mouseUpHandler: null,
     _keyHandler: null,
     _beforeUnloadHandler: null,
-    _pollTimer: null,
     _spriteLooping: false,
-    _thumbVideo: null,
-    _thumbCanvas: null,
 
     // HLS parallel encoding state
     _hlsSessionId: null,
     _hlsComplete: false,
     _hlsPollTimer: null,
     _thumbnailPollTimer: null,
+    _hlsScriptPromise: null,
+    _hlsPreviewUrl: null,
+    _blobPreviewFailed: false,
+    _previewCodecErrorShown: false,
+    _hlsPreviewErrorShown: false,
 
     /**
      * Show settings modal for a project
@@ -2326,6 +2328,10 @@ window.ProjectSettings = {
         // Reset HLS state
         this._hlsSessionId = null;
         this._hlsComplete = false;
+        this._hlsPreviewUrl = null;
+        this._blobPreviewFailed = false;
+        this._previewCodecErrorShown = false;
+        this._hlsPreviewErrorShown = false;
 
         const content = this.modal.querySelector('.edit-settings-content');
         content.classList.add('edit-settings-content--video');
@@ -2341,6 +2347,7 @@ window.ProjectSettings = {
                 <video class="edit-hero-video-player" controls playsinline></video>
             </div>
             <div class="edit-hero-file-info">${this.escHtml(file.name)} (${fileSize} MB)</div>
+            <div class="edit-hero-preview-status" hidden></div>
             <div class="edit-hero-timeline">
                 <div class="edit-hero-timeline-track">
                     <canvas class="edit-hero-timeline-thumbs"></canvas>
@@ -2367,6 +2374,10 @@ window.ProjectSettings = {
             </div>
         `;
 
+        // Get reference to video element
+        this.videoEl = content.querySelector('.edit-hero-video-player');
+        this.updatePreviewStatus();
+
         // Close goes back to settings
         content.querySelector('.edit-settings-close').addEventListener('click', () => this.cancelUpload());
 
@@ -2376,97 +2387,6 @@ window.ProjectSettings = {
 
         // Immediately upload to server for thumbnail extraction
         this.extractServerThumbnails(file, content);
-
-        this.videoEl.addEventListener('timeupdate', () => {
-            this.updatePlayhead();
-            content.querySelector('.edit-hero-current-time').textContent = this.formatTime(this.videoEl.currentTime);
-
-            // Sprite loop: wrap back to start when reaching end of sprite range
-            if (this._spriteLooping && this.videoEl.currentTime >= this.spriteStart + this.spriteDuration) {
-                this.videoEl.currentTime = this.spriteStart;
-            }
-        });
-
-        // Timeline click — click on sprite range to loop, outside to seek freely
-        const track = content.querySelector('.edit-hero-timeline-track');
-        track.addEventListener('click', (e) => {
-            if (this._isDraggingSprite) return;
-            const rect = track.getBoundingClientRect();
-            const pct = (e.clientX - rect.left) / rect.width;
-            const time = pct * this.videoDuration;
-
-            // Check if click landed inside the sprite range
-            const spriteEnd = this.spriteStart + this.spriteDuration;
-            if (time >= this.spriteStart && time <= spriteEnd) {
-                // Activate sprite loop and play from clicked position within range
-                this._spriteLooping = true;
-                this.videoEl.currentTime = time;
-                this.videoEl.play();
-            } else {
-                // Click outside sprite range: move sprite position, disable loop
-                this._spriteLooping = false;
-                this.spriteStart = Math.max(0, Math.min(time, this.videoDuration - this.spriteDuration));
-                this.videoEl.currentTime = this.spriteStart;
-                this.updateSpriteRange();
-            }
-            this.updateSpriteLoopUI();
-        });
-
-        // Sprite range drag
-        const spriteRange = content.querySelector('.edit-hero-sprite-range');
-        spriteRange.addEventListener('mousedown', (e) => {
-            this._isDraggingSprite = true;
-            this._dragStartX = e.clientX;
-            this._dragStartTime = this.spriteStart;
-            e.preventDefault();
-            e.stopPropagation();
-        });
-
-        // Double-click sprite range to toggle loop playback
-        spriteRange.addEventListener('dblclick', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this._spriteLooping = !this._spriteLooping;
-            if (this._spriteLooping) {
-                this.videoEl.currentTime = this.spriteStart;
-                this.videoEl.play();
-            }
-            this.updateSpriteLoopUI();
-        });
-
-        this._mouseMoveHandler = (e) => {
-            if (!this._isDraggingSprite) return;
-            const rect = this.modal.querySelector('.edit-hero-timeline-track').getBoundingClientRect();
-            const dx = e.clientX - this._dragStartX;
-            const dt = (dx / rect.width) * this.videoDuration;
-            this.spriteStart = Math.max(0, Math.min(this._dragStartTime + dt, this.videoDuration - this.spriteDuration));
-            this.videoEl.currentTime = this.spriteStart;
-            this.updateSpriteRange();
-        };
-        document.addEventListener('mousemove', this._mouseMoveHandler);
-
-        this._mouseUpHandler = () => {
-            this._isDraggingSprite = false;
-        };
-        document.addEventListener('mouseup', this._mouseUpHandler);
-
-        // Arrow key adjustment
-        this._keyHandler = (e) => {
-            if (this.currentView !== 'video' || !this.modal) return;
-            if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                this.spriteStart = Math.max(0, this.spriteStart - 0.5);
-                this.videoEl.currentTime = this.spriteStart;
-                this.updateSpriteRange();
-            }
-            if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                this.spriteStart = Math.min(this.videoDuration - this.spriteDuration, this.spriteStart + 0.5);
-                this.videoEl.currentTime = this.spriteStart;
-                this.updateSpriteRange();
-            }
-        };
-        document.addEventListener('keydown', this._keyHandler);
     },
 
     /**
@@ -2539,9 +2459,39 @@ window.ProjectSettings = {
                             progressDiv.style.display = 'none';
                         }
 
-                        // Create hidden video element for playback (if browser supports it)
+                        // Set local preview source; if unsupported, we'll switch to HLS when ready
                         this.objectUrl = URL.createObjectURL(file);
                         this.videoEl = content.querySelector('.edit-hero-video-player');
+                        this.videoEl.classList.remove('hls-video-preview');
+                        this.videoEl.dataset.previewSource = 'blob';
+                        this.videoEl.addEventListener('error', () => {
+                            const src = this.videoEl.currentSrc || this.videoEl.src || '';
+                            if (!src.startsWith('blob:') || this._previewCodecErrorShown) return;
+                            this._blobPreviewFailed = true;
+                            this._previewCodecErrorShown = true;
+                            this.updatePreviewStatus(
+                                'Preview unavailable: this upload codec is not supported by your browser yet. It will appear once HLS finishes encoding.',
+                                'warning'
+                            );
+                            EditUtils.showNotification(
+                                'Browser cannot play this upload codec. Preview will switch to HLS when ready.',
+                                'info',
+                                4500
+                            );
+                        }, { once: true });
+                        this.videoEl.addEventListener('loadedmetadata', () => {
+                            const src = this.videoEl.currentSrc || this.videoEl.src || '';
+                            if (!src.startsWith('blob:')) return;
+                            if (this.videoEl.videoWidth === 0 && !this._blobPreviewFailed) {
+                                this._blobPreviewFailed = true;
+                                this.updatePreviewStatus(
+                                    'Preview unavailable: browser can only decode audio for this upload. It will appear once HLS finishes encoding.',
+                                    'warning'
+                                );
+                            } else if (!this._blobPreviewFailed) {
+                                this.updatePreviewStatus();
+                            }
+                        }, { once: true });
                         this.videoEl.src = this.objectUrl;
 
                         // Set up video event listeners
@@ -2624,6 +2574,10 @@ window.ProjectSettings = {
                     this._hlsPollTimer = null;
                     this._hlsComplete = true;
 
+                    if (data.hls_url) {
+                        await this.switchPreviewToHls(data.hls_url);
+                    }
+
                     progressFill.style.width = '100%';
                     progressText.textContent = 'HLS ready! Select sprite range and confirm.';
 
@@ -2657,6 +2611,187 @@ window.ProjectSettings = {
                 // Polling error, keep trying
             }
         }, 1000);
+    },
+
+    /**
+     * Lazy-load HLS.js for editor preview playback.
+     */
+    loadHlsScript() {
+        if (window.Hls) return Promise.resolve();
+        if (this._hlsScriptPromise) return this._hlsScriptPromise;
+
+        const hlsJsSrc = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
+        this._hlsScriptPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = hlsJsSrc;
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load HLS.js'));
+            document.head.appendChild(script);
+        });
+
+        return this._hlsScriptPromise;
+    },
+
+    /**
+     * Switch preview playback from local blob source to encoded HLS stream.
+     */
+    async switchPreviewToHls(hlsUrl) {
+        if (!hlsUrl || !this.videoEl || this.currentView !== 'video') return;
+        if (this._hlsPreviewUrl === hlsUrl) return;
+
+        const video = this.videoEl;
+        const resumeTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        const shouldResumePlayback = !video.paused || this._spriteLooping;
+        const canPlayNative = !!video.canPlayType('application/vnd.apple.mpegurl');
+
+        const restorePlaybackState = () => {
+            if (resumeTime > 0) {
+                try { video.currentTime = resumeTime; } catch (_) {}
+            }
+            if (shouldResumePlayback) {
+                video.play().catch(() => {});
+            }
+        };
+
+        const destroyHlsInstance = () => {
+            if (video.hlsInstance) {
+                video.hlsInstance.destroy();
+                video.hlsInstance = null;
+            }
+        };
+
+        const attachWithHlsJs = () => new Promise((resolve, reject) => {
+            if (!window.Hls || !window.Hls.isSupported()) {
+                reject(new Error('HLS.js not supported'));
+                return;
+            }
+
+            destroyHlsInstance();
+            const hls = new window.Hls({
+                abrEwmaDefaultEstimate: 5000000,
+                capLevelToPlayerSize: true,
+            });
+            video.hlsInstance = hls;
+
+            let settled = false;
+            const finish = (ok, error) => {
+                if (settled) return;
+                settled = true;
+                if (ok) {
+                    restorePlaybackState();
+                    resolve();
+                } else {
+                    destroyHlsInstance();
+                    reject(error || new Error('HLS.js failed to initialize'));
+                }
+            };
+
+            hls.on(window.Hls.Events.MANIFEST_PARSED, () => finish(true));
+            hls.on(window.Hls.Events.ERROR, (_, data) => {
+                if (data && data.fatal) {
+                    finish(false, new Error(data.details || 'HLS.js fatal error'));
+                }
+            });
+
+            hls.loadSource(hlsUrl);
+            hls.attachMedia(video);
+        });
+
+        const attachNatively = () => new Promise((resolve, reject) => {
+            if (!canPlayNative) {
+                reject(new Error('Native HLS not supported'));
+                return;
+            }
+
+            const onLoaded = () => {
+                cleanup();
+                restorePlaybackState();
+                resolve();
+            };
+            const onError = () => {
+                cleanup();
+                reject(new Error('Native HLS failed to load'));
+            };
+            const cleanup = () => {
+                video.removeEventListener('loadedmetadata', onLoaded);
+                video.removeEventListener('error', onError);
+            };
+
+            destroyHlsInstance();
+            video.addEventListener('loadedmetadata', onLoaded);
+            video.addEventListener('error', onError);
+            video.src = hlsUrl;
+            video.load();
+        });
+
+        let switched = false;
+        try {
+            await attachWithHlsJs();
+            switched = true;
+        } catch (_) {
+            try {
+                await this.loadHlsScript();
+                await attachWithHlsJs();
+                switched = true;
+            } catch (_) {
+                if (canPlayNative) {
+                    try {
+                        await attachNatively();
+                        switched = true;
+                    } catch (_) {
+                        // Keep existing preview source on failure.
+                    }
+                }
+            }
+        }
+
+        if (!switched) {
+            video.dataset.previewSource = 'blob';
+            if (this._blobPreviewFailed && !this._hlsPreviewErrorShown) {
+                this._hlsPreviewErrorShown = true;
+                this.updatePreviewStatus(
+                    'Preview unavailable: HLS preview could not be initialized.',
+                    'error'
+                );
+                EditUtils.showNotification(
+                    'HLS preview could not be initialized. Video will still process, but live preview is unavailable.',
+                    'error',
+                    5000
+                );
+            } else {
+                this.updatePreviewStatus();
+            }
+            return;
+        }
+
+        this._hlsPreviewUrl = hlsUrl;
+        video.classList.add('hls-video-preview');
+        video.dataset.previewSource = 'hls';
+        this.updatePreviewStatus();
+        if (this.objectUrl) {
+            URL.revokeObjectURL(this.objectUrl);
+            this.objectUrl = null;
+        }
+    },
+
+    /**
+     * Update preview source status text in the video modal.
+     */
+    updatePreviewStatus(message = '', tone = 'info') {
+        if (!this.modal || this.currentView !== 'video') return;
+        const el = this.modal.querySelector('.edit-hero-preview-status');
+        if (!el) return;
+        if (!message) {
+            el.hidden = true;
+            el.textContent = '';
+            el.classList.remove('is-info', 'is-warning', 'is-error', 'is-success');
+            return;
+        }
+        el.hidden = false;
+        el.textContent = message;
+        el.classList.remove('is-info', 'is-warning', 'is-error', 'is-success');
+        el.classList.add(`is-${tone}`);
     },
 
     /**
@@ -2831,6 +2966,10 @@ window.ProjectSettings = {
      * Clean up video-related state and listeners
      */
     cleanupVideoState() {
+        if (this.videoEl && this.videoEl.hlsInstance) {
+            this.videoEl.hlsInstance.destroy();
+            this.videoEl.hlsInstance = null;
+        }
         if (this.objectUrl) {
             URL.revokeObjectURL(this.objectUrl);
             this.objectUrl = null;
@@ -2850,10 +2989,6 @@ window.ProjectSettings = {
         if (this._beforeUnloadHandler) {
             window.removeEventListener('beforeunload', this._beforeUnloadHandler);
             this._beforeUnloadHandler = null;
-        }
-        if (this._pollTimer) {
-            clearInterval(this._pollTimer);
-            this._pollTimer = null;
         }
         // Clean up HLS polling timer
         if (this._hlsPollTimer) {
@@ -2877,6 +3012,10 @@ window.ProjectSettings = {
         // Clean up HLS state
         this._hlsSessionId = null;
         this._hlsComplete = false;
+        this._hlsPreviewUrl = null;
+        this._blobPreviewFailed = false;
+        this._previewCodecErrorShown = false;
+        this._hlsPreviewErrorShown = false;
     },
 
     /**
@@ -2966,6 +3105,9 @@ window.ProjectSettings = {
                         clearInterval(processingPollTimer);
                         processingPollTimer = null;
                         this._hlsComplete = true;
+                        if (data.hls_url) {
+                            await this.switchPreviewToHls(data.hls_url);
+                        }
                         // HLS done - now show sprite generation progress
                         progressFill.style.width = '80%';
                         progressText.textContent = 'Generating sprite sheet & thumbnail...';
@@ -3079,11 +3221,6 @@ window.ProjectSettings = {
         if (this.activeXhr) {
             this.activeXhr.abort();
             this.activeXhr = null;
-        }
-        if (this._pollTimer) {
-            // Server processing continues in background, just stop polling
-            clearInterval(this._pollTimer);
-            this._pollTimer = null;
         }
         this.showSettingsView();
     },
