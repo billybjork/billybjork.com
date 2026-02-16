@@ -683,6 +683,9 @@
     const PLANE_HEIGHT = 45.0;
     const CAMERA_FOV = 50;
     const CAMERA_Z = 100;
+    const TILT_ORBIT_VERTICAL_SCALE = 1.0;
+    const PAN_Y_CAMERA_INFLUENCE = 0.25;
+    const PAN_Y_LOOK_INFLUENCE = 0.15;
     const CLOUD_FILL_FACTOR = 0.96;
     const RENDER_MARGIN = 180;
     const DEBUG_UI_UPDATE_MS = 100;
@@ -1032,12 +1035,12 @@
             this.lastLayoutCanvasHeight = -1;
 
             const debug = this.container.querySelector('.thumbnail-debug');
-            this.debugElements = {
+            this.debugElements = debug ? {
                 tiltAngle: debug.querySelector('.tilt-angle'),
                 frameNum: debug.querySelector('.frame-num'),
                 frameTotal: debug.querySelector('.frame-total'),
                 coherenceVal: debug.querySelector('.coherence-val'),
-            };
+            } : null;
 
             this.group = new THREE.Group();
             this.group.visible = false;
@@ -1102,7 +1105,9 @@
             this.motionGroup.add(this.points);
 
             // Update debug
-            this.debugElements.frameTotal.textContent = metadata.frames;
+            if (this.debugElements?.frameTotal) {
+                this.debugElements.frameTotal.textContent = metadata.frames;
+            }
         }
 
         rebuildPointCloud() {
@@ -1187,14 +1192,22 @@
         updateMotionTransform(effectiveDepth) {
             if (!this.motionGroup || !sharedRenderer || !sharedRenderer.camera) return;
 
+            const sharedCamera = sharedRenderer.camera;
+            if (Math.abs(this.virtualCamera.aspect - sharedCamera.aspect) > 1e-6) {
+                this.virtualCamera.aspect = sharedCamera.aspect;
+                this.virtualCamera.updateProjectionMatrix();
+            }
+
             const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
             const distance = CAMERA_Z;
+            const tiltY = Math.sin(tiltRad) * distance * TILT_ORBIT_VERTICAL_SCALE;
+            const panY = this.currentPanY * PAN_Y_CAMERA_INFLUENCE;
             this.virtualCamera.position.x = this.currentPanX;
-            this.virtualCamera.position.y = Math.sin(tiltRad) * distance * 0.5 + this.currentPanY;
+            this.virtualCamera.position.y = tiltY + panY;
             this.virtualCamera.position.z = Math.cos(tiltRad) * distance;
             this.virtualLookTarget.set(
                 this.currentPanX * 0.3,
-                this.currentPanY * 0.3,
+                this.currentPanY * PAN_Y_LOOK_INFLUENCE,
                 effectiveDepth / 2
             );
             this.virtualCamera.lookAt(this.virtualLookTarget);
@@ -1294,9 +1307,15 @@
 
             const nowMs = performance.now();
             if (nowMs - this.lastDebugUpdateMs >= DEBUG_UI_UPDATE_MS) {
-                this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
-                this.debugElements.frameNum.textContent = frameIndex + 1;
-                this.debugElements.coherenceVal.textContent = Math.round(this.currentCoherence * 100) + '%';
+                if (this.debugElements?.tiltAngle) {
+                    this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
+                }
+                if (this.debugElements?.frameNum) {
+                    this.debugElements.frameNum.textContent = frameIndex + 1;
+                }
+                if (this.debugElements?.coherenceVal) {
+                    this.debugElements.coherenceVal.textContent = Math.round(this.currentCoherence * 100) + '%';
+                }
                 this.lastDebugUpdateMs = nowMs;
             }
         }
@@ -1711,23 +1730,23 @@
         });
 
         on(document.getElementById('depth-amount'), 'input', (e) => {
-            config.depthAmount = parseInt(e.target.value);
+            config.depthAmount = parseInt(e.target.value, 10);
             document.getElementById('depth-val').textContent = config.depthAmount;
         });
 
         on(document.getElementById('tilt-range'), 'input', (e) => {
-            config.tiltRange = parseInt(e.target.value);
+            config.tiltRange = parseInt(e.target.value, 10);
             document.getElementById('tilt-val').textContent = config.tiltRange;
         });
 
         on(document.getElementById('mouse-parallax'), 'input', (e) => {
-            config.mouseParallax = parseInt(e.target.value);
+            config.mouseParallax = parseInt(e.target.value, 10);
             document.getElementById('parallax-val').textContent = config.mouseParallax;
         });
 
         // Viewport coherence
         on(document.getElementById('depth-center'), 'input', (e) => {
-            config.depthAmountCenter = parseInt(e.target.value);
+            config.depthAmountCenter = parseInt(e.target.value, 10);
             document.getElementById('depth-center-val').textContent = config.depthAmountCenter;
         });
 
