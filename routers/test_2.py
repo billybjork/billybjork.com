@@ -19,3 +19,16 @@ async def test_2_page(request: Request):
             "page_meta_description": "Testing point cloud rendering from RGBD sprite sheets",
         },
     )
+
+
+@router.get("/test-3", response_class=HTMLResponse)
+async def test_3_page(request: Request):
+    """Render the shared-canvas point cloud depth test page."""
+    return templates.TemplateResponse(
+        "test-3.html",
+        {
+            "request": request,
+            "page_title": "Point Cloud Shared Renderer Test",
+            "page_meta_description": "Testing shared-canvas point cloud rendering from RGBD sprite sheets",
+        },
+    )
