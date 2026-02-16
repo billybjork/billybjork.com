@@ -2,7 +2,7 @@
     <figure
         id="thumbnail-{{ project.slug }}"
         class="thumbnail lazy-thumbnail"
-        data-bg="{{ project.sprite_sheet_link }}"
+        {% if project.sprite_sheet_link %}data-bg="{{ project.sprite_sheet_link }}"{% endif %}
         data-frames="{{ project.frames | default(60) }}"
         data-frame-width="{{ project.frame_width | default(320) }}"
         data-frame-height="{{ project.frame_height | default(180) }}"
