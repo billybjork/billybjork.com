@@ -52,9 +52,9 @@
         width: 100%;
         max-width: 640px;
         aspect-ratio: 16/9;
-        background: #111;
-        border-radius: 8px;
-        overflow: hidden;
+        background: transparent;
+        border-radius: 0;
+        overflow: visible;
         position: relative;
     }
 
@@ -436,6 +436,7 @@
         uniform float depthAmount;
         uniform float pointSize;
         uniform float depthSizing;
+        uniform float attenuationBase;
         uniform bool sizeAttenuation;
         uniform float edgeScatter;
         uniform float edgeThreshold;
@@ -517,7 +518,7 @@
             float size = pointSize;
             size *= mix(1.0, depthSizing, depth);
             if (sizeAttenuation) {
-                size *= (300.0 / -mvPosition.z);
+                size *= (300.0 / -mvPosition.z) * attenuationBase;
             }
 
             gl_PointSize = size;
@@ -678,6 +679,11 @@
 
     const SPRITE_BASE_PATH = '/static/test/rgbd-sprites';
     const RESOLUTION = '640x360';
+    const PLANE_WIDTH = 80.0;
+    const PLANE_HEIGHT = 45.0;
+    const CAMERA_FOV = 50;
+    const CAMERA_Z = 100;
+    const CLOUD_FILL_FACTOR = 0.96;
     const RENDER_MARGIN = 180;
     const DEBUG_UI_UPDATE_MS = 100;
     const DENSITY_REBUILD_DEBOUNCE_MS = 120;
@@ -950,6 +956,10 @@
             this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             this.renderer.setClearColor(0x000000, 0);
             this.renderer.autoClear = false;
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
+            this.camera.position.set(0, 0, CAMERA_Z);
+            this.camera.lookAt(0, 0, 0);
             this.resize();
         }
 
@@ -967,6 +977,8 @@
                 renderState.height = height;
                 this.renderer.setPixelRatio(pixelRatio);
                 this.renderer.setSize(width, height, false);
+                this.camera.aspect = width / Math.max(height, 1);
+                this.camera.updateProjectionMatrix();
             }
         }
 
@@ -977,33 +989,20 @@
             renderer.setScissorTest(false);
             renderer.setViewport(0, 0, renderState.width, renderState.height);
             renderer.clear(true, true, true);
+            this.camera.updateMatrixWorld(true);
 
             if (renderables.length === 0) {
                 renderState.renderedCount = 0;
                 return;
             }
 
-            let renderedCount = 0;
-
             renderables.forEach(({ thumb, rect }) => {
-                const fullLeft = Math.floor(rect.left);
-                const fullTop = Math.floor(rect.top);
-                const fullRight = Math.ceil(rect.right);
-                const fullBottom = Math.ceil(rect.bottom);
-                const fullWidth = Math.max(1, fullRight - fullLeft);
-                const fullHeight = Math.max(1, fullBottom - fullTop);
-                if (fullWidth <= 0 || fullHeight <= 0) return;
-
-                const viewportY = renderState.height - fullBottom;
-                thumb.update(globalProgress, time, rect, fullWidth, fullHeight);
-
-                renderer.setViewport(fullLeft, viewportY, fullWidth, fullHeight);
-                renderer.clearDepth();
-                renderer.render(thumb.scene, thumb.camera);
-                renderedCount++;
+                thumb.setVisible(true);
+                thumb.update(globalProgress, time, rect);
             });
 
-            renderState.renderedCount = renderedCount;
+            renderer.render(this.scene, this.camera);
+            renderState.renderedCount = renderables.length;
         }
     }
 
@@ -1021,12 +1020,16 @@
             this.pointCount = 0;
             this.currentCoherence = prefersReducedMotion ? 1 : 0;
             this.lastDebugUpdateMs = 0;
-            this.lastCameraWidth = -1;
-            this.lastCameraHeight = -1;
             this.geometryKey = null;
             this.cachedRect = null;
             this.isRenderable = false;
             this.isInViewportMargin = true;
+            this.lastLayoutWidth = -1;
+            this.lastLayoutHeight = -1;
+            this.lastLayoutLeft = Number.NaN;
+            this.lastLayoutTop = Number.NaN;
+            this.lastLayoutCanvasWidth = -1;
+            this.lastLayoutCanvasHeight = -1;
 
             const debug = this.container.querySelector('.thumbnail-debug');
             this.debugElements = {
@@ -1036,18 +1039,19 @@
                 coherenceVal: debug.querySelector('.coherence-val'),
             };
 
-            this.initThree();
+            this.group = new THREE.Group();
+            this.group.visible = false;
+            this.motionGroup = new THREE.Group();
+            this.motionGroup.matrixAutoUpdate = false;
+            this.group.add(this.motionGroup);
+            sharedRenderer.scene.add(this.group);
+
+            this.virtualCamera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
+            this.virtualLookTarget = new THREE.Vector3();
         }
 
         get spriteData() {
             return spriteSets[this.spriteId];
-        }
-
-        initThree() {
-            this.scene = new THREE.Scene();
-            const aspect = this.container.clientWidth / Math.max(this.container.clientHeight, 1);
-            this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
-            this.camera.position.set(0, 0, 100);
         }
 
         createPointCloud() {
@@ -1072,6 +1076,7 @@
                     depthAmount: { value: config.depthAmount },
                     pointSize: { value: config.pointSize },
                     depthSizing: { value: config.depthSizing },
+                    attenuationBase: { value: CAMERA_Z / 100 },
                     sizeAttenuation: { value: config.sizeAttenuation },
                     edgeScatter: { value: config.edgeScatter },
                     edgeThreshold: { value: config.edgeThreshold },
@@ -1093,7 +1098,8 @@
             });
 
             this.points = new THREE.Points(geometry, this.material);
-            this.scene.add(this.points);
+            this.points.frustumCulled = false;
+            this.motionGroup.add(this.points);
 
             // Update debug
             this.debugElements.frameTotal.textContent = metadata.frames;
@@ -1106,7 +1112,7 @@
 
         disposePointCloud() {
             if (this.points) {
-                this.scene.remove(this.points);
+                this.motionGroup.remove(this.points);
                 this.points = null;
             }
             if (this.material) {
@@ -1121,6 +1127,9 @@
 
         destroy() {
             this.disposePointCloud();
+            if (this.group && sharedRenderer && sharedRenderer.scene) {
+                sharedRenderer.scene.remove(this.group);
+            }
         }
 
         updateViewportPosition(rect) {
@@ -1130,7 +1139,76 @@
             this.viewportPosition = Math.max(-0.2, Math.min(1.2, this.viewportPosition));
         }
 
-        update(globalProgress, time, rect, width, height) {
+        setVisible(isVisible) {
+            if (this.group) {
+                this.group.visible = isVisible;
+            }
+        }
+
+        syncLayout(rect) {
+            if (!this.group) return;
+
+            const left = Math.floor(rect.left);
+            const top = Math.floor(rect.top);
+            const width = Math.max(1, Math.ceil(rect.width));
+            const height = Math.max(1, Math.ceil(rect.height));
+
+            if (
+                this.lastLayoutWidth === width &&
+                this.lastLayoutHeight === height &&
+                this.lastLayoutLeft === left &&
+                this.lastLayoutTop === top &&
+                this.lastLayoutCanvasWidth === renderState.width &&
+                this.lastLayoutCanvasHeight === renderState.height
+            ) {
+                return;
+            }
+
+            this.lastLayoutWidth = width;
+            this.lastLayoutHeight = height;
+            this.lastLayoutLeft = left;
+            this.lastLayoutTop = top;
+            this.lastLayoutCanvasWidth = renderState.width;
+            this.lastLayoutCanvasHeight = renderState.height;
+
+            const halfFovRad = THREE.MathUtils.degToRad(CAMERA_FOV * 0.5);
+            const visibleHeight = 2 * CAMERA_Z * Math.tan(halfFovRad);
+            const pixelsPerWorld = renderState.height / Math.max(visibleHeight, 1e-6);
+            const centerX = (left + width / 2 - renderState.width / 2) / pixelsPerWorld;
+            const centerY = (renderState.height / 2 - (top + height / 2)) / pixelsPerWorld;
+            const scaleX = (width * CLOUD_FILL_FACTOR) / (PLANE_WIDTH * pixelsPerWorld);
+            const scaleY = (height * CLOUD_FILL_FACTOR) / (PLANE_HEIGHT * pixelsPerWorld);
+            const scaleZ = (scaleX + scaleY) * 0.5;
+
+            this.group.position.set(centerX, centerY, 0);
+            this.group.scale.set(scaleX, scaleY, scaleZ);
+        }
+
+        updateMotionTransform(effectiveDepth) {
+            if (!this.motionGroup || !sharedRenderer || !sharedRenderer.camera) return;
+
+            const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
+            const distance = CAMERA_Z;
+            this.virtualCamera.position.x = this.currentPanX;
+            this.virtualCamera.position.y = Math.sin(tiltRad) * distance * 0.5 + this.currentPanY;
+            this.virtualCamera.position.z = Math.cos(tiltRad) * distance;
+            this.virtualLookTarget.set(
+                this.currentPanX * 0.3,
+                this.currentPanY * 0.3,
+                effectiveDepth / 2
+            );
+            this.virtualCamera.lookAt(this.virtualLookTarget);
+            this.virtualCamera.updateMatrixWorld(true);
+
+            // Convert old per-thumbnail camera view transform into model transform
+            // under the shared camera so motion/tilt/parallax matches prior behavior.
+            this.motionGroup.matrix
+                .copy(sharedRenderer.camera.matrixWorld)
+                .multiply(this.virtualCamera.matrixWorldInverse);
+            this.motionGroup.matrixWorldNeedsUpdate = true;
+        }
+
+        update(globalProgress, time, rect) {
             if (!this.material) return;
 
             const { metadata } = this.spriteData;
@@ -1211,20 +1289,8 @@
             u.dofEnable.value = config.dofEnable;
             u.dofFocal.value = config.dofFocal;
             u.dofStrength.value = config.dofStrength;
-            this.updateSize(width, height);
-            this.camera.clearViewOffset();
-
-            // Position camera based on tilt and mouse pan
-            const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
-            const distance = 100;
-            // X: mouse left/right panning
-            this.camera.position.x = this.currentPanX;
-            // Y: scroll-based tilt + mouse up/down offset
-            this.camera.position.y = Math.sin(tiltRad) * distance * 0.5 + this.currentPanY;
-            // Z: maintain distance based on tilt angle
-            this.camera.position.z = Math.cos(tiltRad) * distance;
-            // Look at center of the depth volume, offset by mouse pan for true parallax
-            this.camera.lookAt(this.currentPanX * 0.3, this.currentPanY * 0.3, effectiveDepth / 2);
+            this.syncLayout(rect);
+            this.updateMotionTransform(effectiveDepth);
 
             const nowMs = performance.now();
             if (nowMs - this.lastDebugUpdateMs >= DEBUG_UI_UPDATE_MS) {
@@ -1233,16 +1299,6 @@
                 this.debugElements.coherenceVal.textContent = Math.round(this.currentCoherence * 100) + '%';
                 this.lastDebugUpdateMs = nowMs;
             }
-        }
-
-        updateSize(width, height) {
-            if (this.lastCameraWidth === width && this.lastCameraHeight === height) {
-                return;
-            }
-            this.lastCameraWidth = width;
-            this.lastCameraHeight = height;
-            this.camera.aspect = width / height;
-            this.camera.updateProjectionMatrix();
         }
     }
 
@@ -1583,6 +1639,8 @@
         thumbnails.forEach((thumb) => {
             if (thumb.isRenderable && thumb.cachedRect) {
                 renderables.push({ thumb, rect: thumb.cachedRect });
+            } else {
+                thumb.setVisible(false);
             }
         });
 
