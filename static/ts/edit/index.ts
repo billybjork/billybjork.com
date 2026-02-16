@@ -10,6 +10,8 @@ import EditMedia from './media';
 import EditSlash from './slash';
 import EditUndo from './undo';
 import EditBootstrap from './bootstrap';
+import ProjectSettings from './project-settings';
+import ProjectCreate from './project-create';
 
 // Expose modules to window for backwards compatibility
 if (typeof window !== 'undefined') {
@@ -19,6 +21,8 @@ if (typeof window !== 'undefined') {
   window.EditMedia = EditMedia;
   window.EditSlash = EditSlash;
   window.EditUndo = EditUndo;
+  window.ProjectSettings = ProjectSettings;
+  window.ProjectCreate = ProjectCreate;
 }
 
 // Initialize bootstrap (which handles edit mode activation)
@@ -33,6 +37,8 @@ export {
   EditSlash,
   EditUndo,
   EditBootstrap,
+  ProjectSettings,
+  ProjectCreate,
 };
 
 // Re-export types

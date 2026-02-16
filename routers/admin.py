@@ -36,11 +36,49 @@ logger = logging.getLogger(__name__)
 # Processing progress tracker: { slug: { status, stage, progress, video, error } }
 _processing_progress = {}
 
-# Temp video files for thumbnail preview: { temp_id: { path, timestamp, frames, frames_complete } }
+# Temp video sources for thumbnail preview:
+# { temp_id: { path, timestamp, frames, frames_complete, is_remote } }
 _temp_video_files = {}
 
 # HLS encoding sessions: { session_id: { status, stage, progress, hls_url, temp_id, slug, timestamp, error } }
 _hls_sessions = {}
+
+TIMELINE_INITIAL_FRAME_COUNT = 6
+TIMELINE_TOTAL_FRAME_COUNT = 24
+TIMELINE_FRAME_WIDTH = 96
+TIMELINE_FRAME_HEIGHT = 54
+
+
+def _is_remote_video_source(path: str) -> bool:
+    return isinstance(path, str) and (
+        path.startswith("http://") or path.startswith("https://")
+    )
+
+
+def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
+    import threading
+
+    from utils.video import extract_thumbnail_frames
+
+    def extract_remaining_frames():
+        try:
+            all_frames, _ = extract_thumbnail_frames(
+                source_path,
+                num_frames=TIMELINE_TOTAL_FRAME_COUNT,
+                width=TIMELINE_FRAME_WIDTH,
+                height=TIMELINE_FRAME_HEIGHT,
+            )
+            if temp_id in _temp_video_files:
+                _temp_video_files[temp_id]["frames"] = all_frames
+                _temp_video_files[temp_id]["frames_complete"] = True
+        except Exception as e:
+            logger.warning(f"Background thumbnail extraction failed: {e}")
+            if temp_id in _temp_video_files:
+                _temp_video_files[temp_id]["frames_complete"] = True
+
+    thread = threading.Thread(target=extract_remaining_frames, daemon=True)
+    thread.start()
+
 
 router = APIRouter(
     prefix="/api",
@@ -317,8 +355,6 @@ async def video_thumbnails(request: Request):
     Returns: { success, frames (first frame only), duration, temp_id, hls_session_id? }
     """
     import secrets
-    import threading
-
     from utils.video import extract_thumbnail_frames, get_video_info
 
     form = await request.form()
@@ -349,8 +385,13 @@ async def video_thumbnails(request: Request):
         info = get_video_info(temp_path)
         duration = info["duration"]
 
-        # Extract first frame only for immediate response
-        first_frames, _ = extract_thumbnail_frames(temp_path, num_frames=1, width=160, height=90)
+        # Extract a small initial frame set for immediate timeline feedback
+        first_frames, _ = extract_thumbnail_frames(
+            temp_path,
+            num_frames=TIMELINE_INITIAL_FRAME_COUNT,
+            width=TIMELINE_FRAME_WIDTH,
+            height=TIMELINE_FRAME_HEIGHT,
+        )
 
         # Generate unique temp_id and store the temp file path
         temp_id = secrets.token_urlsafe(16)
@@ -359,22 +400,13 @@ async def video_thumbnails(request: Request):
             "timestamp": datetime.now(),
             "frames": first_frames,  # Will be extended with more frames
             "frames_complete": False,
+            "is_remote": False,
         }
 
-        # Start background extraction of remaining 29 frames
-        def extract_remaining_frames():
-            try:
-                all_frames, _ = extract_thumbnail_frames(temp_path, num_frames=30, width=160, height=90)
-                if temp_id in _temp_video_files:
-                    _temp_video_files[temp_id]["frames"] = all_frames
-                    _temp_video_files[temp_id]["frames_complete"] = True
-            except Exception as e:
-                logger.warning(f"Background thumbnail extraction failed: {e}")
-                if temp_id in _temp_video_files:
-                    _temp_video_files[temp_id]["frames_complete"] = True
-
-        thread = threading.Thread(target=extract_remaining_frames, daemon=True)
-        thread.start()
+        if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
+            _start_background_thumbnail_extraction(temp_path, temp_id)
+        else:
+            _temp_video_files[temp_id]["frames_complete"] = True
 
         response = {
             "success": True,
@@ -399,7 +431,6 @@ async def video_thumbnails(request: Request):
 
             def run_hls_encoding():
                 from utils.video import generate_hls_only
-                from utils.assets import delete_video_prefix
 
                 def progress_callback(stage, progress):
                     if hls_session_id in _hls_sessions:
@@ -443,6 +474,65 @@ async def video_thumbnails(request: Request):
         if os.path.exists(temp_path):
             os.unlink(temp_path)
         logger.exception("Video thumbnail extraction failed")
+        raise HTTPException(status_code=500, detail=f"Thumbnail extraction failed: {str(e)}")
+
+
+@router.post("/video-thumbnails-existing")
+async def video_thumbnails_existing(request: Request):
+    """Extract thumbnail frames from the project's current hero HLS URL."""
+    import secrets
+
+    from utils.video import extract_thumbnail_frames, get_video_info
+
+    form = await request.form()
+    project_slug = form.get("project_slug")
+
+    if not project_slug:
+        raise HTTPException(status_code=400, detail="project_slug is required")
+    if not validate_slug(project_slug):
+        raise HTTPException(status_code=400, detail="Invalid slug format")
+
+    project = load_project(project_slug)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    hls_url = project.get("video_link")
+    if not hls_url:
+        raise HTTPException(status_code=400, detail="Project has no hero HLS video")
+
+    try:
+        info = get_video_info(hls_url)
+        duration = info["duration"]
+        first_frames, _ = extract_thumbnail_frames(
+            hls_url,
+            num_frames=TIMELINE_INITIAL_FRAME_COUNT,
+            width=TIMELINE_FRAME_WIDTH,
+            height=TIMELINE_FRAME_HEIGHT,
+        )
+
+        temp_id = secrets.token_urlsafe(16)
+        _temp_video_files[temp_id] = {
+            "path": hls_url,
+            "timestamp": datetime.now(),
+            "frames": first_frames,
+            "frames_complete": False,
+            "is_remote": True,
+        }
+
+        if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
+            _start_background_thumbnail_extraction(hls_url, temp_id)
+        else:
+            _temp_video_files[temp_id]["frames_complete"] = True
+
+        return {
+            "success": True,
+            "frames": first_frames,
+            "duration": duration,
+            "temp_id": temp_id,
+            "hls_url": hls_url,
+        }
+    except Exception as e:
+        logger.exception("Existing video thumbnail extraction failed")
         raise HTTPException(status_code=500, detail=f"Thumbnail extraction failed: {str(e)}")
 
 
@@ -524,7 +614,8 @@ async def generate_sprite_sheet_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
 
     temp_path = temp_info["path"]
-    if not os.path.exists(temp_path):
+    is_remote = temp_info.get("is_remote", False) or _is_remote_video_source(temp_path)
+    if not is_remote and not os.path.exists(temp_path):
         raise HTTPException(status_code=400, detail="Temp file not found")
 
     try:
@@ -562,6 +653,15 @@ async def generate_sprite_sheet_endpoint(request: Request):
             if waited >= max_wait:
                 raise HTTPException(status_code=500, detail="HLS encoding timed out")
 
+        if not hls_url:
+            project = load_project(project_slug)
+            hls_url = project.get("video_link") if project else None
+        if not hls_url:
+            raise HTTPException(
+                status_code=500,
+                detail="HLS URL unavailable after sprite generation",
+            )
+
         # Combine results
         response = {
             "success": True,
@@ -582,7 +682,7 @@ async def generate_sprite_sheet_endpoint(request: Request):
     finally:
         # Clean up temp file and sessions
         if temp_id in _temp_video_files:
-            if os.path.exists(temp_path):
+            if not is_remote and os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
                 except Exception:
@@ -782,7 +882,7 @@ def cleanup_old_temp_videos():
         age = now - temp_info["timestamp"]
         if age > timedelta(hours=1):
             temp_path = temp_info["path"]
-            if os.path.exists(temp_path):
+            if not (temp_info.get("is_remote", False) or _is_remote_video_source(temp_path)) and os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
                     logger.info(f"Cleaned up expired temp video file: {temp_path}")

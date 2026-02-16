@@ -1134,11 +1134,20 @@ body.editing {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
     padding: 10px 12px;
     background: #111;
     border-radius: 6px;
     font-size: 13px;
     color: #888;
+}
+
+.edit-video-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 .edit-btn-small {
@@ -1222,6 +1231,12 @@ body.editing {
     margin-top: 16px;
 }
 
+.edit-hero-timeline-loading {
+    padding: 6px 20px 0;
+    font-size: 11px;
+    color: #6b7280;
+}
+
 .edit-hero-timeline-track {
     position: relative;
     height: 48px;
@@ -1256,11 +1271,55 @@ body.editing {
     border-radius: 4px;
     cursor: grab;
     z-index: 2;
-    transition: left 0.05s ease;
+    overflow: visible;
+    will-change: left, width;
+}
+
+/* Smooth transitions only when not actively dragging */
+.edit-hero-sprite-range:not(.is-dragging) {
+    transition: left 0.05s ease, width 0.05s ease;
 }
 
 .edit-hero-sprite-range:active {
     cursor: grabbing;
+}
+
+/* Sprite range resize handles */
+.edit-hero-sprite-handle {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 28px;
+    background: #3b82f6;
+    border-radius: 4px;
+    cursor: ew-resize;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+}
+
+.edit-hero-sprite-range:not(.is-dragging) .edit-hero-sprite-handle:hover {
+    background: #2563eb;
+    transform: translate(-50%, -50%) scale(1.1);
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.edit-hero-sprite-handle--start {
+    left: 0;
+}
+
+.edit-hero-sprite-handle--end {
+    left: 100%;
+}
+
+.edit-hero-sprite-handle-grip {
+    width: 2px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 1px;
 }
 
 /* Dimmed regions outside sprite range */
@@ -1272,6 +1331,7 @@ body.editing {
     background: rgba(0, 0, 0, 0.45);
     z-index: 1;
     pointer-events: none;
+    will-change: left, width;
 }
 
 .edit-hero-timeline-dim-left {

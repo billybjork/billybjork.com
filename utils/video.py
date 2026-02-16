@@ -53,7 +53,7 @@ def get_video_info(video_path: str) -> dict:
         'ffprobe',
         '-v', 'error',
         '-select_streams', 'v:0',
-        '-show_entries', 'stream=width,height,r_frame_rate,duration',
+        '-show_entries', 'stream=width,height,r_frame_rate,duration:format=duration',
         '-of', 'json',
         video_path
     ]
@@ -73,10 +73,14 @@ def get_video_info(video_path: str) -> dict:
     else:
         fps = float(fps_str)
 
+    stream_duration = float(stream.get('duration', 0) or 0)
+    format_duration = float(data.get('format', {}).get('duration', 0) or 0)
+    duration = stream_duration if stream_duration > 0 else format_duration
+
     return {
         'width': int(stream.get('width', 1920)),
         'height': int(stream.get('height', 1080)),
-        'duration': float(stream.get('duration', 0)),
+        'duration': duration,
         'fps': fps,
     }
 
@@ -389,7 +393,8 @@ def extract_thumbnail_frames(
                 '-ss', str(timestamp),
                 '-i', video_path,
                 '-vframes', '1',
-                '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2',
+                # Use cover-style scaling so each frame fully fills the timeline slice.
+                '-vf', f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}',
                 '-q:v', '5',
                 output_path
             ]

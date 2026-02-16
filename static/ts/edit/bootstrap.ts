@@ -100,7 +100,7 @@ function addProjectControls(projectItem: HTMLElement): void {
     if (!window.ProjectSettings) {
       await loadEditModeScripts();
     }
-    (window.ProjectSettings as { show?: (slug: string) => void })?.show?.(slug);
+    window.ProjectSettings?.show(slug);
   });
 
   editBtns.appendChild(editBtn);
@@ -140,7 +140,7 @@ function addNewProjectButton(): void {
       if (!window.ProjectCreate) {
         await loadEditModeScripts();
       }
-      (window.ProjectCreate as { show?: () => void })?.show?.();
+      window.ProjectCreate?.show();
     }
   });
 
@@ -292,7 +292,7 @@ function initializeEditMode(): void {
           if (!window.ProjectSettings) {
             await loadEditModeScripts();
           }
-          (window.ProjectSettings as { show?: (slug: string) => void })?.show?.(slug);
+          window.ProjectSettings?.show(slug);
         }, 100);
       }
     }
