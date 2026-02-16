@@ -54,6 +54,13 @@ function buildUrl(path: string, extraParams: Record<string, string | number | nu
 }
 
 /**
+ * Whether project open/close should sync browser URL/history.
+ */
+function isProjectUrlSyncEnabled(): boolean {
+  return document.body.dataset.projectUrlSync !== 'false';
+}
+
+/**
  * Dispatch a custom event on the document body
  */
 export function dispatchEvent<T extends object>(eventName: string, detail: T = {} as T): void {
@@ -110,7 +117,8 @@ interface OpenProjectOptions {
  * Open a project by fetching its details
  */
 export async function openProject(slug: string, options: OpenProjectOptions = {}): Promise<void> {
-  const { pushUrl = true, smoothScroll = true } = options;
+  const defaultPushUrl = isProjectUrlSyncEnabled();
+  const { pushUrl = defaultPushUrl, smoothScroll = true } = options;
 
   const projectItem = document.querySelector<HTMLElement>(`.project-item[data-slug="${slug}"]`);
   if (!projectItem) {
@@ -199,7 +207,8 @@ interface CloseProjectOptions {
  * Close a specific project
  */
 export async function closeProject(slug: string, options: CloseProjectOptions = {}): Promise<void> {
-  const { pushUrl = true } = options;
+  const defaultPushUrl = isProjectUrlSyncEnabled();
+  const { pushUrl = defaultPushUrl } = options;
 
   const projectItem = document.querySelector<HTMLElement>(`.project-item[data-slug="${slug}"]`);
   if (!projectItem) return;
@@ -328,6 +337,10 @@ interface HistoryState {
 }
 
 function handlePopState(event: PopStateEvent): void {
+  if (!isProjectUrlSyncEnabled()) {
+    return;
+  }
+
   const state = event.state as HistoryState | null;
 
   if (state && state.slug && state.isOpen) {
@@ -397,18 +410,25 @@ function handleProjectClick(event: MouseEvent): void {
 
 function initialize(): void {
   document.body.addEventListener('click', handleProjectClick);
-  window.addEventListener('popstate', handlePopState);
+  if (isProjectUrlSyncEnabled()) {
+    window.addEventListener('popstate', handlePopState);
+  }
   initializeSentinelObserver();
 
   document.body.addEventListener('projects:loaded', () => {
     observeSentinels();
   });
 
-  if (!history.state) {
+  if (isProjectUrlSyncEnabled() && !history.state) {
     const pathname = window.location.pathname;
     if (pathname !== '/' && pathname !== '/me') {
       const slug = pathname.slice(1);
-      history.replaceState({ slug: slug, isOpen: true }, '');
+      const hasMatchingProject = !!document.querySelector<HTMLElement>(`.project-item[data-slug="${slug}"]`);
+      if (hasMatchingProject) {
+        history.replaceState({ slug: slug, isOpen: true }, '');
+      } else {
+        history.replaceState({ slug: null, isOpen: false }, '');
+      }
     } else {
       history.replaceState({ slug: null, isOpen: false }, '');
     }
