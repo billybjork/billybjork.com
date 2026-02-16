@@ -1,27 +1,28 @@
 {
-  "frames": 21,
-  "columns": 5,
-  "rows": 5,
+  "frames": 41,
+  "columns": 6,
+  "rows": 7,
+  "atlas_version": 2026021610,
   "depth_normalization": {
     "global_min": 0.0,
-    "global_max": 1216.0
+    "global_max": 1201.0
   },
   "resolutions": {
     "320x180": {
       "frame_width": 320,
       "frame_height": 180,
-      "sheet_width": 1600,
-      "sheet_height": 900,
+      "sheet_width": 1920,
+      "sheet_height": 1260,
       "rgb_file": "rgb_320x180.webp",
-      "depth_file": "depth_320x180.png"
+      "depth_file": "depth_320x180.webp"
     },
     "640x360": {
       "frame_width": 640,
       "frame_height": 360,
-      "sheet_width": 3200,
-      "sheet_height": 1800,
+      "sheet_width": 3840,
+      "sheet_height": 2520,
       "rgb_file": "rgb_640x360.webp",
-      "depth_file": "depth_640x360.png"
+      "depth_file": "depth_640x360.webp"
     }
   }
 }
