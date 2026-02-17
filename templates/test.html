@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block main_class %}test-depth-3d{% endblock %}
+{% block main_class %}test-depth-pointcloud{% endblock %}
 
 {% block additional_head %}
 <style>
@@ -8,6 +8,15 @@
         background: #0a0a0a;
         margin: 0;
         overflow-x: hidden;
+    }
+
+    #shared-depth-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 20;
     }
 
     .page-container {
@@ -28,35 +37,63 @@
     .spacer.top { color: #555; }
     .spacer.bottom { color: #555; }
 
-    /* Simulated project item - matches homepage structure */
-    .project-item {
-        margin-bottom: 3rem;
+    .pc-project {
+        width: 100%;
+        max-width: 920px;
+        margin: 0 auto 4.25rem;
+        opacity: 1;
+        transform: none;
+        position: relative;
+        z-index: 25;
     }
 
-    .project-header {
+    .pc-project-header {
         display: flex;
-        align-items: flex-start;
-        gap: 1.5rem;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        cursor: pointer;
     }
 
-    .thumbnail-container {
+    .pc-header-main {
+        min-width: 0;
+    }
+
+    .pc-thumbnail-container {
         flex-shrink: 0;
         width: 100%;
-        max-width: 640px;
-        aspect-ratio: 16/9;
-        background: #111;
-        border-radius: 8px;
-        overflow: hidden;
+        max-width: none;
+        aspect-ratio: 16 / 9;
+        background: transparent;
+        border-radius: 0;
+        overflow: visible;
         position: relative;
     }
 
-    .thumbnail-container canvas {
-        width: 100%;
-        height: 100%;
-        display: block;
+    .pc-thumbnail-container.transition-overlay {
+        position: fixed !important;
+        margin: 0 !important;
+        max-width: none !important;
+        z-index: 70;
+        pointer-events: none;
+        will-change: left, top, width, height, opacity;
     }
 
-    .thumbnail-debug {
+    .pc-thumbnail-container.thumb-hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .pc-project .pc-project-details {
+        position: relative;
+        z-index: 30;
+    }
+
+    .pc-project .pc-close-project {
+        z-index: 35;
+    }
+
+    .pc-thumbnail-debug {
         position: absolute;
         bottom: 0.5rem;
         left: 0.5rem;
@@ -67,39 +104,141 @@
         font-size: 0.7rem;
         color: #888;
         pointer-events: none;
+        z-index: 21;
     }
 
-    .thumbnail-debug .value {
+    .pc-thumbnail-debug .value {
         color: #fff;
         font-weight: bold;
     }
 
-    .thumbnail-label {
-        position: absolute;
-        top: 0.5rem;
-        left: 0.5rem;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 0.35rem 0.6rem;
-        border-radius: 4px;
-        font-size: 0.85rem;
-        color: #fff;
-        font-weight: 500;
-        pointer-events: none;
-    }
-
-    .project-info {
-        padding-top: 0.5rem;
-    }
-
-    .project-title {
+    .pc-project-title {
         font-size: 1.1rem;
         color: #fff;
         margin: 0 0 0.25rem 0;
+        line-height: 1.15;
     }
 
-    .project-meta {
+    .pc-project-meta {
         font-size: 0.85rem;
         color: #666;
+    }
+
+    .pc-close-project {
+        font-size: 1.9rem;
+        border: none;
+        background: none;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.95);
+        transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+    }
+
+    .pc-project.pc-open .pc-close-project {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scale(1);
+    }
+
+    .pc-close-project:hover {
+        color: #fff;
+    }
+
+    .pc-thumb-placeholder {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        pointer-events: none;
+    }
+
+    .pc-stage {
+        position: relative;
+        width: 100%;
+        max-width: 640px;
+        aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
+        margin-top: 0.75rem;
+    }
+
+    .pc-project.pc-hero-expanded .pc-stage {
+        --pc-hero-max-height: calc(100vh - clamp(120px, 18vh, 180px));
+        width: min(100%, calc(var(--pc-hero-max-height) * var(--pc-stage-aspect-ratio, 1.7777777778)));
+        max-width: none;
+    }
+
+    .pc-hero-slot {
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background:
+            var(--fallback-poster, none) center / cover no-repeat,
+            #040404;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: none;
+    }
+
+    .pc-hero-slot.slot-visible {
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .pc-hero-slot > .video-container {
+        position: relative;
+        inset: 0;
+        margin: 0;
+        max-width: none;
+        min-height: 0;
+        background: transparent;
+    }
+
+    .pc-hero-slot > .video-container video {
+        width: 100%;
+        height: 100%;
+        max-height: none;
+        object-fit: contain;
+        padding: 0;
+        opacity: 0;
+        transform: none;
+        transition: none;
+    }
+
+    .pc-hero-slot.video-visible > .video-container video {
+        opacity: 1;
+    }
+
+    .pc-project-details {
+        display: none;
+        opacity: 0;
+        transform: translateY(16px);
+        transition: opacity 0.35s ease, transform 0.35s ease;
+        margin-top: 1rem;
+    }
+
+    .pc-project.pc-open .pc-project-details {
+        display: block;
+    }
+
+    .pc-project.pc-content-visible .pc-project-details {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .pc-project.pc-closing .pc-project-details {
+        opacity: 0;
+        transform: translateY(16px);
+        transition: none;
+    }
+
+    .pc-project-details .project-content {
+        overflow: visible;
+    }
+
+    .pc-project-details .video-container {
+        display: none;
     }
 
     /* Fixed controls */
@@ -114,6 +253,8 @@
         color: #fff;
         z-index: 100;
         font-size: 0.8rem;
+        max-height: 90vh;
+        overflow-y: auto;
         transition: width 0.2s ease, padding 0.2s ease;
     }
 
@@ -172,6 +313,22 @@
         display: block;
     }
 
+    .controls-section {
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .controls-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .controls-section strong {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
     .global-stats {
         position: fixed;
         bottom: 1rem;
@@ -192,65 +349,68 @@
         color: #666;
         margin-right: 0.5rem;
     }
+
+    body.no-webgl #shared-depth-canvas {
+        display: none;
+    }
+
+    body.no-webgl .pc-thumbnail-container {
+        background:
+            var(--fallback-poster, none) center / cover no-repeat,
+            radial-gradient(120% 100% at 30% 20%, rgba(90, 90, 90, 0.25), rgba(20, 20, 20, 0.95)),
+            #111;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+<canvas id="shared-depth-canvas" aria-hidden="true"></canvas>
 <div class="page-container">
-    <div class="spacer top">↓ Scroll down to see depth thumbnails ↓</div>
+    <div class="spacer top">↓ Scroll down to see point cloud depth thumbnails ↓</div>
 
-    <!-- Each project item shows a different sprite set -->
-    <div class="project-item" data-sprite="somewhere-in-space">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <canvas class="depth-canvas"></canvas>
-                <div class="thumbnail-label">Somewhere in Space</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">21</span>
+    {% if projects %}
+        {% for project in projects %}
+        <article
+            class="pc-project no-fade"
+            data-slug="{{ project.slug }}"
+            data-sprite="{{ project.sprite_id }}"
+            {% if project.video_link %}
+            data-hls-url="{{ project.video_link }}"
+            {% endif %}>
+            <header class="pc-project-header">
+                <div class="pc-header-main">
+                    <h2 class="pc-project-title">{{ project.name }}</h2>
+                    <div class="pc-project-meta">{{ project.formatted_date }}</div>
                 </div>
-            </div>
-        </div>
-    </div>
+                <button class="pc-close-project" aria-label="Close project">&times;</button>
+            </header>
 
-    <div class="project-item" data-sprite="gravity">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <canvas class="depth-canvas"></canvas>
-                <div class="thumbnail-label">Gravity</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">15</span>
+            <div class="pc-stage">
+                <div
+                    class="pc-thumbnail-container"
+                    {% if project.thumbnail_link %}
+                    style="--fallback-poster: url('{{ project.thumbnail_link }}');"
+                    {% endif %}>
+                    <div class="pc-thumbnail-debug">
+                        Tilt: <span class="value tilt-angle">0°</span> |
+                        Frame: <span class="value frame-num">1</span>/<span class="value frame-total">0</span> |
+                        <span class="value coherence-val">0%</span>
+                    </div>
                 </div>
+                <section
+                    class="pc-hero-slot"
+                    id="hero-{{ project.slug }}"
+                    aria-hidden="true"
+                    {% if project.thumbnail_link %}
+                    style="--fallback-poster: url('{{ project.thumbnail_link }}');"
+                    {% endif %}></section>
             </div>
-        </div>
-    </div>
-
-    <div class="project-item" data-sprite="lead-me-home">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <canvas class="depth-canvas"></canvas>
-                <div class="thumbnail-label">Lead Me Home</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">19</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="project-item" data-sprite="surf">
-        <div class="project-header">
-            <div class="thumbnail-container">
-                <canvas class="depth-canvas"></canvas>
-                <div class="thumbnail-label">Surf</div>
-                <div class="thumbnail-debug">
-                    Tilt: <span class="value tilt-angle">0°</span> |
-                    Frame: <span class="value frame-num">1</span>/<span class="value frame-total">27</span>
-                </div>
-            </div>
-        </div>
-    </div>
+            <section id="details-{{ project.slug }}" class="pc-project-details" hidden></section>
+        </article>
+        {% endfor %}
+    {% else %}
+        <p class="pc-project-meta">No RGBD-ready projects are currently configured for /test.</p>
+    {% endif %}
 
     <div class="spacer bottom">↑ End of thumbnails ↑</div>
 </div>
@@ -258,59 +418,130 @@
 <div class="controls" id="controls-panel">
     <button class="controls-toggle" id="controls-toggle" title="Hide controls">×</button>
     <div class="controls-content">
-        <div style="border-bottom: 1px solid #333; padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+        <div class="controls-section">
             <strong>Base Settings</strong>
+            <label>
+                Point Density: <span id="density-val">0.5</span>
+                <input type="range" id="point-density" min="0.1" max="1.0" step="0.05" value="0.5">
+            </label>
+            <label>
+                Point Size: <span id="size-val">2.0</span>
+                <input type="range" id="point-size" min="0.5" max="8.0" step="0.25" value="2.0">
+            </label>
+            <label>
+                Depth (Edge): <span id="depth-val">25</span>
+                <input type="range" id="depth-amount" min="0" max="60" value="25">
+            </label>
+            <label>
+                Tilt Range: <span id="tilt-val">20</span>°
+                <input type="range" id="tilt-range" min="5" max="45" value="20">
+            </label>
+            <label>
+                Mouse Parallax: <span id="parallax-val">12</span>
+                <input type="range" id="mouse-parallax" min="0" max="30" value="12">
+            </label>
         </div>
-        <label>
-            Depth: <span id="depth-val">25</span>
-            <input type="range" id="depth-amount" min="0" max="60" value="25">
-        </label>
-        <label>
-            Tilt Range: <span id="tilt-val">20</span>°
-            <input type="range" id="tilt-range" min="5" max="45" value="20">
-        </label>
-        <label>
-            <input type="checkbox" id="show-wireframe"> Wireframe
-        </label>
 
-        <div style="border-bottom: 1px solid #333; padding-bottom: 0.5rem; margin-bottom: 0.5rem; margin-top: 1rem;">
-            <strong>Edge Handling</strong>
+        <div class="controls-section">
+            <strong>Viewport Coherence</strong>
+            <label>
+                Depth (Center): <span id="depth-center-val">8</span>
+                <input type="range" id="depth-center" min="0" max="30" value="8">
+            </label>
+            <label>
+                Scatter (Center): <span id="scatter-center-val">0.0</span>
+                <input type="range" id="scatter-center" min="0" max="1.0" step="0.05" value="0">
+            </label>
+            <label>
+                Transition Curve: <span id="transition-curve-val">0.6</span>
+                <input type="range" id="transition-curve" min="0.2" max="2.0" step="0.1" value="0.6">
+            </label>
+            <label>
+                Opacity (Edge): <span id="opacity-edge-val">0.85</span>
+                <input type="range" id="opacity-edge" min="0.3" max="1.0" step="0.05" value="0.85">
+            </label>
         </div>
-        <label>
-            <input type="checkbox" id="edge-extrusion"> Edge-aware extrusion
-        </label>
-        <label>
-            <input type="checkbox" id="edge-fade"> Edge fade/darken
-        </label>
-        <label>
-            <input type="checkbox" id="normal-shading"> Normal shading
-        </label>
-        <label>
-            Edge Threshold: <span id="edge-thresh-val">0.15</span>
-            <input type="range" id="edge-threshold" min="0.01" max="0.5" step="0.01" value="0.15">
-        </label>
-        <label>
-            Edge Softness: <span id="edge-soft-val">2.0</span>
-            <input type="range" id="edge-softness" min="0.5" max="5" step="0.1" value="2.0">
-        </label>
 
-        <div style="border-bottom: 1px solid #333; padding-bottom: 0.5rem; margin-bottom: 0.5rem; margin-top: 1rem;">
+        <div class="controls-section">
+            <strong>Point Cloud Style</strong>
+            <label>
+                Point Shape:
+                <select id="point-shape">
+                    <option value="soft" selected>Soft/Gaussian</option>
+                    <option value="circle">Circle</option>
+                    <option value="square">Square</option>
+                </select>
+            </label>
+            <label>
+                <input type="checkbox" id="size-attenuation" checked> Size attenuation
+            </label>
+            <label>
+                Depth Sizing: <span id="depth-sizing-val">1.2</span>
+                <input type="range" id="depth-sizing" min="1.0" max="2.0" step="0.05" value="1.2">
+            </label>
+            <label>
+                Opacity (Center): <span id="opacity-val">1.0</span>
+                <input type="range" id="opacity" min="0.1" max="1.0" step="0.05" value="1.0">
+            </label>
+            <label>
+                <input type="checkbox" id="depth-opacity"> Depth-based opacity
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Creative Effects</strong>
+            <label>
+                Scatter (Edge): <span id="scatter-val">0.8</span>
+                <input type="range" id="edge-scatter" min="0" max="2.0" step="0.1" value="0.8">
+            </label>
+            <label>
+                Scatter Threshold: <span id="edge-thresh-val">0.15</span>
+                <input type="range" id="edge-threshold" min="0.01" max="0.5" step="0.01" value="0.15">
+            </label>
+            <label>
+                <input type="checkbox" id="dof-enable"> Depth of field
+            </label>
+            <label>
+                DOF Focal Depth: <span id="dof-focal-val">0.5</span>
+                <input type="range" id="dof-focal" min="0" max="1.0" step="0.05" value="0.5">
+            </label>
+            <label>
+                DOF Strength: <span id="dof-strength-val">1.0</span>
+                <input type="range" id="dof-strength" min="0.1" max="3.0" step="0.1" value="1.0">
+            </label>
+        </div>
+
+        <div class="controls-section">
+            <strong>Color Mode</strong>
+            <label>
+                <select id="color-mode">
+                    <option value="original" selected>Original RGB</option>
+                    <option value="depth">Depth Colorized</option>
+                    <option value="normal">Normal Colorized</option>
+                    <option value="blend">Blend</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="controls-section">
             <strong>Debug Views</strong>
+            <label>
+                <input type="checkbox" id="show-depth"> Show depth
+            </label>
+            <label>
+                <input type="checkbox" id="show-edges"> Show edges
+            </label>
+            <label>
+                <input type="checkbox" id="show-density"> Show point density
+            </label>
         </div>
-        <label>
-            <input type="checkbox" id="show-depth"> Show depth
-        </label>
-        <label>
-            <input type="checkbox" id="show-edges"> Show edges
-        </label>
-        <label>
-            <input type="checkbox" id="show-normals"> Show normals
-        </label>
     </div>
 </div>
 
 <div class="global-stats">
     <div><span class="stat-label">Scroll Speed:</span><span id="global-speed">0.0</span></div>
+    <div><span class="stat-label">Rendered:</span><span id="render-count">0</span></div>
+    <div><span class="stat-label">Contexts:</span><span id="gl-context-count">1</span></div>
 </div>
 {% endblock %}
 
@@ -321,27 +552,45 @@
     'use strict';
 
     // =============================================
-    // Shaders with Edge Handling
+    // Point Cloud Shaders
     // =============================================
     const vertexShader = `
         uniform sampler2D depthAtlas;
+        uniform sampler2D rgbAtlas;
         uniform float frameIndex;
         uniform vec2 atlasSize;
         uniform vec2 frameSize;
         uniform float columns;
-        uniform float extrusionAmount;
+        uniform float depthAmount;
+        uniform float pointSize;
+        uniform float depthSizing;
+        uniform float attenuationBase;
+        uniform bool sizeAttenuation;
+        uniform float edgeScatter;
         uniform float edgeThreshold;
-        uniform bool edgeAwareExtrusion;
+        uniform float time;
+
+        attribute vec2 pixelUV;
 
         varying vec2 vUv;
         varying float vDepth;
         varying float vEdgeMask;
         varying vec3 vNormal;
+        varying vec3 vColor;
+
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
 
         vec2 getAtlasUV(vec2 localUV, float frame) {
+            // Clamp to half-texel from edges to avoid bleeding into adjacent frames.
+            vec2 halfTexel = vec2(0.5) / frameSize;
+            vec2 clampedUV = clamp(localUV, halfTexel, vec2(1.0) - halfTexel);
             float col = mod(frame, columns);
             float row = floor(frame / columns);
-            vec2 flippedLocalUV = vec2(localUV.x, 1.0 - localUV.y);
+            // localUV is generated in bottom-up space; atlas rows are top-down.
+            // With texture.flipY = false, this matches the expected UV coordinate convention.
+            vec2 flippedLocalUV = vec2(clampedUV.x, 1.0 - clampedUV.y);
             vec2 frameOffset = vec2(col * frameSize.x, row * frameSize.y);
             return (frameOffset + flippedLocalUV * frameSize) / atlasSize;
         }
@@ -351,142 +600,176 @@
             return texture2D(depthAtlas, depthUV).r;
         }
 
+        vec3 sampleColor(vec2 localUV) {
+            return texture2D(rgbAtlas, getAtlasUV(localUV, frameIndex)).rgb;
+        }
+
         void main() {
-            vUv = uv;
+            vUv = pixelUV;
 
-            // Sample depth at this vertex
-            float depth = sampleDepth(uv);
+            float depth = sampleDepth(pixelUV);
             vDepth = depth;
+            vColor = sampleColor(pixelUV);
 
-            // Calculate depth gradient using neighboring samples
             vec2 texelSize = 1.0 / frameSize;
-            float depthL = sampleDepth(uv + vec2(-texelSize.x, 0.0));
-            float depthR = sampleDepth(uv + vec2(texelSize.x, 0.0));
-            float depthU = sampleDepth(uv + vec2(0.0, -texelSize.y));
-            float depthD = sampleDepth(uv + vec2(0.0, texelSize.y));
+            float depthL = sampleDepth(pixelUV + vec2(-texelSize.x, 0.0));
+            float depthR = sampleDepth(pixelUV + vec2(texelSize.x, 0.0));
+            float depthU = sampleDepth(pixelUV + vec2(0.0, -texelSize.y));
+            float depthD = sampleDepth(pixelUV + vec2(0.0, texelSize.y));
 
-            // Gradient magnitude (Sobel-like)
             float gradX = (depthR - depthL) * 0.5;
             float gradY = (depthD - depthU) * 0.5;
             float gradMag = sqrt(gradX * gradX + gradY * gradY);
 
-            // Edge mask: 1 = smooth area, 0 = edge
             vEdgeMask = 1.0 - smoothstep(edgeThreshold * 0.5, edgeThreshold, gradMag);
-
-            // Reconstruct normal from depth gradient
             vNormal = normalize(vec3(-gradX * 10.0, -gradY * 10.0, 1.0));
 
-            // Calculate extrusion (optionally reduced at edges)
-            float extrusion = depth * extrusionAmount;
-            if (edgeAwareExtrusion) {
-                extrusion *= vEdgeMask;
+            float planeWidth = 80.0;
+            float planeHeight = 45.0;
+            vec3 pos;
+            pos.x = (pixelUV.x - 0.5) * planeWidth;
+            pos.y = (pixelUV.y - 0.5) * planeHeight;
+            pos.z = depth * depthAmount;
+
+            if (edgeScatter > 0.0) {
+                float frameSeed = frameIndex;
+                float edgeFactor = 1.0 - vEdgeMask;
+                float noiseX = hash(pixelUV + frameSeed * 0.1) * 2.0 - 1.0;
+                float noiseY = hash(pixelUV.yx + frameSeed * 0.1 + 100.0) * 2.0 - 1.0;
+                float noiseZ = hash(pixelUV * 2.0 + frameSeed * 0.1 + 200.0) * 2.0 - 1.0;
+
+                float scatterAmount = edgeFactor * edgeScatter;
+                pos.x += noiseX * scatterAmount * 3.0;
+                pos.y += noiseY * scatterAmount * 2.0;
+                pos.z += noiseZ * scatterAmount * depthAmount * 0.3;
             }
 
-            vec3 displaced = position;
-            displaced.z = extrusion;
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
 
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+            float size = pointSize;
+            size *= mix(1.0, depthSizing, depth);
+            if (sizeAttenuation) {
+                size *= (300.0 / -mvPosition.z) * attenuationBase;
+            }
+
+            gl_PointSize = size;
         }
     `;
 
     const fragmentShader = `
-        uniform sampler2D rgbAtlas;
-        uniform sampler2D depthAtlas;
-        uniform float frameIndex;
-        uniform vec2 atlasSize;
-        uniform vec2 frameSize;
-        uniform float columns;
-        uniform float edgeThreshold;
-        uniform float edgeSoftness;
-        uniform bool edgeFade;
-        uniform bool normalShading;
+        uniform float opacity;
+        uniform bool depthOpacity;
+        uniform int pointShape; // 0 = soft, 1 = circle, 2 = square
+        uniform int colorMode; // 0 = original, 1 = depth, 2 = normal, 3 = blend
         uniform bool showDepth;
         uniform bool showEdges;
-        uniform bool showNormals;
-        uniform vec3 lightDir;
+        uniform bool showDensity;
+        uniform bool dofEnable;
+        uniform float dofFocal;
+        uniform float dofStrength;
 
         varying vec2 vUv;
         varying float vDepth;
         varying float vEdgeMask;
         varying vec3 vNormal;
+        varying vec3 vColor;
 
-        vec2 getAtlasUV(vec2 localUV, float frame) {
-            float col = mod(frame, columns);
-            float row = floor(frame / columns);
-            vec2 flippedLocalUV = vec2(localUV.x, 1.0 - localUV.y);
-            vec2 frameOffset = vec2(col * frameSize.x, row * frameSize.y);
-            return (frameOffset + flippedLocalUV * frameSize) / atlasSize;
+        // Viridis-like colormap for depth visualization
+        vec3 viridis(float t) {
+            const vec3 c0 = vec3(0.267, 0.004, 0.329);
+            const vec3 c1 = vec3(0.282, 0.140, 0.457);
+            const vec3 c2 = vec3(0.253, 0.265, 0.529);
+            const vec3 c3 = vec3(0.191, 0.407, 0.556);
+            const vec3 c4 = vec3(0.127, 0.566, 0.550);
+            const vec3 c5 = vec3(0.267, 0.678, 0.480);
+            const vec3 c6 = vec3(0.478, 0.761, 0.363);
+            const vec3 c7 = vec3(0.741, 0.843, 0.215);
+            const vec3 c8 = vec3(0.993, 0.906, 0.144);
+
+            t = clamp(t, 0.0, 1.0);
+            float idx = t * 7.0;
+            int i = int(floor(idx));
+            float f = fract(idx);
+
+            if (i == 0) return mix(c0, c1, f);
+            if (i == 1) return mix(c1, c2, f);
+            if (i == 2) return mix(c2, c3, f);
+            if (i == 3) return mix(c3, c4, f);
+            if (i == 4) return mix(c4, c5, f);
+            if (i == 5) return mix(c5, c6, f);
+            if (i == 6) return mix(c6, c7, f);
+            return mix(c7, c8, f);
         }
 
         void main() {
-            vec2 rgbUV = getAtlasUV(vUv, frameIndex);
-            vec4 color = texture2D(rgbAtlas, rgbUV);
+            vec2 pc = gl_PointCoord - 0.5;
+            float dist = length(pc);
 
-            // Recalculate edge in fragment for smoother result
-            vec2 texelSize = 1.0 / frameSize;
-            vec2 depthUV = getAtlasUV(vUv, frameIndex);
-
-            float depthC = texture2D(depthAtlas, depthUV).r;
-            float depthL = texture2D(depthAtlas, getAtlasUV(vUv + vec2(-texelSize.x, 0.0), frameIndex)).r;
-            float depthR = texture2D(depthAtlas, getAtlasUV(vUv + vec2(texelSize.x, 0.0), frameIndex)).r;
-            float depthU = texture2D(depthAtlas, getAtlasUV(vUv + vec2(0.0, -texelSize.y), frameIndex)).r;
-            float depthD = texture2D(depthAtlas, getAtlasUV(vUv + vec2(0.0, texelSize.y), frameIndex)).r;
-
-            float gradX = (depthR - depthL) * 0.5;
-            float gradY = (depthD - depthU) * 0.5;
-            float gradMag = sqrt(gradX * gradX + gradY * gradY);
-
-            // Edge mask with softness control
-            float edgeMask = 1.0 - smoothstep(edgeThreshold * 0.5, edgeThreshold * edgeSoftness, gradMag);
-
-            // Reconstruct normal
-            vec3 normal = normalize(vec3(-gradX * 10.0, -gradY * 10.0, 1.0));
+            // Point shape
+            float alpha = 1.0;
+            if (pointShape == 0) {
+                // Soft/Gaussian falloff
+                alpha = exp(-dist * dist * 8.0);
+            } else if (pointShape == 1) {
+                // Circle - hard edge
+                if (dist > 0.5) discard;
+            }
+            // pointShape == 2 is square, no modification needed
 
             // Debug views
             if (showDepth) {
-                gl_FragColor = vec4(vec3(depthC), 1.0);
+                gl_FragColor = vec4(vec3(vDepth), alpha * opacity);
                 return;
             }
 
             if (showEdges) {
-                float edge = 1.0 - edgeMask;
-                gl_FragColor = vec4(edge, edge * 0.5, 0.0, 1.0);
+                float edge = 1.0 - vEdgeMask;
+                gl_FragColor = vec4(edge, edge * 0.5, 0.0, alpha * opacity);
                 return;
             }
 
-            if (showNormals) {
-                gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
+            if (showDensity) {
+                // Visualize as grid pattern
+                vec2 grid = fract(vUv * 20.0);
+                float g = step(0.1, grid.x) * step(0.1, grid.y);
+                gl_FragColor = vec4(vec3(g * 0.5 + 0.5), alpha * opacity);
                 return;
             }
 
-            // Apply edge fade (darken edges)
-            if (edgeFade) {
-                color.rgb *= mix(0.3, 1.0, edgeMask);
+            // Color modes
+            vec3 color;
+            if (colorMode == 0) {
+                // Original RGB
+                color = vColor;
+            } else if (colorMode == 1) {
+                // Depth colorized
+                color = viridis(vDepth);
+            } else if (colorMode == 2) {
+                // Normal colorized
+                color = vNormal * 0.5 + 0.5;
+            } else {
+                // Blend - mix original with depth color
+                color = mix(vColor, viridis(vDepth), 0.3);
             }
 
-            // Apply normal-based shading
-            if (normalShading) {
-                float diffuse = max(dot(normal, lightDir), 0.0);
-                diffuse = mix(0.5, 1.0, diffuse);
+            // Opacity adjustments
+            float finalOpacity = opacity * alpha;
 
-                float rim = 1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0);
-                rim = pow(rim, 2.0) * 0.3;
-
-                color.rgb *= diffuse;
-                color.rgb += rim * vec3(0.4, 0.5, 0.6);
+            // Depth-based opacity (fade distant points)
+            if (depthOpacity) {
+                finalOpacity *= mix(0.3, 1.0, vDepth);
             }
 
-            gl_FragColor = color;
-        }
-    `;
+            // Depth of field effect
+            if (dofEnable) {
+                float dofDist = abs(vDepth - dofFocal);
+                float blur = dofDist * dofStrength;
+                // Simulate bokeh by making out-of-focus points larger but more transparent
+                finalOpacity *= 1.0 / (1.0 + blur * 2.0);
+            }
 
-    const wireframeFragmentShader = `
-        varying float vEdgeMask;
-
-        void main() {
-            // Color wireframe by edge detection
-            vec3 color = mix(vec3(1.0, 0.3, 0.0), vec3(0.0, 1.0, 0.0), vEdgeMask);
-            gl_FragColor = vec4(color, 0.5);
+            gl_FragColor = vec4(color, finalOpacity);
         }
     `;
 
@@ -494,103 +777,446 @@
     // Configuration
     // =============================================
     const config = {
-        depthAmount: 25,
+        // Base settings (these are the "edge" / exploded values)
+        pointDensity: 0.5,
+        pointSize: 2.0,
+        depthAmount: 25,          // Depth at edges (exploded)
         tiltRange: 20,
-        meshSegments: 150,
-        // Edge handling
+        mouseParallax: 12,
+        // Viewport coherence - interpolation between edge (exploded) and center (coherent)
+        depthAmountCenter: 8,     // Depth at center (coherent) - flatter, clearer
+        edgeScatterCenter: 0,     // Scatter at center (coherent) - no scatter, clean
+        opacityEdge: 0.85,        // Opacity at edges - slightly transparent/ethereal
+        transitionCurve: 0.6,     // Power curve: <1 = wider center zone, >1 = narrower
+        // Point cloud style
+        pointShape: 0, // 0 = soft, 1 = circle, 2 = square
+        sizeAttenuation: true,
+        depthSizing: 1.2,
+        opacity: 1.0,             // Opacity at center (coherent) - full opacity
+        depthOpacity: false,
+        // Creative effects (these are the "edge" / exploded values)
+        edgeScatter: 0.8,         // Scatter at edges (exploded) - high dispersion
         edgeThreshold: 0.15,
-        edgeSoftness: 2.0,
-        edgeAwareExtrusion: false,
-        edgeFade: false,
-        normalShading: false,
+        dofEnable: false,
+        dofFocal: 0.5,
+        dofStrength: 1.0,
+        // Color mode
+        colorMode: 0, // 0 = original, 1 = depth, 2 = normal, 3 = blend
         // Debug
         showDepth: false,
         showEdges: false,
-        showNormals: false,
+        showDensity: false,
     };
+    const defaultConfig = Object.assign({}, config);
 
     const SPRITE_BASE_PATH = '/static/test/rgbd-sprites';
     const RESOLUTION = '640x360';
+    const PLANE_WIDTH = 80.0;
+    const PLANE_HEIGHT = 45.0;
+    const CAMERA_FOV = 50;
+    const CAMERA_Z = 100;
+    const TILT_ORBIT_VERTICAL_SCALE = 1.0;
+    const PAN_Y_CAMERA_INFLUENCE = 0.25;
+    const PAN_Y_LOOK_INFLUENCE = 0.15;
+    const CLOUD_FILL_FACTOR = 0.96;
+    const RENDER_MARGIN = 180;
+    const DEBUG_UI_UPDATE_MS = 100;
+    const DENSITY_REBUILD_DEBOUNCE_MS = 120;
+    const ACTIVE_SCROLL_RECT_REFRESH_MS = 140;
+    const STARTUP_STABILIZE_MS = 900;
+    const SCROLL_SPEED_SMOOTHING = 0.35;
+    const SPRITE_REQUEST_VERSION = Date.now().toString(36);
+    const prefersReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let prefersReducedMotion = prefersReducedMotionMedia.matches;
 
     // =============================================
     // Global State
     // =============================================
-    // Each sprite set has its own metadata and textures
-    const spriteSets = {}; // { spriteId: { metadata, rgbTexture, depthTexture } }
+    const spriteSets = {};
+    const thumbnails = [];
+    const thumbnailByContainer = new Map();
+    const thumbnailBySlug = new Map();
+    const geometryCache = new Map();
+    const managedListeners = [];
 
-    // Animation state (shared across all thumbnails, like homepage)
+    let sharedRenderer = null;
+    let hasWebGL = true;
+    let resizeObserver = null;
+    let intersectionObserver = null;
+    let isDisposed = false;
+    let renderFrameId = null;
+    let rectsNeedUpdate = true;
+    let prefersReducedMotionListener = null;
+
+    const renderState = {
+        width: 0,
+        height: 0,
+        renderedCount: 0,
+    };
+
     let animationProgress = 0;
     let animationSpeed = 0;
     let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
     let lastScrollEventTime = Date.now();
+    let startupStabilizeUntilMs = Date.now() + STARTUP_STABILIZE_MS;
     let lastAnimationFrameTime = Date.now();
     let animationFrameId = null;
-    let showWireframe = false;
 
-    // Per-thumbnail instances
-    const thumbnails = [];
+    // Global mouse position (normalized -1 to 1 across viewport)
+    let globalMouseX = 0;
+    let globalMouseY = 0;
+
+    // Device orientation
+    let deviceX = 0;
+    let deviceY = 0;
+    let hasDeviceOrientation = false;
+    let lastGlobalStatsUpdateMs = 0;
+    let densityRebuildTimer = null;
+    let transitionRectRefreshUntilMs = 0;
+    let projectTransitionManager = null;
+
+    function addManagedEventListener(target, type, handler, options) {
+        target.addEventListener(type, handler, options);
+        managedListeners.push({ target, type, handler, options });
+    }
+
+    function removeManagedEventListeners() {
+        managedListeners.forEach(({ target, type, handler, options }) => {
+            target.removeEventListener(type, handler, options);
+        });
+        managedListeners.length = 0;
+    }
+
+    function getGeometryCacheKey(frameWidth, frameHeight, density) {
+        const stride = Math.max(1, Math.round(1 / density));
+        return `${frameWidth}x${frameHeight}@${stride}`;
+    }
+
+    function buildPointGeometry(frameWidth, frameHeight, density) {
+        const stride = Math.max(1, Math.round(1 / density));
+        const pointsX = Math.ceil(frameWidth / stride);
+        const pointsY = Math.ceil(frameHeight / stride);
+        const pointCount = pointsX * pointsY;
+
+        const uvs = new Float32Array(pointCount * 2);
+        let idx = 0;
+        for (let y = 0; y < pointsY; y++) {
+            for (let x = 0; x < pointsX; x++) {
+                // Sample at texel centers (+ 0.5) to avoid boundary interpolation
+                uvs[idx++] = (x * stride + 0.5) / frameWidth;
+                uvs[idx++] = (y * stride + 0.5) / frameHeight;
+            }
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('pixelUV', new THREE.BufferAttribute(uvs, 2));
+        const positions = new Float32Array(pointCount * 3);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        return geometry;
+    }
+
+    function acquireSharedGeometry(frameWidth, frameHeight, density) {
+        const key = getGeometryCacheKey(frameWidth, frameHeight, density);
+        let entry = geometryCache.get(key);
+        if (!entry) {
+            entry = {
+                geometry: buildPointGeometry(frameWidth, frameHeight, density),
+                refs: 0,
+            };
+            geometryCache.set(key, entry);
+        }
+        entry.refs += 1;
+        return { key, geometry: entry.geometry };
+    }
+
+    function releaseSharedGeometry(key) {
+        if (!key) return;
+        const entry = geometryCache.get(key);
+        if (!entry) return;
+        entry.refs -= 1;
+        if (entry.refs <= 0) {
+            entry.geometry.dispose();
+            geometryCache.delete(key);
+        }
+    }
+
+    function refreshRenderableThumbnails() {
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+
+        thumbnails.forEach((thumb) => {
+            if (thumb.renderSuppressed) {
+                thumb.isRenderable = false;
+                return;
+            }
+
+            if (intersectionObserver && !thumb.isInViewportMargin) {
+                thumb.isRenderable = false;
+                return;
+            }
+
+            const rect = thumb.container.getBoundingClientRect();
+            thumb.cachedRect = rect;
+            thumb.isRenderable =
+                rect.bottom > -RENDER_MARGIN &&
+                rect.top < viewportHeight + RENDER_MARGIN &&
+                rect.right > -RENDER_MARGIN &&
+                rect.left < viewportWidth + RENDER_MARGIN;
+        });
+
+        rectsNeedUpdate = false;
+    }
+
+    function setupThumbnailObservers() {
+        if ('IntersectionObserver' in window) {
+            intersectionObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const thumb = thumbnailByContainer.get(entry.target);
+                    if (!thumb) return;
+
+                    thumb.isInViewportMargin = entry.isIntersecting;
+                    if (entry.isIntersecting) {
+                        thumb.cachedRect = entry.boundingClientRect;
+                    } else {
+                        thumb.isRenderable = false;
+                    }
+                });
+                rectsNeedUpdate = true;
+            }, {
+                root: null,
+                rootMargin: `${RENDER_MARGIN}px 0px ${RENDER_MARGIN}px 0px`,
+                threshold: 0,
+            });
+
+            thumbnails.forEach((thumb) => intersectionObserver.observe(thumb.container));
+        } else {
+            thumbnails.forEach((thumb) => {
+                thumb.isInViewportMargin = true;
+            });
+        }
+
+        if ('ResizeObserver' in window) {
+            resizeObserver = new ResizeObserver((entries) => {
+                entries.forEach((entry) => {
+                    const thumb = thumbnailByContainer.get(entry.target);
+                    if (!thumb) return;
+                    thumb.cachedRect = thumb.container.getBoundingClientRect();
+                });
+                rectsNeedUpdate = true;
+            });
+            thumbnails.forEach((thumb) => resizeObserver.observe(thumb.container));
+        }
+    }
+
+    // Track mouse globally across the entire page
+    function setupGlobalMouseTracking() {
+        addManagedEventListener(window, 'mousemove', (e) => {
+            globalMouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            globalMouseY = (e.clientY / window.innerHeight) * 2 - 1;
+        }, { passive: true });
+
+        addManagedEventListener(window, 'mouseleave', () => {
+            // Smoothly return to center when mouse leaves window
+            globalMouseX = 0;
+            globalMouseY = 0;
+        }, { passive: true });
+    }
+
+    function supportsWebGL() {
+        const canvas = document.createElement('canvas');
+        return !!(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+    }
+
+    function setGlobalStat(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function bumpTransitionRectRefresh(durationMs = 700) {
+        transitionRectRefreshUntilMs = Math.max(transitionRectRefreshUntilMs, Date.now() + durationMs);
+        rectsNeedUpdate = true;
+    }
+
+    function syncMotionControlledInputs() {
+        const disabled = prefersReducedMotion;
+        const ids = ['tilt-range', 'mouse-parallax', 'edge-scatter', 'depth-amount', 'opacity-edge'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = disabled;
+        });
+    }
+
+    function syncMotionValuesToUI() {
+        const depthAmountInput = document.getElementById('depth-amount');
+        if (depthAmountInput) depthAmountInput.value = String(config.depthAmount);
+        setGlobalStat('depth-val', String(config.depthAmount));
+
+        const tiltInput = document.getElementById('tilt-range');
+        if (tiltInput) tiltInput.value = String(config.tiltRange);
+        setGlobalStat('tilt-val', String(config.tiltRange));
+
+        const parallaxInput = document.getElementById('mouse-parallax');
+        if (parallaxInput) parallaxInput.value = String(config.mouseParallax);
+        setGlobalStat('parallax-val', String(config.mouseParallax));
+
+        const scatterInput = document.getElementById('edge-scatter');
+        if (scatterInput) scatterInput.value = String(config.edgeScatter);
+        setGlobalStat('scatter-val', config.edgeScatter.toFixed(1));
+
+        const opacityEdgeInput = document.getElementById('opacity-edge');
+        if (opacityEdgeInput) opacityEdgeInput.value = String(config.opacityEdge);
+        setGlobalStat('opacity-edge-val', config.opacityEdge.toFixed(2));
+    }
+
+    function applyMotionPreference(isReduced) {
+        prefersReducedMotion = isReduced;
+
+        if (isReduced) {
+            config.tiltRange = 0;
+            config.mouseParallax = 0;
+            config.edgeScatter = 0;
+            config.edgeScatterCenter = 0;
+            config.depthAmountCenter = defaultConfig.depthAmountCenter;
+            config.depthAmount = defaultConfig.depthAmountCenter;
+            config.opacityEdge = 1;
+            animationSpeed = 0;
+        } else {
+            config.tiltRange = defaultConfig.tiltRange;
+            config.mouseParallax = defaultConfig.mouseParallax;
+            config.edgeScatter = defaultConfig.edgeScatter;
+            config.edgeScatterCenter = defaultConfig.edgeScatterCenter;
+            config.depthAmount = defaultConfig.depthAmount;
+            config.depthAmountCenter = defaultConfig.depthAmountCenter;
+            config.opacityEdge = defaultConfig.opacityEdge;
+        }
+
+        syncMotionControlledInputs();
+        syncMotionValuesToUI();
+    }
+
+    class SharedRenderer {
+        constructor(canvas) {
+            this.renderer = new THREE.WebGLRenderer({
+                canvas,
+                antialias: true,
+                alpha: true,
+                powerPreference: 'high-performance',
+            });
+            this.renderer.outputEncoding = THREE.sRGBEncoding;
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.setClearColor(0x000000, 0);
+            this.renderer.autoClear = false;
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
+            this.camera.position.set(0, 0, CAMERA_Z);
+            this.camera.lookAt(0, 0, 0);
+            this.resize();
+        }
+
+        resize() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const pixelRatio = Math.min(window.devicePixelRatio, 2);
+
+            if (
+                renderState.width !== width ||
+                renderState.height !== height ||
+                this.renderer.getPixelRatio() !== pixelRatio
+            ) {
+                renderState.width = width;
+                renderState.height = height;
+                this.renderer.setPixelRatio(pixelRatio);
+                this.renderer.setSize(width, height, false);
+                this.camera.aspect = width / Math.max(height, 1);
+                this.camera.updateProjectionMatrix();
+            }
+        }
+
+        render(renderables, globalProgress, time) {
+            this.resize();
+
+            const renderer = this.renderer;
+            renderer.setScissorTest(false);
+            renderer.setViewport(0, 0, renderState.width, renderState.height);
+            renderer.clear(true, true, true);
+            this.camera.updateMatrixWorld(true);
+
+            if (renderables.length === 0) {
+                renderState.renderedCount = 0;
+                return;
+            }
+
+            renderables.forEach(({ thumb, rect }) => {
+                thumb.setVisible(true);
+                thumb.update(globalProgress, time, rect);
+            });
+
+            renderer.render(this.scene, this.camera);
+            renderState.renderedCount = renderables.length;
+        }
+    }
 
     // =============================================
-    // Thumbnail Instance Class
+    // Point Cloud Thumbnail Class
     // =============================================
-    class DepthThumbnail {
-        constructor(canvas, spriteId) {
-            this.canvas = canvas;
-            this.container = canvas.parentElement;
+    class PointCloudThumbnail {
+        constructor(container, spriteId) {
+            this.container = container;
             this.spriteId = spriteId;
             this.currentTilt = 0;
+            this.currentPanX = 0;
+            this.currentPanY = 0;
             this.viewportPosition = 0.5;
+            this.pointCount = 0;
+            this.currentCoherence = prefersReducedMotion ? 1 : 0;
+            this.coherenceOverride = null;
+            this.motionFrozen = false;
+            this.renderSuppressed = false;
+            this.lastDebugUpdateMs = 0;
+            this.geometryKey = null;
+            this.cachedRect = null;
+            this.isRenderable = false;
+            this.isInViewportMargin = true;
+            this.lastLayoutWidth = -1;
+            this.lastLayoutHeight = -1;
+            this.lastLayoutLeft = Number.NaN;
+            this.lastLayoutTop = Number.NaN;
+            this.lastLayoutCanvasWidth = -1;
+            this.lastLayoutCanvasHeight = -1;
 
-            // Get debug elements
-            const debug = this.container.querySelector('.thumbnail-debug');
-            this.debugElements = {
+            const debug = this.container.querySelector('.pc-thumbnail-debug');
+            this.debugElements = debug ? {
                 tiltAngle: debug.querySelector('.tilt-angle'),
                 frameNum: debug.querySelector('.frame-num'),
                 frameTotal: debug.querySelector('.frame-total'),
-            };
+                coherenceVal: debug.querySelector('.coherence-val'),
+            } : null;
 
-            this.initThree();
+            this.group = new THREE.Group();
+            this.group.visible = false;
+            this.motionGroup = new THREE.Group();
+            this.motionGroup.matrixAutoUpdate = false;
+            this.group.add(this.motionGroup);
+            sharedRenderer.scene.add(this.group);
+
+            this.virtualCamera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 2000);
+            this.virtualLookTarget = new THREE.Vector3();
         }
 
         get spriteData() {
             return spriteSets[this.spriteId];
         }
 
-        initThree() {
-            // Scene
-            this.scene = new THREE.Scene();
-            this.scene.background = new THREE.Color(0x000000);
-
-            // Renderer
-            this.renderer = new THREE.WebGLRenderer({
-                canvas: this.canvas,
-                antialias: true,
-            });
-            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-            // Camera
-            const aspect = this.container.clientWidth / this.container.clientHeight;
-            this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
-            this.camera.position.set(0, 0, 100);
-
-            this.updateSize();
-        }
-
-        createMesh() {
+        createPointCloud() {
             const { metadata, rgbTexture, depthTexture } = this.spriteData;
             const res = metadata.resolutions[RESOLUTION];
+            const shared = acquireSharedGeometry(res.frame_width, res.frame_height, config.pointDensity);
+            this.geometryKey = shared.key;
+            const geometry = shared.geometry;
+            this.pointCount = geometry.getAttribute('pixelUV').count;
 
-            const aspect = res.frame_width / res.frame_height;
-            const segmentsX = config.meshSegments;
-            const segmentsY = Math.round(segmentsX / aspect);
-
-            const planeWidth = 80;
-            const planeHeight = planeWidth / aspect;
-            const geometry = new THREE.PlaneGeometry(
-                planeWidth, planeHeight, segmentsX, segmentsY
-            );
-
-            // Main material with all uniforms
+            // Material
             this.material = new THREE.ShaderMaterial({
                 vertexShader,
                 fragmentShader,
@@ -601,150 +1227,314 @@
                     atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
                     frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
                     columns: { value: metadata.columns },
-                    extrusionAmount: { value: config.depthAmount },
-                    // Edge handling
+                    depthAmount: { value: config.depthAmount },
+                    pointSize: { value: config.pointSize },
+                    depthSizing: { value: config.depthSizing },
+                    attenuationBase: { value: CAMERA_Z / 100 },
+                    sizeAttenuation: { value: config.sizeAttenuation },
+                    edgeScatter: { value: config.edgeScatter },
                     edgeThreshold: { value: config.edgeThreshold },
-                    edgeSoftness: { value: config.edgeSoftness },
-                    edgeAwareExtrusion: { value: config.edgeAwareExtrusion },
-                    edgeFade: { value: config.edgeFade },
-                    normalShading: { value: config.normalShading },
-                    lightDir: { value: new THREE.Vector3(0.3, 0.5, 1.0).normalize() },
-                    // Debug
+                    time: { value: 0.0 },
+                    opacity: { value: config.opacity },
+                    depthOpacity: { value: config.depthOpacity },
+                    pointShape: { value: config.pointShape },
+                    colorMode: { value: config.colorMode },
                     showDepth: { value: config.showDepth },
                     showEdges: { value: config.showEdges },
-                    showNormals: { value: config.showNormals },
+                    showDensity: { value: config.showDensity },
+                    dofEnable: { value: config.dofEnable },
+                    dofFocal: { value: config.dofFocal },
+                    dofStrength: { value: config.dofStrength },
                 },
-                side: THREE.DoubleSide,
-            });
-
-            this.mesh = new THREE.Mesh(geometry, this.material);
-            this.scene.add(this.mesh);
-
-            // Wireframe with edge visualization
-            this.wireframeMaterial = new THREE.ShaderMaterial({
-                vertexShader,
-                fragmentShader: wireframeFragmentShader,
-                uniforms: {
-                    depthAtlas: { value: depthTexture },
-                    frameIndex: { value: 0.0 },
-                    atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
-                    frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
-                    columns: { value: metadata.columns },
-                    extrusionAmount: { value: config.depthAmount },
-                    edgeThreshold: { value: config.edgeThreshold },
-                    edgeAwareExtrusion: { value: config.edgeAwareExtrusion },
-                },
-                wireframe: true,
                 transparent: true,
-                depthTest: false,
+                depthWrite: false,
+                blending: THREE.NormalBlending,
             });
-            this.wireframeMesh = new THREE.Mesh(geometry.clone(), this.wireframeMaterial);
-            this.wireframeMesh.visible = false;
-            this.scene.add(this.wireframeMesh);
 
-            // Update frame total in debug
-            this.debugElements.frameTotal.textContent = metadata.frames;
+            this.points = new THREE.Points(geometry, this.material);
+            this.points.frustumCulled = false;
+            this.motionGroup.add(this.points);
+
+            // Update debug
+            if (this.debugElements?.frameTotal) {
+                this.debugElements.frameTotal.textContent = metadata.frames;
+            }
         }
 
-        updateViewportPosition() {
-            const rect = this.container.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
+        rebuildPointCloud() {
+            this.disposePointCloud();
+            this.createPointCloud();
+        }
 
-            // Calculate position: 0 = element center at bottom of viewport
-            //                     0.5 = element center at center of viewport
-            //                     1 = element center at top of viewport
+        disposePointCloud() {
+            if (this.points) {
+                this.motionGroup.remove(this.points);
+                this.points = null;
+            }
+            if (this.material) {
+                this.material.dispose();
+                this.material = null;
+            }
+            if (this.geometryKey) {
+                releaseSharedGeometry(this.geometryKey);
+                this.geometryKey = null;
+            }
+        }
+
+        destroy() {
+            this.disposePointCloud();
+            if (this.group && sharedRenderer && sharedRenderer.scene) {
+                sharedRenderer.scene.remove(this.group);
+            }
+        }
+
+        updateViewportPosition(rect) {
+            const viewportHeight = window.innerHeight;
             const elementCenter = rect.top + rect.height / 2;
             this.viewportPosition = 1 - (elementCenter / viewportHeight);
-
-            // Clamp to reasonable range (allow some overshoot for smooth edges)
             this.viewportPosition = Math.max(-0.2, Math.min(1.2, this.viewportPosition));
         }
 
-        update(globalProgress) {
+        setVisible(isVisible) {
+            if (this.group) {
+                this.group.visible = isVisible;
+            }
+        }
+
+        setCoherenceOverride(value) {
+            if (value === null || value === undefined) {
+                this.coherenceOverride = null;
+                return;
+            }
+            this.coherenceOverride = Math.max(0, Math.min(1, value));
+        }
+
+        setMotionFrozen(frozen) {
+            this.motionFrozen = !!frozen;
+        }
+
+        resetTransitionState() {
+            this.coherenceOverride = null;
+            this.motionFrozen = false;
+        }
+
+        setRenderSuppressed(suppressed) {
+            this.renderSuppressed = !!suppressed;
+            if (this.renderSuppressed) {
+                this.isRenderable = false;
+                this.setVisible(false);
+            }
+        }
+
+        syncLayout(rect) {
+            if (!this.group) return;
+
+            const left = Math.floor(rect.left);
+            const top = Math.floor(rect.top);
+            const width = Math.max(1, Math.ceil(rect.width));
+            const height = Math.max(1, Math.ceil(rect.height));
+
+            if (
+                this.lastLayoutWidth === width &&
+                this.lastLayoutHeight === height &&
+                this.lastLayoutLeft === left &&
+                this.lastLayoutTop === top &&
+                this.lastLayoutCanvasWidth === renderState.width &&
+                this.lastLayoutCanvasHeight === renderState.height
+            ) {
+                return;
+            }
+
+            this.lastLayoutWidth = width;
+            this.lastLayoutHeight = height;
+            this.lastLayoutLeft = left;
+            this.lastLayoutTop = top;
+            this.lastLayoutCanvasWidth = renderState.width;
+            this.lastLayoutCanvasHeight = renderState.height;
+
+            const halfFovRad = THREE.MathUtils.degToRad(CAMERA_FOV * 0.5);
+            const visibleHeight = 2 * CAMERA_Z * Math.tan(halfFovRad);
+            const pixelsPerWorld = renderState.height / Math.max(visibleHeight, 1e-6);
+            const centerX = (left + width / 2 - renderState.width / 2) / pixelsPerWorld;
+            const centerY = (renderState.height / 2 - (top + height / 2)) / pixelsPerWorld;
+            const scaleX = (width * CLOUD_FILL_FACTOR) / (PLANE_WIDTH * pixelsPerWorld);
+            const scaleY = (height * CLOUD_FILL_FACTOR) / (PLANE_HEIGHT * pixelsPerWorld);
+            const scaleZ = (scaleX + scaleY) * 0.5;
+
+            this.group.position.set(centerX, centerY, 0);
+            this.group.scale.set(scaleX, scaleY, scaleZ);
+        }
+
+        updateMotionTransform(effectiveDepth) {
+            if (!this.motionGroup || !sharedRenderer || !sharedRenderer.camera) return;
+
+            const sharedCamera = sharedRenderer.camera;
+            if (Math.abs(this.virtualCamera.aspect - sharedCamera.aspect) > 1e-6) {
+                this.virtualCamera.aspect = sharedCamera.aspect;
+                this.virtualCamera.updateProjectionMatrix();
+            }
+
+            const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
+            const distance = CAMERA_Z;
+            const tiltY = Math.sin(tiltRad) * distance * TILT_ORBIT_VERTICAL_SCALE;
+            const panY = this.currentPanY * PAN_Y_CAMERA_INFLUENCE;
+            this.virtualCamera.position.x = this.currentPanX;
+            this.virtualCamera.position.y = tiltY + panY;
+            this.virtualCamera.position.z = Math.cos(tiltRad) * distance;
+            this.virtualLookTarget.set(
+                this.currentPanX * 0.3,
+                this.currentPanY * PAN_Y_LOOK_INFLUENCE,
+                effectiveDepth / 2
+            );
+            this.virtualCamera.lookAt(this.virtualLookTarget);
+            this.virtualCamera.updateMatrixWorld(true);
+
+            // Convert old per-thumbnail camera view transform into model transform
+            // under the shared camera so motion/tilt/parallax matches prior behavior.
+            this.motionGroup.matrix
+                .copy(sharedRenderer.camera.matrixWorld)
+                .multiply(this.virtualCamera.matrixWorldInverse);
+            this.motionGroup.matrixWorldNeedsUpdate = true;
+        }
+
+        update(globalProgress, time, rect) {
             if (!this.material) return;
 
             const { metadata } = this.spriteData;
-
-            // Calculate frame index for THIS sprite's frame count
             let frameIndex = Math.floor(globalProgress) % metadata.frames;
             if (frameIndex < 0) frameIndex += metadata.frames;
 
-            // Update viewport position
-            this.updateViewportPosition();
+            this.updateViewportPosition(rect);
 
-            // Calculate tilt based on THIS element's viewport position
-            // viewportPosition: 0 = bottom (look from below), 0.5 = center, 1 = top (look from above)
-            const targetTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
-            this.currentTilt += (targetTilt - this.currentTilt) * 0.12;
+            // =============================================
+            // Viewport-aware coherence calculation
+            // =============================================
+            // distanceFromCenter: 0 at center, 1 at edges
+            const distanceFromCenter = Math.abs((this.viewportPosition - 0.5) * 2);
+            // Clamp to 0-1 range
+            const clampedDistance = Math.min(1, Math.max(0, distanceFromCenter));
+            // Apply power curve: <1 = wider center zone, >1 = narrower center zone
+            const curvedDistance = Math.pow(clampedDistance, config.transitionCurve);
+            // coherence: 1 at center (coherent), 0 at edges (exploded)
+            const autoCoherence = prefersReducedMotion ? 1 : (1 - curvedDistance);
+            const targetCoherence = this.coherenceOverride !== null ? this.coherenceOverride : autoCoherence;
+            // Smooth the coherence transition
+            const coherenceLerp = prefersReducedMotion ? 1 : (this.coherenceOverride !== null ? 0.22 : 0.1);
+            this.currentCoherence += (targetCoherence - this.currentCoherence) * coherenceLerp;
 
-            // Update all uniforms
+            // Interpolate parameters based on coherence
+            // coherence = 1 → center values (coherent)
+            // coherence = 0 → edge values (exploded)
+            const effectiveDepth = config.depthAmountCenter +
+                (config.depthAmount - config.depthAmountCenter) * (1 - this.currentCoherence);
+            const effectiveScatter = config.edgeScatterCenter +
+                (config.edgeScatter - config.edgeScatterCenter) * (1 - this.currentCoherence);
+            const effectiveOpacity = config.opacityEdge +
+                (config.opacity - config.opacityEdge) * this.currentCoherence;
+
+            // =============================================
+            // Camera positioning
+            // =============================================
+            const scrollTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
+
+            // Use global mouse position (or device orientation on mobile)
+            let inputX = globalMouseX;
+            let inputY = -globalMouseY; // Invert Y for natural feel
+
+            if (hasDeviceOrientation) {
+                inputX = deviceX;
+                inputY = deviceY;
+            }
+
+            let targetPanX = inputX * config.mouseParallax;
+            let targetPanY = inputY * config.mouseParallax * 0.6;
+            let targetTilt = scrollTilt;
+            if (this.motionFrozen || this.coherenceOverride !== null) {
+                targetPanX = 0;
+                targetPanY = 0;
+                targetTilt = 0;
+            }
+
+            // Smooth interpolation - faster response for mouse, slower for scroll tilt
+            const tiltLerp = prefersReducedMotion ? 1 : (this.motionFrozen ? 0.25 : 0.12);
+            const panLerp = prefersReducedMotion ? 1 : (this.motionFrozen ? 0.25 : 0.15);
+            this.currentTilt += (targetTilt - this.currentTilt) * tiltLerp;
+            this.currentPanX += (targetPanX - this.currentPanX) * panLerp;
+            this.currentPanY += (targetPanY - this.currentPanY) * panLerp;
+
+            // =============================================
+            // Update uniforms with viewport-aware values
+            // =============================================
             const u = this.material.uniforms;
             u.frameIndex.value = frameIndex;
-            u.extrusionAmount.value = config.depthAmount;
+            u.depthAmount.value = effectiveDepth;
+            u.pointSize.value = config.pointSize;
+            u.depthSizing.value = config.depthSizing;
+            u.sizeAttenuation.value = config.sizeAttenuation;
+            u.edgeScatter.value = effectiveScatter;
             u.edgeThreshold.value = config.edgeThreshold;
-            u.edgeSoftness.value = config.edgeSoftness;
-            u.edgeAwareExtrusion.value = config.edgeAwareExtrusion;
-            u.edgeFade.value = config.edgeFade;
-            u.normalShading.value = config.normalShading;
-            // Debug
+            u.time.value = time;
+            u.opacity.value = effectiveOpacity;
+            u.depthOpacity.value = config.depthOpacity;
+            u.pointShape.value = config.pointShape;
+            u.colorMode.value = config.colorMode;
             u.showDepth.value = config.showDepth;
             u.showEdges.value = config.showEdges;
-            u.showNormals.value = config.showNormals;
+            u.showDensity.value = config.showDensity;
+            u.dofEnable.value = config.dofEnable;
+            u.dofFocal.value = config.dofFocal;
+            u.dofStrength.value = config.dofStrength;
+            this.syncLayout(rect);
+            this.updateMotionTransform(effectiveDepth);
 
-            const wu = this.wireframeMaterial.uniforms;
-            wu.frameIndex.value = frameIndex;
-            wu.extrusionAmount.value = config.depthAmount;
-            wu.edgeThreshold.value = config.edgeThreshold;
-            wu.edgeAwareExtrusion.value = config.edgeAwareExtrusion;
-            this.wireframeMesh.visible = showWireframe;
-
-            // Position camera based on tilt
-            const tiltRad = THREE.MathUtils.degToRad(this.currentTilt);
-            const distance = 100;
-            this.camera.position.y = Math.sin(tiltRad) * distance * 0.5;
-            this.camera.position.z = Math.cos(tiltRad) * distance;
-            this.camera.lookAt(0, 0, config.depthAmount / 2);
-
-            // Update debug display
-            this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
-            this.debugElements.frameNum.textContent = frameIndex + 1;
-
-            // Render
-            this.renderer.render(this.scene, this.camera);
-        }
-
-        updateSize() {
-            const width = this.container.clientWidth;
-            const height = this.container.clientHeight;
-            this.renderer.setSize(width, height);
-            this.camera.aspect = width / height;
-            this.camera.updateProjectionMatrix();
+            const nowMs = performance.now();
+            if (nowMs - this.lastDebugUpdateMs >= DEBUG_UI_UPDATE_MS) {
+                if (this.debugElements?.tiltAngle) {
+                    this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
+                }
+                if (this.debugElements?.frameNum) {
+                    this.debugElements.frameNum.textContent = frameIndex + 1;
+                }
+                if (this.debugElements?.coherenceVal) {
+                    this.debugElements.coherenceVal.textContent = Math.round(this.currentCoherence * 100) + '%';
+                }
+                this.lastDebugUpdateMs = nowMs;
+            }
         }
     }
 
     // =============================================
     // Initialization
     // =============================================
+    function withVersion(url, version) {
+        if (!version) return url;
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}v=${encodeURIComponent(version)}`;
+    }
+
     async function loadSpriteSet(spriteId) {
         const spritePath = `${SPRITE_BASE_PATH}/${spriteId}`;
 
-        // Load metadata
         let metadata;
         try {
-            const response = await fetch(`${spritePath}/metadata.json`);
+            const metadataUrl = withVersion(`${spritePath}/metadata.json`, `${spriteId}-${SPRITE_REQUEST_VERSION}`);
+            const response = await fetch(metadataUrl, { cache: 'no-store' });
             metadata = await response.json();
         } catch (err) {
             console.error(`Failed to load metadata for ${spriteId}:`, err);
             return null;
         }
 
-        // Load textures
         const loader = new THREE.TextureLoader();
         const res = metadata.resolutions[RESOLUTION];
 
+        const atlasVersion = String(
+            metadata.atlas_version ||
+            `${spriteId}-${metadata.frames}-${metadata.columns}-${metadata.rows}-${res.sheet_width}x${res.sheet_height}`
+        );
         const [rgbTexture, depthTexture] = await Promise.all([
-            loadTexture(loader, `${spritePath}/${res.rgb_file}`),
-            loadTexture(loader, `${spritePath}/${res.depth_file}`),
+            loadTexture(loader, withVersion(`${spritePath}/${res.rgb_file}`, atlasVersion)),
+            loadTexture(loader, withVersion(`${spritePath}/${res.depth_file}`, atlasVersion)),
         ]);
 
         [rgbTexture, depthTexture].forEach(tex => {
@@ -752,18 +1542,1171 @@
             tex.magFilter = THREE.LinearFilter;
             tex.generateMipmaps = false;
             tex.flipY = false;
+            tex.wrapS = THREE.ClampToEdgeWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
         });
+        rgbTexture.encoding = THREE.sRGBEncoding;
+        depthTexture.encoding = THREE.LinearEncoding;
+
+        const expectedWidth = res.sheet_width;
+        const expectedHeight = res.sheet_height;
+        const rgbWidth = rgbTexture.image?.width;
+        const rgbHeight = rgbTexture.image?.height;
+        const depthWidth = depthTexture.image?.width;
+        const depthHeight = depthTexture.image?.height;
+        if (
+            rgbWidth !== expectedWidth ||
+            rgbHeight !== expectedHeight ||
+            depthWidth !== expectedWidth ||
+            depthHeight !== expectedHeight
+        ) {
+            console.warn(`Atlas dimension mismatch for ${spriteId}`, {
+                expectedWidth,
+                expectedHeight,
+                rgbWidth,
+                rgbHeight,
+                depthWidth,
+                depthHeight,
+            });
+        }
 
         console.log(`Loaded sprite set: ${spriteId} (${metadata.frames} frames)`);
         return { metadata, rgbTexture, depthTexture };
     }
 
+    function loadTexture(loader, url) {
+        return new Promise((resolve, reject) => {
+            loader.load(url, resolve, undefined, reject);
+        });
+    }
+
+    function enableNoWebGLLegacyBehavior() {
+        document.querySelectorAll('.pc-project[data-slug]').forEach((item) => {
+            item.classList.add('project-item', 'no-fade');
+            const header = item.querySelector('.pc-project-header');
+            if (header) header.classList.add('project-header');
+            const container = item.querySelector('.pc-thumbnail-container');
+            if (container) container.classList.add('thumbnail');
+            const closeButton = item.querySelector('.pc-close-project');
+            if (closeButton) closeButton.classList.add('close-project');
+            const details = item.querySelector('.pc-project-details');
+            if (details) details.classList.add('project-details');
+        });
+    }
+
+    function activateNoWebGLFallback(message, error = null) {
+        hasWebGL = false;
+        document.body.classList.add('no-webgl');
+        setGlobalStat('global-speed', 'n/a');
+        setGlobalStat('render-count', '0');
+        setGlobalStat('gl-context-count', '0');
+        enableNoWebGLLegacyBehavior();
+        if (error) {
+            console.error(message, error);
+        } else {
+            console.warn(message);
+        }
+    }
+
+    class ProjectTransitionManager {
+        constructor() {
+            this.contextBySlug = new Map();
+            this.promotedStates = new Map();
+            this.currentOpenSlug = null;
+            this.transitionToken = 0;
+            this.transitionInFlight = false;
+            this.fetchController = null;
+            this.hlsScriptPromise = null;
+            this.prefetchBySlug = new Map();
+            this.prefetchAbortBySlug = new Map();
+            this.detailsHtmlCache = new Map();
+            this.manifestWarmupByUrl = new Map();
+            this.preconnectedOrigins = new Set();
+            this.hlsWarmupRequested = false;
+            this.boundCaptureClick = this.handleCaptureClick.bind(this);
+            this.boundKeyDown = this.handleKeyDown.bind(this);
+            this.boundPrefetchIntent = this.handlePrefetchIntent.bind(this);
+        }
+
+        init() {
+            this.rebuildContextMap();
+            addManagedEventListener(document, 'click', this.boundCaptureClick, true);
+            addManagedEventListener(document, 'keydown', this.boundKeyDown);
+            addManagedEventListener(document, 'pointerover', this.boundPrefetchIntent, true);
+            addManagedEventListener(document, 'pointerdown', this.boundPrefetchIntent, true);
+            addManagedEventListener(document, 'focusin', this.boundPrefetchIntent, true);
+            addManagedEventListener(document, 'touchstart', this.boundPrefetchIntent, { passive: true, capture: true });
+            this.warmHlsScript();
+            document.querySelectorAll('.pc-project[data-hls-url]').forEach((item) => {
+                this.ensurePreconnectForUrl(item.dataset.hlsUrl || '');
+            });
+        }
+
+        destroy() {
+            this.abortPendingFetch();
+            this.prefetchAbortBySlug.forEach((controller) => controller.abort());
+            this.prefetchAbortBySlug.clear();
+            this.prefetchBySlug.clear();
+            this.detailsHtmlCache.clear();
+            this.manifestWarmupByUrl.clear();
+            this.preconnectedOrigins.clear();
+            this.promotedStates.forEach((_state, slug) => {
+                const context = this.contextBySlug.get(slug);
+                if (context) {
+                    this.restoreContainer(context, false);
+                    context.thumbnail.setRenderSuppressed(false);
+                    this.destroyVideoInContext(context);
+                }
+            });
+            this.promotedStates.clear();
+            this.contextBySlug.clear();
+            this.currentOpenSlug = null;
+            this.transitionInFlight = false;
+        }
+
+        destroyVideosExcept(keepSlug = null) {
+            this.contextBySlug.forEach((context, slug) => {
+                if (keepSlug && slug === keepSlug) return;
+                this.destroyVideoInContext(context);
+                this.setHeroSlotVisibility(context, false);
+                context.heroSlot.innerHTML = '';
+                this.resetProjectVisualState(context);
+                context.container.classList.remove('thumb-hidden');
+                context.thumbnail.setRenderSuppressed(false);
+            });
+        }
+
+        rebuildContextMap() {
+            this.contextBySlug.clear();
+            document.querySelectorAll('.pc-project[data-slug]').forEach((item) => {
+                const slug = item.dataset.slug;
+                if (!slug) return;
+                const container = item.querySelector('.pc-thumbnail-container');
+                const heroSlot = item.querySelector(`#hero-${slug}`);
+                const details = item.querySelector(`#details-${slug}`);
+                const closeButton = item.querySelector('.pc-close-project');
+                const thumbnail = thumbnailBySlug.get(slug);
+                if (!container || !heroSlot || !details || !closeButton || !thumbnail) return;
+                this.contextBySlug.set(slug, {
+                    slug,
+                    item,
+                    container,
+                    heroSlot,
+                    details,
+                    closeButton,
+                    thumbnail,
+                });
+            });
+        }
+
+        setHeroSlotVisibility(ctx, slotVisible, videoVisible = false) {
+            ctx.heroSlot.classList.toggle('slot-visible', !!slotVisible);
+            ctx.heroSlot.classList.toggle('video-visible', !!videoVisible);
+            ctx.heroSlot.setAttribute('aria-hidden', slotVisible ? 'false' : 'true');
+        }
+
+        resetProjectVisualState(ctx) {
+            ctx.item.classList.remove('pc-has-hero-video');
+            ctx.item.classList.remove('pc-hero-expanded');
+            ctx.item.classList.remove('pc-closing');
+            ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+        }
+
+        async toggleProject(slug) {
+            if (!slug || this.transitionInFlight) return;
+            this.transitionInFlight = true;
+            try {
+                if (this.currentOpenSlug && this.currentOpenSlug !== slug) {
+                    await this.closeProject(this.currentOpenSlug);
+                }
+
+                if (this.currentOpenSlug === slug) {
+                    await this.closeProject(slug);
+                } else {
+                    await this.openProject(slug);
+                }
+            } finally {
+                this.transitionInFlight = false;
+            }
+        }
+
+        async openProject(slug) {
+            const ctx = this.contextBySlug.get(slug);
+            if (!ctx) return;
+            const token = this.beginTransition();
+            const prefersInstant = prefersReducedMotion;
+            this.destroyVideosExcept(slug);
+            this.destroyVideoInContext(ctx);
+            const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
+
+            ctx.thumbnail.setRenderSuppressed(false);
+            ctx.item.classList.add('pc-open');
+            ctx.item.classList.remove('pc-content-visible');
+            this.resetProjectVisualState(ctx);
+            ctx.details.hidden = true;
+            ctx.details.innerHTML = '';
+            this.setHeroSlotVisibility(ctx, false);
+            ctx.heroSlot.innerHTML = '';
+            ctx.closeButton.disabled = true;
+            ctx.container.classList.remove('thumb-hidden');
+
+            ctx.thumbnail.setMotionFrozen(true);
+
+            let html = '';
+            try {
+                html = await detailsHtmlPromise;
+            } catch (err) {
+                if (!this.isTokenActive(token)) return;
+                console.error(`Failed to load ${slug}:`, err);
+                ctx.item.classList.remove('pc-open');
+                ctx.closeButton.disabled = false;
+                ctx.thumbnail.resetTransitionState();
+                return;
+            }
+
+            if (!this.isTokenActive(token)) return;
+            const hasHeroVideo = this.populateProjectContent(ctx, html);
+            if (hasHeroVideo) {
+                ctx.item.classList.add('pc-has-hero-video');
+                this.syncStageAspectRatioFromHero(ctx);
+            }
+
+            const headerY = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+            window.scrollTo({ top: headerY, behavior: prefersInstant ? 'auto' : 'smooth' });
+
+            if (!hasHeroVideo) {
+                await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 320, token, { easing: 'inOut' });
+                if (!this.isTokenActive(token)) return;
+
+                if (!ctx.details.hidden) {
+                    requestAnimationFrame(() => {
+                        if (!this.isTokenActive(token)) return;
+                        ctx.item.classList.add('pc-content-visible');
+                    });
+                }
+                ctx.closeButton.disabled = false;
+                this.currentOpenSlug = slug;
+                ctx.thumbnail.resetTransitionState();
+                ctx.thumbnail.setRenderSuppressed(false);
+                this.setHeroSlotVisibility(ctx, false);
+                return;
+            }
+
+            if (prefersInstant) {
+                const heroVideo = ctx.heroSlot.querySelector('video');
+                ctx.item.classList.add('pc-hero-expanded');
+                this.setHeroSlotVisibility(ctx, true);
+                ctx.thumbnail.setCoherenceOverride(1);
+                ctx.container.classList.add('thumb-hidden');
+                ctx.thumbnail.setRenderSuppressed(true);
+                if (!ctx.details.hidden) {
+                    ctx.item.classList.add('pc-content-visible');
+                }
+                ctx.closeButton.disabled = false;
+                this.currentOpenSlug = slug;
+                ctx.thumbnail.resetTransitionState();
+
+                if (heroVideo) {
+                    this.prepareHeroVideoReady(heroVideo, ctx, token)
+                        .then((ready) => {
+                            if (!this.isTokenActive(token)) return;
+                            if (ready) {
+                                this.setHeroSlotVisibility(ctx, true, true);
+                            }
+                        })
+                        .catch(() => {});
+                }
+                return;
+            }
+
+            const heroVideo = ctx.heroSlot.querySelector('video');
+            const heroVideoReadyPromise = heroVideo
+                ? this.prepareHeroVideoReady(heroVideo, ctx, token)
+                : Promise.resolve(false);
+
+            const startRect = ctx.container.getBoundingClientRect();
+            this.promoteContainer(ctx);
+            this.setContainerRect(ctx.container, startRect);
+            ctx.item.classList.add('pc-hero-expanded');
+
+            const targetRect = ctx.heroSlot.getBoundingClientRect();
+            const hasTarget = targetRect.width > 0 && targetRect.height > 0;
+            const morphDuration = 640;
+            const flattenPromise = this.animateCoherence(ctx.thumbnail, 1, morphDuration, token, { easing: 'inOut' });
+            const rectPromise = hasTarget
+                ? this.animateRect(ctx.container, startRect, targetRect, morphDuration, token, {
+                    getTargetRect: () => ctx.heroSlot.getBoundingClientRect(),
+                })
+                : Promise.resolve();
+            await Promise.all([flattenPromise, rectPromise]);
+            if (!this.isTokenActive(token)) return;
+
+            const videoIsReady = await heroVideoReadyPromise;
+
+            if (videoIsReady) {
+                this.setHeroSlotVisibility(ctx, true, true);
+                this.restoreContainer(ctx, true);
+                ctx.thumbnail.setRenderSuppressed(true);
+            } else {
+                this.setHeroSlotVisibility(ctx, false);
+                ctx.item.classList.remove('pc-hero-expanded');
+                this.restoreContainer(ctx, false);
+                ctx.thumbnail.setRenderSuppressed(false);
+            }
+
+            if (!ctx.details.hidden) {
+                requestAnimationFrame(() => {
+                    if (!this.isTokenActive(token)) return;
+                    ctx.item.classList.add('pc-content-visible');
+                });
+            }
+
+            ctx.closeButton.disabled = false;
+            this.currentOpenSlug = slug;
+        }
+
+        async closeProject(slug) {
+            const ctx = this.contextBySlug.get(slug);
+            if (!ctx) return;
+
+            const token = this.beginTransition();
+            const prefersInstant = prefersReducedMotion;
+            ctx.closeButton.disabled = true;
+            const hadHeroVideo = ctx.item.classList.contains('pc-has-hero-video');
+            ctx.item.classList.add('pc-closing');
+
+            ctx.thumbnail.setRenderSuppressed(false);
+            ctx.thumbnail.setMotionFrozen(true);
+
+            if (prefersInstant) {
+                this.restoreContainer(ctx, false);
+                ctx.container.classList.remove('thumb-hidden');
+                this.setHeroSlotVisibility(ctx, false);
+                this.destroyVideoInContext(ctx);
+                ctx.heroSlot.innerHTML = '';
+                ctx.details.innerHTML = '';
+                ctx.details.hidden = true;
+                ctx.item.classList.remove('pc-content-visible');
+                ctx.item.classList.remove('pc-open');
+                this.resetProjectVisualState(ctx);
+                ctx.thumbnail.setCoherenceOverride(0);
+                ctx.thumbnail.resetTransitionState();
+                ctx.closeButton.disabled = false;
+                this.currentOpenSlug = null;
+                this.destroyVideosExcept(null);
+                return;
+            }
+
+            ctx.thumbnail.setCoherenceOverride(1);
+            await this.animateCoherence(ctx.thumbnail, 1, 120, token);
+            if (!this.isTokenActive(token)) {
+                ctx.item.classList.remove('pc-closing');
+                ctx.closeButton.disabled = false;
+                return;
+            }
+
+            const heroRect = hadHeroVideo
+                ? ctx.heroSlot.getBoundingClientRect()
+                : ctx.container.getBoundingClientRect();
+            // Hide the visible hero immediately so only the promoted thumbnail drives close animation.
+            this.setHeroSlotVisibility(ctx, false);
+
+            // Collapse stage sizing before measuring target so close animates to the true thumbnail footprint.
+            ctx.item.classList.remove('pc-hero-expanded');
+            const targetRect = this.measureContainerOriginRect(ctx);
+
+            this.promoteContainer(ctx);
+            this.setContainerRect(ctx.container, heroRect);
+            ctx.container.classList.remove('thumb-hidden');
+            ctx.container.style.opacity = '1';
+
+            ctx.item.classList.remove('pc-content-visible');
+            await this.animateRect(ctx.container, heroRect, targetRect, 420, token);
+            if (!this.isTokenActive(token)) {
+                ctx.item.classList.remove('pc-closing');
+                ctx.closeButton.disabled = false;
+                return;
+            }
+
+            this.restoreContainer(ctx, false);
+            this.destroyVideoInContext(ctx);
+            ctx.heroSlot.innerHTML = '';
+            ctx.details.innerHTML = '';
+            ctx.details.hidden = true;
+            ctx.item.classList.remove('pc-open');
+            this.resetProjectVisualState(ctx);
+            ctx.closeButton.disabled = false;
+
+            await this.animateCoherence(ctx.thumbnail, 0, 260, token);
+            if (!this.isTokenActive(token)) return;
+            ctx.thumbnail.resetTransitionState();
+            this.currentOpenSlug = null;
+            this.destroyVideosExcept(null);
+        }
+
+        handleCaptureClick(event) {
+            const closeBtn = event.target.closest('.pc-close-project');
+            if (closeBtn) {
+                const item = closeBtn.closest('.pc-project[data-slug]');
+                const slug = item?.dataset.slug;
+                if (!slug) return;
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleProject(slug);
+                return;
+            }
+
+            const trigger = event.target.closest('.pc-project-header, .pc-thumbnail-container, .pc-stage');
+            if (!trigger) return;
+
+            const item = trigger.closest('.pc-project[data-slug]');
+            const slug = item?.dataset.slug;
+            if (!slug) return;
+
+            if (slug === this.currentOpenSlug) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            this.prefetchProject(slug, item.dataset.hlsUrl || '');
+            this.toggleProject(slug);
+        }
+
+        handleKeyDown(event) {
+            if (event.key !== 'Escape') return;
+            if (!this.currentOpenSlug || this.transitionInFlight) return;
+            event.preventDefault();
+            this.toggleProject(this.currentOpenSlug);
+        }
+
+        handlePrefetchIntent(event) {
+            const target = event.target instanceof Element ? event.target : null;
+            if (!target) return;
+
+            const item = target.closest('.pc-project[data-slug]');
+            if (!item) return;
+
+            if (event.type === 'pointerover') {
+                const from = event.relatedTarget;
+                if (from instanceof Element && item.contains(from)) {
+                    return;
+                }
+            }
+
+            const slug = item.dataset.slug;
+            if (!slug) return;
+            this.prefetchProject(slug, item.dataset.hlsUrl || '');
+        }
+
+        beginTransition() {
+            this.transitionToken += 1;
+            this.abortPendingFetch();
+            return this.transitionToken;
+        }
+
+        isTokenActive(token) {
+            return token === this.transitionToken;
+        }
+
+        buildProjectURL(slug) {
+            const url = new URL(`/${slug}`, window.location.origin);
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('show_drafts') === 'true' || sessionStorage.getItem('bb_show_drafts') === 'true') {
+                url.searchParams.set('show_drafts', 'true');
+            }
+            return url.toString();
+        }
+
+        async fetchProjectDetailsHTML(slug, token) {
+            if (this.detailsHtmlCache.has(slug)) {
+                return this.detailsHtmlCache.get(slug);
+            }
+
+            const pendingPrefetch = this.prefetchBySlug.get(slug);
+            if (pendingPrefetch) {
+                try {
+                    const prefetched = await pendingPrefetch;
+                    if (prefetched) {
+                        return prefetched;
+                    }
+                } catch {
+                    // Fall through to direct fetch.
+                }
+            }
+
+            const controller = new AbortController();
+            this.fetchController = controller;
+            try {
+                const response = await fetch(this.buildProjectURL(slug), {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'text/html',
+                    },
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const html = await response.text();
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Stale transition token');
+                }
+                this.detailsHtmlCache.set(slug, html);
+                return html;
+            } finally {
+                if (this.fetchController === controller) {
+                    this.fetchController = null;
+                }
+            }
+        }
+
+        abortPendingFetch() {
+            if (!this.fetchController) return;
+            this.fetchController.abort();
+            this.fetchController = null;
+        }
+
+        prefetchProject(slug, hlsUrl) {
+            if (!slug) return;
+
+            this.ensurePreconnectForUrl(hlsUrl);
+            this.warmHlsScript();
+            if (hlsUrl) {
+                this.warmHlsManifest(hlsUrl);
+            }
+
+            if (this.detailsHtmlCache.has(slug) || this.prefetchBySlug.has(slug)) return;
+
+            const controller = new AbortController();
+            this.prefetchAbortBySlug.set(slug, controller);
+            const request = fetch(this.buildProjectURL(slug), {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'text/html',
+                },
+                signal: controller.signal,
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.text();
+                })
+                .then((html) => {
+                    this.detailsHtmlCache.set(slug, html);
+                    return html;
+                })
+                .catch((err) => {
+                    if (err && err.name === 'AbortError') {
+                        return '';
+                    }
+                    console.warn(`Prefetch failed for ${slug}:`, err);
+                    return '';
+                })
+                .finally(() => {
+                    this.prefetchBySlug.delete(slug);
+                    this.prefetchAbortBySlug.delete(slug);
+                });
+
+            this.prefetchBySlug.set(slug, request);
+        }
+
+        warmHlsScript() {
+            if (window.Hls || this.hlsScriptPromise || this.hlsWarmupRequested) return;
+            this.hlsWarmupRequested = true;
+            const trigger = () => {
+                if (window.Hls || this.hlsScriptPromise) return;
+                this.loadHlsScript().catch(() => {});
+            };
+
+            if (document.visibilityState === 'visible') {
+                window.setTimeout(trigger, 80);
+            } else if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(trigger, { timeout: 400 });
+            } else {
+                window.setTimeout(trigger, 180);
+            }
+        }
+
+        warmHlsManifest(hlsUrl) {
+            if (!hlsUrl || this.manifestWarmupByUrl.has(hlsUrl)) return;
+            this.ensurePreconnectForUrl(hlsUrl);
+            const controller = new AbortController();
+            const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+            const request = fetch(hlsUrl, {
+                method: 'GET',
+                mode: 'no-cors',
+                credentials: 'omit',
+                signal: controller.signal,
+            })
+                .catch(() => {})
+                .finally(() => {
+                    clearTimeout(timeoutId);
+                });
+            this.manifestWarmupByUrl.set(hlsUrl, request);
+        }
+
+        ensurePreconnectForUrl(resourceUrl) {
+            if (!resourceUrl) return;
+            let origin = '';
+            try {
+                origin = new URL(resourceUrl, window.location.origin).origin;
+            } catch {
+                return;
+            }
+            if (!origin || this.preconnectedOrigins.has(origin)) return;
+            this.preconnectedOrigins.add(origin);
+
+            const preconnect = document.createElement('link');
+            preconnect.rel = 'preconnect';
+            preconnect.href = origin;
+            preconnect.crossOrigin = 'anonymous';
+            document.head.appendChild(preconnect);
+        }
+
+        syncStageAspectRatioFromHero(ctx) {
+            const heroVideo = ctx.heroSlot.querySelector('video');
+            if (!heroVideo) {
+                ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+                return;
+            }
+
+            let resolvedRatio = Number.NaN;
+            if (heroVideo.videoWidth > 0 && heroVideo.videoHeight > 0) {
+                resolvedRatio = heroVideo.videoWidth / heroVideo.videoHeight;
+            } else {
+                const rawRatio = heroVideo.dataset?.videoAspectRatio;
+                resolvedRatio = Number.parseFloat(rawRatio || '');
+            }
+
+            if (Number.isFinite(resolvedRatio) && resolvedRatio > 0.35 && resolvedRatio < 4.5) {
+                ctx.item.style.setProperty('--pc-stage-aspect-ratio', resolvedRatio.toString());
+            } else {
+                ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+            }
+        }
+
+        populateProjectContent(ctx, html) {
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+
+            const videoContainer = temp.querySelector('.video-container');
+            const projectContent = temp.querySelector('.project-content');
+
+            ctx.heroSlot.innerHTML = '';
+            ctx.details.innerHTML = '';
+            this.setHeroSlotVisibility(ctx, false);
+
+            if (videoContainer) {
+                ctx.heroSlot.appendChild(videoContainer);
+            }
+            if (projectContent) {
+                ctx.details.appendChild(projectContent);
+                ctx.details.hidden = false;
+            } else {
+                ctx.details.hidden = true;
+            }
+            return !!videoContainer;
+        }
+
+        promoteContainer(ctx) {
+            if (this.promotedStates.has(ctx.slug)) return;
+
+            const parent = ctx.container.parentElement;
+            if (!parent) return;
+
+            const nextSibling = ctx.container.nextSibling;
+            const rect = ctx.container.getBoundingClientRect();
+
+            const placeholder = document.createElement('div');
+            placeholder.className = 'pc-thumb-placeholder';
+            placeholder.style.width = `${rect.width}px`;
+            placeholder.style.height = `${rect.height}px`;
+
+            parent.insertBefore(placeholder, ctx.container);
+            document.body.appendChild(ctx.container);
+            ctx.container.classList.add('transition-overlay');
+
+            this.promotedStates.set(ctx.slug, {
+                parent,
+                nextSibling,
+                placeholder,
+            });
+            this.setContainerRect(ctx.container, rect);
+            bumpTransitionRectRefresh(700);
+        }
+
+        restoreContainer(ctx, hidden) {
+            const promoted = this.promotedStates.get(ctx.slug);
+            if (promoted) {
+                if (promoted.nextSibling && promoted.nextSibling.parentNode === promoted.parent) {
+                    promoted.parent.insertBefore(ctx.container, promoted.nextSibling);
+                } else {
+                    promoted.parent.appendChild(ctx.container);
+                }
+                promoted.placeholder.remove();
+                this.promotedStates.delete(ctx.slug);
+            }
+
+            ctx.container.classList.remove('transition-overlay');
+            ctx.container.style.position = '';
+            ctx.container.style.left = '';
+            ctx.container.style.top = '';
+            ctx.container.style.width = '';
+            ctx.container.style.height = '';
+            ctx.container.style.opacity = '';
+            ctx.container.style.zIndex = '';
+            ctx.container.style.transform = '';
+            if (hidden) {
+                ctx.container.classList.add('thumb-hidden');
+            } else {
+                ctx.container.classList.remove('thumb-hidden');
+            }
+            bumpTransitionRectRefresh(260);
+        }
+
+        measureContainerOriginRect(ctx) {
+            const rect = ctx.container.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                return rect;
+            }
+
+            const header = ctx.item.querySelector('.pc-project-header');
+            if (!header) return rect;
+            const fallback = header.getBoundingClientRect();
+            return new DOMRect(fallback.left, fallback.top, Math.max(1, fallback.width), Math.max(1, fallback.height));
+        }
+
+        setContainerRect(container, rect) {
+            container.style.left = `${rect.left}px`;
+            container.style.top = `${rect.top}px`;
+            container.style.width = `${rect.width}px`;
+            container.style.height = `${rect.height}px`;
+            bumpTransitionRectRefresh(180);
+        }
+
+        animateRect(container, fromRect, toRect, durationMs, token, options = {}) {
+            if (durationMs <= 0 || prefersReducedMotion) {
+                this.setContainerRect(container, toRect);
+                return Promise.resolve();
+            }
+
+            const getTargetRect = () => {
+                if (typeof options.getTargetRect === 'function') {
+                    const next = options.getTargetRect();
+                    if (next && next.width > 0 && next.height > 0) {
+                        return next;
+                    }
+                }
+                return toRect;
+            };
+
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = 1 - Math.pow(1 - t, 3);
+                    const targetRect = getTargetRect();
+                    const interpolated = new DOMRect(
+                        fromRect.left + (targetRect.left - fromRect.left) * eased,
+                        fromRect.top + (targetRect.top - fromRect.top) * eased,
+                        fromRect.width + (targetRect.width - fromRect.width) * eased,
+                        fromRect.height + (targetRect.height - fromRect.height) * eased
+                    );
+                    this.setContainerRect(container, interpolated);
+
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        animateCoherence(thumbnail, targetValue, durationMs, token, options = {}) {
+            if (durationMs <= 0 || prefersReducedMotion) {
+                thumbnail.setCoherenceOverride(targetValue);
+                return Promise.resolve();
+            }
+
+            const easing = options.easing || 'out';
+            const easeValue = (t) => {
+                if (easing === 'inOut') {
+                    return t < 0.5
+                        ? 4 * t * t * t
+                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                return 1 - Math.pow(1 - t, 3);
+            };
+            const startValue = thumbnail.coherenceOverride !== null ? thumbnail.coherenceOverride : thumbnail.currentCoherence;
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = easeValue(t);
+                    const value = startValue + (targetValue - startValue) * eased;
+                    thumbnail.setCoherenceOverride(value);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        thumbnail.setCoherenceOverride(targetValue);
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        async prepareHeroVideoReady(video, ctx, token) {
+            if (!video) return false;
+
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = 'auto';
+            video.setAttribute('playsinline', '');
+            video.setAttribute('muted', '');
+
+            try {
+                this.syncStageAspectRatioFromHero(ctx);
+                await this.setupHeroVideo(video, true, token);
+                if (!this.isTokenActive(token)) return false;
+                await this.waitForFirstVideoFrame(video, token, 7000);
+                if (!this.isTokenActive(token)) return false;
+                this.syncStageAspectRatioFromHero(ctx);
+                return true;
+            } catch (err) {
+                if (this.isTokenActive(token)) {
+                    console.warn('Hero video was not ready before reveal window:', err);
+                }
+                return false;
+            }
+        }
+
+        async setupHeroVideo(video, autoplay, token) {
+            if (!this.isTokenActive(token)) {
+                throw new Error('Transition cancelled');
+            }
+            const streamUrl = video.dataset.hlsUrl;
+            if (!streamUrl) return;
+
+            const canPlayNative = !!video.canPlayType('application/vnd.apple.mpegurl');
+            const startPlayback = async () => {
+                if (!autoplay || !this.isTokenActive(token)) return;
+                try {
+                    await video.play();
+                } catch {
+                    // Ignore autoplay failures (browser policy/network races).
+                }
+            };
+
+            const attachNative = async () => {
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Transition cancelled');
+                }
+                video.src = streamUrl;
+                await startPlayback();
+            };
+
+            const attachHlsJs = async () => {
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Transition cancelled');
+                }
+                if (!window.Hls || !Hls.isSupported()) {
+                    throw new Error('HLS.js is not supported in this browser');
+                }
+
+                if (video.hlsInstance) {
+                    video.hlsInstance.destroy();
+                    video.hlsInstance = null;
+                }
+
+                await new Promise((resolve, reject) => {
+                    if (!this.isTokenActive(token)) {
+                        reject(new Error('Transition cancelled'));
+                        return;
+                    }
+                    const hls = new Hls({
+                        abrEwmaDefaultEstimate: 1800000,
+                        startLevel: 0,
+                        capLevelToPlayerSize: true,
+                    });
+
+                    video.hlsInstance = hls;
+                    hls.loadSource(streamUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+                        startPlayback();
+                    });
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        if (!this.isTokenActive(token)) {
+                            if (video.hlsInstance) {
+                                video.hlsInstance.destroy();
+                                video.hlsInstance = null;
+                            }
+                            reject(new Error('Transition cancelled'));
+                            return;
+                        }
+                        resolve();
+                    });
+                    hls.on(Hls.Events.ERROR, (_event, data) => {
+                        if (data?.fatal) {
+                            reject(new Error(data.details || 'Fatal HLS.js error'));
+                        }
+                    });
+                });
+
+                if (!this.isTokenActive(token)) {
+                    if (video.hlsInstance) {
+                        video.hlsInstance.destroy();
+                        video.hlsInstance = null;
+                    }
+                    throw new Error('Transition cancelled');
+                }
+
+                await startPlayback();
+            };
+
+            if (window.Hls && Hls.isSupported()) {
+                await attachHlsJs();
+                return;
+            }
+
+            try {
+                await this.loadHlsScript();
+                if (!this.isTokenActive(token)) {
+                    throw new Error('Transition cancelled');
+                }
+                if (window.Hls && Hls.isSupported()) {
+                    await attachHlsJs();
+                    return;
+                }
+            } catch (err) {
+                console.warn('Failed to load HLS.js for /test transition:', err);
+            }
+
+            if (canPlayNative) {
+                await attachNative();
+                return;
+            }
+
+            throw new Error('No supported HLS playback path for hero video');
+        }
+
+        loadHlsScript() {
+            if (window.Hls) {
+                return Promise.resolve();
+            }
+            if (this.hlsScriptPromise) {
+                return this.hlsScriptPromise;
+            }
+
+            const src = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
+            this.hlsScriptPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('Failed to load HLS.js'));
+                document.head.appendChild(script);
+            });
+            return this.hlsScriptPromise;
+        }
+
+        waitForFirstVideoFrame(video, token, timeoutMs = 7000) {
+            return new Promise((resolve, reject) => {
+                let done = false;
+                let frameCallbackId = null;
+                let tokenWatcherId = null;
+
+                const finish = (ok, error) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timeoutId);
+                    if (tokenWatcherId !== null) {
+                        clearInterval(tokenWatcherId);
+                    }
+                    video.removeEventListener('loadeddata', onMaybeReady);
+                    video.removeEventListener('canplay', onMaybeReady);
+                    video.removeEventListener('playing', onMaybeReady);
+                    video.removeEventListener('timeupdate', onMaybeReady);
+                    video.removeEventListener('error', onError);
+                    if (frameCallbackId !== null && typeof video.cancelVideoFrameCallback === 'function') {
+                        video.cancelVideoFrameCallback(frameCallbackId);
+                    }
+                    if (ok) {
+                        resolve();
+                    } else {
+                        reject(error || new Error('Video did not render a first frame in time'));
+                    }
+                };
+
+                const onMaybeReady = () => {
+                    if (!this.isTokenActive(token)) {
+                        finish(false, new Error('Transition cancelled'));
+                        return;
+                    }
+                    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+                        finish(true);
+                    }
+                };
+
+                const onError = () => {
+                    finish(false, new Error('Video error before first frame'));
+                };
+
+                const timeoutId = window.setTimeout(() => {
+                    finish(false, new Error('Timed out waiting for first video frame'));
+                }, timeoutMs);
+
+                tokenWatcherId = window.setInterval(() => {
+                    if (!this.isTokenActive(token)) {
+                        finish(false, new Error('Transition cancelled'));
+                    }
+                }, 80);
+
+                video.addEventListener('loadeddata', onMaybeReady);
+                video.addEventListener('canplay', onMaybeReady);
+                video.addEventListener('playing', onMaybeReady);
+                video.addEventListener('timeupdate', onMaybeReady);
+                video.addEventListener('error', onError, { once: true });
+
+                if (typeof video.requestVideoFrameCallback === 'function') {
+                    frameCallbackId = video.requestVideoFrameCallback(() => {
+                        if (!this.isTokenActive(token)) {
+                            finish(false, new Error('Transition cancelled'));
+                            return;
+                        }
+                        finish(true);
+                    });
+                }
+
+                onMaybeReady();
+            });
+        }
+
+        destroyVideoInContext(ctx) {
+            const video = ctx.heroSlot.querySelector('video');
+            if (!video) return;
+
+            if (video.hlsInstance) {
+                video.hlsInstance.destroy();
+                video.hlsInstance = null;
+            }
+
+            video.pause();
+            if (video.src && video.src.startsWith('blob:')) {
+                URL.revokeObjectURL(video.src);
+            }
+            video.removeAttribute('src');
+            video.load();
+        }
+    }
+
+    function cleanup() {
+        if (isDisposed) return;
+        isDisposed = true;
+
+        stopAnimationLoop();
+        if (renderFrameId !== null) {
+            cancelAnimationFrame(renderFrameId);
+            renderFrameId = null;
+        }
+
+        if (densityRebuildTimer !== null) {
+            clearTimeout(densityRebuildTimer);
+            densityRebuildTimer = null;
+        }
+
+        if (resizeObserver) {
+            resizeObserver.disconnect();
+            resizeObserver = null;
+        }
+        if (intersectionObserver) {
+            intersectionObserver.disconnect();
+            intersectionObserver = null;
+        }
+
+        if (prefersReducedMotionListener) {
+            if (typeof prefersReducedMotionMedia.removeEventListener === 'function') {
+                prefersReducedMotionMedia.removeEventListener('change', prefersReducedMotionListener);
+            } else if (typeof prefersReducedMotionMedia.removeListener === 'function') {
+                prefersReducedMotionMedia.removeListener(prefersReducedMotionListener);
+            }
+            prefersReducedMotionListener = null;
+        }
+
+        removeManagedEventListeners();
+
+        thumbnails.forEach((thumb) => thumb.destroy());
+        thumbnails.length = 0;
+        thumbnailByContainer.clear();
+        thumbnailBySlug.clear();
+
+        if (projectTransitionManager) {
+            projectTransitionManager.destroy();
+            projectTransitionManager = null;
+        }
+
+        Object.values(spriteSets).forEach((set) => {
+            if (set.rgbTexture) set.rgbTexture.dispose();
+            if (set.depthTexture) set.depthTexture.dispose();
+        });
+        Object.keys(spriteSets).forEach((key) => {
+            delete spriteSets[key];
+        });
+
+        geometryCache.forEach((entry) => {
+            entry.geometry.dispose();
+        });
+        geometryCache.clear();
+
+        if (sharedRenderer && sharedRenderer.renderer) {
+            if (typeof sharedRenderer.renderer.forceContextLoss === 'function') {
+                sharedRenderer.renderer.forceContextLoss();
+            }
+            sharedRenderer.renderer.dispose();
+        }
+        sharedRenderer = null;
+    }
+
     async function init() {
-        // Find all project items and their sprite IDs
-        const projectItems = document.querySelectorAll('.project-item[data-sprite]');
+        setupControls();
+        applyMotionPreference(prefersReducedMotion);
+        addManagedEventListener(window, 'pagehide', cleanup);
+        addManagedEventListener(window, 'beforeunload', cleanup);
+
+        if (!supportsWebGL()) {
+            activateNoWebGLFallback('WebGL is unavailable. Falling back to static thumbnail containers.');
+            return;
+        }
+
+        try {
+            const canvas = document.getElementById('shared-depth-canvas');
+            sharedRenderer = new SharedRenderer(canvas);
+        } catch (err) {
+            activateNoWebGLFallback('Failed to initialize shared WebGL renderer. Falling back to static thumbnail containers.', err);
+            return;
+        }
+
+        const projectItems = document.querySelectorAll('.pc-project[data-sprite]');
         const spriteIds = [...new Set([...projectItems].map(el => el.dataset.sprite))];
 
-        // Load all sprite sets in parallel
         console.log(`Loading ${spriteIds.length} sprite sets...`);
         const loadPromises = spriteIds.map(async id => {
             const data = await loadSpriteSet(id);
@@ -773,29 +2716,49 @@
 
         console.log(`Loaded ${Object.keys(spriteSets).length} sprite sets`);
 
-        // Create thumbnail instances, each with its own sprite set
         projectItems.forEach((item) => {
-            const canvas = item.querySelector('.depth-canvas');
+            const container = item.querySelector('.pc-thumbnail-container');
             const spriteId = item.dataset.sprite;
+            const slug = item.dataset.slug;
 
             if (!spriteSets[spriteId]) {
                 console.warn(`Sprite set not loaded: ${spriteId}`);
                 return;
             }
 
-            const thumbnail = new DepthThumbnail(canvas, spriteId);
-            thumbnail.createMesh();
+            const thumbnail = new PointCloudThumbnail(container, spriteId);
+            thumbnail.createPointCloud();
             thumbnails.push(thumbnail);
+            thumbnailByContainer.set(container, thumbnail);
+            if (slug) {
+                thumbnailBySlug.set(slug, thumbnail);
+            }
         });
 
-        console.log(`Created ${thumbnails.length} depth thumbnails`);
+        console.log(`Created ${thumbnails.length} point cloud thumbnails`);
+        setGlobalStat('gl-context-count', '1');
 
-        // Event listeners
-        setupControls();
-        window.addEventListener('resize', handleResize);
-        window.addEventListener('scroll', handleScroll);
+        setupGlobalMouseTracking();
+        setupDeviceOrientation();
+        setupThumbnailObservers();
+        refreshRenderableThumbnails();
 
-        document.addEventListener('visibilitychange', () => {
+        projectTransitionManager = new ProjectTransitionManager();
+        projectTransitionManager.init();
+
+        addManagedEventListener(window, 'resize', handleResize);
+        addManagedEventListener(window, 'scroll', handleScroll, { passive: true });
+
+        prefersReducedMotionListener = (event) => {
+            applyMotionPreference(event.matches);
+        };
+        if (typeof prefersReducedMotionMedia.addEventListener === 'function') {
+            prefersReducedMotionMedia.addEventListener('change', prefersReducedMotionListener);
+        } else if (typeof prefersReducedMotionMedia.addListener === 'function') {
+            prefersReducedMotionMedia.addListener(prefersReducedMotionListener);
+        }
+
+        addManagedEventListener(document, 'visibilitychange', () => {
             if (document.hidden) {
                 stopAnimationLoop();
             } else if (Math.abs(animationSpeed) > 0.01) {
@@ -803,34 +2766,73 @@
             }
         });
 
-        // Start render loop
         animate();
     }
 
-    function loadTexture(loader, url) {
-        return new Promise((resolve, reject) => {
-            loader.load(url, resolve, undefined, reject);
+    function setupDeviceOrientation() {
+        // Only attempt device orientation on touch devices (mobile/tablet)
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (!isTouchDevice) return;
+
+        if (window.DeviceOrientationEvent) {
+            // Request permission on iOS 13+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // Need user gesture to request permission
+                const requestPermission = () => {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(response => {
+                            if (response === 'granted') {
+                                enableDeviceOrientation();
+                            }
+                        })
+                        .catch(console.error);
+                };
+                addManagedEventListener(document.body, 'click', requestPermission, { once: true });
+            } else {
+                enableDeviceOrientation();
+            }
+        }
+    }
+
+    function enableDeviceOrientation() {
+        addManagedEventListener(window, 'deviceorientation', (e) => {
+            // Only enable device orientation if we get meaningful values
+            // This prevents desktop browsers from overriding mouse input
+            if (e.gamma !== null && e.beta !== null && (Math.abs(e.gamma) > 1 || Math.abs(e.beta) > 1)) {
+                hasDeviceOrientation = true;
+                // gamma = left/right tilt (-90 to 90)
+                // beta = front/back tilt (-180 to 180)
+                deviceX = (e.gamma || 0) / 45; // Normalize to roughly -1..1
+                deviceY = (e.beta || 0) / 45;
+                // Clamp
+                deviceX = Math.max(-1, Math.min(1, deviceX));
+                deviceY = Math.max(-1, Math.min(1, deviceY));
+            }
         });
     }
 
     // =============================================
-    // Scroll Handling (same as homepage)
+    // Scroll Handling
     // =============================================
     function handleScroll() {
+        rectsNeedUpdate = true;
+
+        if (prefersReducedMotion) {
+            lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            lastScrollEventTime = Date.now();
+            return;
+        }
+
         const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const now = Date.now();
         const deltaTime = (now - lastScrollEventTime) / 1000;
 
         if (deltaTime > 0) {
             const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime;
-
-            // Higher than homepage (3) because 3D depth makes frame changes more perceptible
-            // Tune this value: higher = slower frame advancement
             const pixelsPerFrame = 15;
-            animationSpeed = scrollVelocity / pixelsPerFrame;
-
-            // Cap at 30 fps
-            animationSpeed = Math.max(-30, Math.min(30, animationSpeed));
+            const targetSpeed = Math.max(-30, Math.min(30, scrollVelocity / pixelsPerFrame));
+            // Smooth speed updates to avoid large visual jumps on abrupt first interactions.
+            animationSpeed += (targetSpeed - animationSpeed) * SCROLL_SPEED_SMOOTHING;
         }
 
         lastScrollTop = currentScrollTop;
@@ -845,6 +2847,7 @@
     // Animation Loop
     // =============================================
     function startAnimationLoop() {
+        if (isDisposed) return;
         if (animationFrameId !== null || document.hidden) return;
         lastAnimationFrameTime = Date.now();
         animationFrameId = requestAnimationFrame(animationLoop);
@@ -858,6 +2861,11 @@
     }
 
     function animationLoop() {
+        if (isDisposed) {
+            stopAnimationLoop();
+            return;
+        }
+
         if (document.hidden) {
             stopAnimationLoop();
             return;
@@ -867,7 +2875,6 @@
         const deltaTime = (now - lastAnimationFrameTime) / 1000;
         lastAnimationFrameTime = now;
 
-        // Deceleration (same as homepage)
         const baseDeceleration = 15;
         const speedFactor = Math.abs(animationSpeed) * 0.1;
         const dynamicDeceleration = baseDeceleration + speedFactor;
@@ -878,12 +2885,10 @@
             animationSpeed = Math.min(0, animationSpeed + dynamicDeceleration * deltaTime);
         }
 
-        // Update progress
         animationProgress += animationSpeed * deltaTime;
         if (animationProgress > 1e6) animationProgress -= 1e6;
         if (animationProgress < -1e6) animationProgress += 1e6;
 
-        // Continue or stop
         if (Math.abs(animationSpeed) > 0.01) {
             animationFrameId = requestAnimationFrame(animationLoop);
         } else {
@@ -892,81 +2897,194 @@
         }
     }
 
-    // Continuous render loop
     function animate() {
-        requestAnimationFrame(animate);
+        if (isDisposed) return;
+        renderFrameId = requestAnimationFrame(animate);
 
-        if (thumbnails.length === 0) return;
+        if (!hasWebGL || !sharedRenderer || thumbnails.length === 0) return;
 
-        // Update all thumbnails with global progress (each calculates its own frame index)
-        thumbnails.forEach(thumb => thumb.update(animationProgress));
+        const now = Date.now();
+        const shouldForceRectRefresh =
+            now < startupStabilizeUntilMs ||
+            (now - lastScrollEventTime) < ACTIVE_SCROLL_RECT_REFRESH_MS ||
+            now < transitionRectRefreshUntilMs;
 
-        // Update global stats
-        document.getElementById('global-speed').textContent =
-            animationSpeed.toFixed(1);
+        if (rectsNeedUpdate || shouldForceRectRefresh) {
+            refreshRenderableThumbnails();
+        }
+
+        const time = performance.now() / 1000;
+        const renderables = [];
+
+        thumbnails.forEach((thumb) => {
+            if (thumb.isRenderable && thumb.cachedRect) {
+                renderables.push({ thumb, rect: thumb.cachedRect });
+            } else {
+                thumb.setVisible(false);
+            }
+        });
+
+        sharedRenderer.render(renderables, animationProgress, time);
+
+        const nowMs = performance.now();
+        if (nowMs - lastGlobalStatsUpdateMs >= DEBUG_UI_UPDATE_MS) {
+            setGlobalStat('global-speed', animationSpeed.toFixed(1));
+            setGlobalStat('render-count', String(renderState.renderedCount));
+            lastGlobalStatsUpdateMs = nowMs;
+        }
     }
 
     function handleResize() {
-        thumbnails.forEach(thumb => thumb.updateSize());
+        rectsNeedUpdate = true;
+        if (sharedRenderer) sharedRenderer.resize();
     }
+
 
     // =============================================
     // Controls
     // =============================================
     function setupControls() {
+        const on = (element, type, handler, options) => {
+            if (!element) return;
+            addManagedEventListener(element, type, handler, options);
+        };
+
         // Toggle collapse/expand
         const controlsPanel = document.getElementById('controls-panel');
         const toggleBtn = document.getElementById('controls-toggle');
 
-        toggleBtn.addEventListener('click', () => {
+        on(toggleBtn, 'click', () => {
             controlsPanel.classList.toggle('collapsed');
             toggleBtn.textContent = controlsPanel.classList.contains('collapsed') ? '☰' : '×';
             toggleBtn.title = controlsPanel.classList.contains('collapsed') ? 'Show controls' : 'Hide controls';
         });
 
         // Base settings
-        document.getElementById('depth-amount').addEventListener('input', (e) => {
-            config.depthAmount = parseInt(e.target.value);
+        const rebuildDensityNow = () => {
+            if (densityRebuildTimer !== null) {
+                clearTimeout(densityRebuildTimer);
+                densityRebuildTimer = null;
+            }
+            thumbnails.forEach(t => t.rebuildPointCloud());
+        };
+
+        const scheduleDensityRebuild = () => {
+            if (densityRebuildTimer !== null) {
+                clearTimeout(densityRebuildTimer);
+            }
+            densityRebuildTimer = window.setTimeout(() => {
+                densityRebuildTimer = null;
+                thumbnails.forEach(t => t.rebuildPointCloud());
+            }, DENSITY_REBUILD_DEBOUNCE_MS);
+        };
+
+        on(document.getElementById('point-density'), 'input', (e) => {
+            config.pointDensity = parseFloat(e.target.value);
+            document.getElementById('density-val').textContent = config.pointDensity.toFixed(2);
+            scheduleDensityRebuild();
+        });
+        on(document.getElementById('point-density'), 'change', rebuildDensityNow);
+
+        on(document.getElementById('point-size'), 'input', (e) => {
+            config.pointSize = parseFloat(e.target.value);
+            document.getElementById('size-val').textContent = config.pointSize.toFixed(1);
+        });
+
+        on(document.getElementById('depth-amount'), 'input', (e) => {
+            config.depthAmount = parseInt(e.target.value, 10);
             document.getElementById('depth-val').textContent = config.depthAmount;
         });
 
-        document.getElementById('tilt-range').addEventListener('input', (e) => {
-            config.tiltRange = parseInt(e.target.value);
+        on(document.getElementById('tilt-range'), 'input', (e) => {
+            config.tiltRange = parseInt(e.target.value, 10);
             document.getElementById('tilt-val').textContent = config.tiltRange;
         });
 
-        document.getElementById('show-wireframe').addEventListener('change', (e) => {
-            showWireframe = e.target.checked;
+        on(document.getElementById('mouse-parallax'), 'input', (e) => {
+            config.mouseParallax = parseInt(e.target.value, 10);
+            document.getElementById('parallax-val').textContent = config.mouseParallax;
         });
 
-        // Edge handling
-        document.getElementById('edge-extrusion').addEventListener('change', (e) => {
-            config.edgeAwareExtrusion = e.target.checked;
+        // Viewport coherence
+        on(document.getElementById('depth-center'), 'input', (e) => {
+            config.depthAmountCenter = parseInt(e.target.value, 10);
+            document.getElementById('depth-center-val').textContent = config.depthAmountCenter;
         });
 
-        document.getElementById('edge-fade').addEventListener('change', (e) => {
-            config.edgeFade = e.target.checked;
+        on(document.getElementById('scatter-center'), 'input', (e) => {
+            config.edgeScatterCenter = parseFloat(e.target.value);
+            document.getElementById('scatter-center-val').textContent = config.edgeScatterCenter.toFixed(2);
         });
 
-        document.getElementById('normal-shading').addEventListener('change', (e) => {
-            config.normalShading = e.target.checked;
+        on(document.getElementById('transition-curve'), 'input', (e) => {
+            config.transitionCurve = parseFloat(e.target.value);
+            document.getElementById('transition-curve-val').textContent = config.transitionCurve.toFixed(1);
         });
 
-        document.getElementById('edge-threshold').addEventListener('input', (e) => {
+        on(document.getElementById('opacity-edge'), 'input', (e) => {
+            config.opacityEdge = parseFloat(e.target.value);
+            document.getElementById('opacity-edge-val').textContent = config.opacityEdge.toFixed(2);
+        });
+
+        // Point cloud style
+        on(document.getElementById('point-shape'), 'change', (e) => {
+            const shapes = { 'soft': 0, 'circle': 1, 'square': 2 };
+            config.pointShape = shapes[e.target.value];
+        });
+
+        on(document.getElementById('size-attenuation'), 'change', (e) => {
+            config.sizeAttenuation = e.target.checked;
+        });
+
+        on(document.getElementById('depth-sizing'), 'input', (e) => {
+            config.depthSizing = parseFloat(e.target.value);
+            document.getElementById('depth-sizing-val').textContent = config.depthSizing.toFixed(2);
+        });
+
+        on(document.getElementById('opacity'), 'input', (e) => {
+            config.opacity = parseFloat(e.target.value);
+            document.getElementById('opacity-val').textContent = config.opacity.toFixed(2);
+        });
+
+        on(document.getElementById('depth-opacity'), 'change', (e) => {
+            config.depthOpacity = e.target.checked;
+        });
+
+        // Creative effects
+        on(document.getElementById('edge-scatter'), 'input', (e) => {
+            config.edgeScatter = parseFloat(e.target.value);
+            document.getElementById('scatter-val').textContent = config.edgeScatter.toFixed(1);
+        });
+
+        on(document.getElementById('edge-threshold'), 'input', (e) => {
             config.edgeThreshold = parseFloat(e.target.value);
             document.getElementById('edge-thresh-val').textContent = config.edgeThreshold.toFixed(2);
         });
 
-        document.getElementById('edge-softness').addEventListener('input', (e) => {
-            config.edgeSoftness = parseFloat(e.target.value);
-            document.getElementById('edge-soft-val').textContent = config.edgeSoftness.toFixed(1);
+        on(document.getElementById('dof-enable'), 'change', (e) => {
+            config.dofEnable = e.target.checked;
+        });
+
+        on(document.getElementById('dof-focal'), 'input', (e) => {
+            config.dofFocal = parseFloat(e.target.value);
+            document.getElementById('dof-focal-val').textContent = config.dofFocal.toFixed(2);
+        });
+
+        on(document.getElementById('dof-strength'), 'input', (e) => {
+            config.dofStrength = parseFloat(e.target.value);
+            document.getElementById('dof-strength-val').textContent = config.dofStrength.toFixed(1);
+        });
+
+        // Color mode
+        on(document.getElementById('color-mode'), 'change', (e) => {
+            const modes = { 'original': 0, 'depth': 1, 'normal': 2, 'blend': 3 };
+            config.colorMode = modes[e.target.value];
         });
 
         // Debug views (mutually exclusive)
-        const debugCheckboxes = ['show-depth', 'show-edges', 'show-normals'];
+        const debugCheckboxes = ['show-depth', 'show-edges', 'show-density'];
         debugCheckboxes.forEach(id => {
-            document.getElementById(id).addEventListener('change', (e) => {
-                // Turn off other debug views
+            on(document.getElementById(id), 'change', (e) => {
                 if (e.target.checked) {
                     debugCheckboxes.forEach(otherId => {
                         if (otherId !== id) {
