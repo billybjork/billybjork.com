@@ -144,6 +144,8 @@ async def save_project_endpoint(request: Request):
     }
 
     video = data.get("video", {})
+    if not isinstance(video, dict):
+        video = {}
     if video.get("hls") or video.get("thumbnail") or video.get("spriteSheet"):
         frontmatter["video"] = {
             "hls": video.get("hls"),
