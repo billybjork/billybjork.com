@@ -2,6 +2,7 @@
 Content management utilities for file-based CMS.
 Handles loading and saving markdown files with YAML frontmatter.
 """
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -16,9 +17,13 @@ from markdown.extensions.tables import TableExtension
 
 __all__ = [
     "CONTENT_DIR",
+    "PROJECTS_DIR",
+    "ABOUT_FILE",
+    "SETTINGS_FILE",
     "GeneralInfo",
     "ProjectInfo",
     "validate_slug",
+    "content_revision",
     "load_project",
     "load_all_projects",
     "save_project",
@@ -111,6 +116,19 @@ def validate_slug(slug: str) -> bool:
     return bool(SLUG_PATTERN.match(slug))
 
 
+def content_revision(filepath: Path) -> Optional[str]:
+    """Compute a short SHA-256 revision hash of a file's contents.
+
+    Used for optimistic conflict detection — the client sends back the
+    revision it loaded, and the server rejects the save if the file
+    changed since then.
+    """
+    if not filepath.exists():
+        return None
+    data = filepath.read_bytes()
+    return "sha256:" + hashlib.sha256(data).hexdigest()[:16]
+
+
 def load_project(slug: str) -> Optional[dict]:
     """
     Load a project by slug.
@@ -137,6 +155,7 @@ def load_project(slug: str) -> Optional[dict]:
         'youtube_link': frontmatter.get('youtube'),
         'html_content': markdown_to_html(markdown_content),
         'markdown_content': markdown_content,
+        'revision': content_revision(filepath),
     }
 
     # Video fields
@@ -190,7 +209,7 @@ def load_all_projects(include_drafts: bool = False) -> list[dict]:
 
 def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
     """
-    Save a project to a markdown file.
+    Save a project to a markdown file and sync to S3.
     """
     if not validate_slug(slug):
         raise ValueError(f"Invalid slug: {slug}")
@@ -202,18 +221,22 @@ def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
 
+    _sync_to_s3(filepath)
     return True
 
 
 def delete_project(slug: str) -> bool:
     """
-    Delete a project file.
+    Delete a project file.  Archives to S3 first as a safety net,
+    then removes from both local filesystem and S3.
     """
     if not validate_slug(slug):
         raise ValueError(f"Invalid slug: {slug}")
     filepath = PROJECTS_DIR / f"{slug}.md"
     if filepath.exists():
+        _archive_to_s3(filepath)
         filepath.unlink()
+        _delete_from_s3(filepath)
         return True
     return False
 
@@ -265,16 +288,17 @@ def save_settings(settings: dict) -> bool:
     with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2)
 
+    _sync_to_s3(SETTINGS_FILE)
     return True
 
 
-def load_about() -> tuple[str, str]:
+def load_about() -> tuple[str, str, Optional[str]]:
     """
     Load about page content.
-    Returns (html_content, markdown_content).
+    Returns (html_content, markdown_content, revision).
     """
     if not ABOUT_FILE.exists():
-        return '', ''
+        return '', '', None
 
     with open(ABOUT_FILE, 'r', encoding='utf-8') as f:
         content = f.read()
@@ -282,12 +306,12 @@ def load_about() -> tuple[str, str]:
     frontmatter, markdown_content = parse_frontmatter(content)
     html_content = markdown_to_html(markdown_content)
 
-    return html_content, markdown_content
+    return html_content, markdown_content, content_revision(ABOUT_FILE)
 
 
 def save_about(markdown_content: str) -> bool:
     """
-    Save about page content.
+    Save about page content and sync to S3.
     """
     CONTENT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -297,7 +321,35 @@ def save_about(markdown_content: str) -> bool:
     with open(ABOUT_FILE, 'w', encoding='utf-8') as f:
         f.write(content)
 
+    _sync_to_s3(ABOUT_FILE)
     return True
+
+
+def _sync_to_s3(filepath: Path) -> None:
+    """Best-effort sync a content file to S3 after writing."""
+    try:
+        from utils.content_sync import sync_to_s3
+        sync_to_s3(filepath)
+    except Exception:
+        pass  # Never let S3 sync failure break a local save
+
+
+def _delete_from_s3(filepath: Path) -> None:
+    """Best-effort delete a content file from S3."""
+    try:
+        from utils.content_sync import delete_from_s3
+        delete_from_s3(filepath)
+    except Exception:
+        pass
+
+
+def _archive_to_s3(filepath: Path) -> None:
+    """Best-effort archive a content file to S3 before deletion."""
+    try:
+        from utils.content_sync import archive_to_s3
+        archive_to_s3(filepath)
+    except Exception:
+        pass
 
 
 def format_date(d) -> str:

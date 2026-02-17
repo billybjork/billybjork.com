@@ -25,6 +25,7 @@ interface ProjectData {
   pinned?: boolean;
   video?: VideoData;
   markdown?: string;
+  revision?: string;
 }
 
 type ViewType = 'settings' | 'video';
@@ -1774,6 +1775,7 @@ const ProjectSettings: ProjectSettingsState & {
       pinned: formData.get('pinned') === 'on',
       video: this.projectData?.video,
       markdown: this.projectData?.markdown,
+      base_revision: this.projectData?.revision,
     };
 
     try {
@@ -1806,13 +1808,18 @@ const ProjectSettings: ProjectSettingsState & {
     const data = {
       ...this.projectData,
       video: videoData,
+      base_revision: this.projectData.revision,
     };
 
     try {
-      await fetchJSON('/api/save-project', {
+      const result = await fetchJSON<{ revision?: string }>('/api/save-project', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+      // Update revision for subsequent saves
+      if (result.revision) {
+        this.projectData.revision = result.revision;
+      }
     } catch (error) {
       console.error('Save video data error:', error);
     }
