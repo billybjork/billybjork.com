@@ -1,10 +1,11 @@
 [phases.setup]
-nixPkgs = ["python39", "nodejs_18"]
+nixPkgs = ["python39", "nodejs_18", "curl"]
 
 [phases.install]
 cmds = [
   "npm ci",
-  "pip install uv && uv sync --frozen"
+  "curl -LsSf https://astral.sh/uv/install.sh | sh",
+  "$HOME/.local/bin/uv sync --frozen"
 ]
 
 [phases.build]
