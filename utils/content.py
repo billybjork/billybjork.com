@@ -5,6 +5,7 @@ Handles loading and saving markdown files with YAML frontmatter.
 import base64
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -15,6 +16,8 @@ import markdown
 import yaml
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "CONTENT_DIR",
@@ -349,7 +352,7 @@ def _sync_to_s3(filepath: Path) -> None:
         from utils.content_sync import sync_to_s3
         sync_to_s3(filepath)
     except Exception:
-        pass  # Never let S3 sync failure break a local save
+        logger.warning("S3 sync failed for %s", filepath, exc_info=True)
 
 
 def _delete_from_s3(filepath: Path) -> None:
@@ -358,7 +361,7 @@ def _delete_from_s3(filepath: Path) -> None:
         from utils.content_sync import delete_from_s3
         delete_from_s3(filepath)
     except Exception:
-        pass
+        logger.warning("S3 delete failed for %s", filepath, exc_info=True)
 
 
 def _archive_to_s3(filepath: Path) -> None:
@@ -367,7 +370,7 @@ def _archive_to_s3(filepath: Path) -> None:
         from utils.content_sync import archive_to_s3
         archive_to_s3(filepath)
     except Exception:
-        pass
+        logger.warning("S3 archive failed for %s", filepath, exc_info=True)
 
 
 def format_date(d) -> str:

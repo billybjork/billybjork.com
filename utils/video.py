@@ -129,17 +129,13 @@ def generate_hls(
     if duration:
         inputs = inputs + ['-t', str(duration)]
 
-    filter_complex = []
-    maps = []
-    stream_maps = []
-
-    for i, (width, height, bitrate) in enumerate(resolutions):
-        # Keep source aspect ratio (no letterbox padding) so portrait videos remain portrait.
-        filter_complex.append(
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[v{i}]"
-        )
-        maps.extend(['-map', f'[v{i}]', '-map', '0:a?'])
-        stream_maps.append(f'v:{i},a:{i}')
+    # Derive filter/map/stream-map lists declaratively from the resolution ladder
+    filter_complex = [
+        f"[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2[v{i}]"
+        for i, (w, h, _) in enumerate(resolutions)
+    ]
+    maps = [flag for i in range(len(resolutions)) for flag in ('-map', f'[v{i}]', '-map', '0:a?')]
+    stream_maps = [f'v:{i},a:{i}' for i in range(len(resolutions))]
 
     cmd = [
         'ffmpeg',

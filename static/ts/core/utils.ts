@@ -743,29 +743,6 @@ export function deepClone<T>(obj: T): T {
 }
 
 /**
- * Check if element is empty or contains only whitespace/br
- */
-export function isElementEmpty(element: HTMLElement): boolean {
-  const text = element.textContent?.trim() ?? '';
-  const html = element.innerHTML.trim();
-  return text === '' || html === '' || html === '<br>';
-}
-
-/**
- * Move caret to end of element
- */
-export function moveCaretToEnd(element: HTMLElement): void {
-  const range = document.createRange();
-  const selection = window.getSelection();
-  if (!selection) return;
-
-  range.selectNodeContents(element);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
-/**
  * Fetch with error handling
  */
 export async function fetchJSON<T>(url: string, options: FetchJSONOptions = {}): Promise<T> {
@@ -834,8 +811,6 @@ export const EditUtils = {
   handleListShortcuts,
   showNotification,
   deepClone,
-  isElementEmpty,
-  moveCaretToEnd,
   fetchJSON,
   debounce,
 };

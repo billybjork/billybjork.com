@@ -54,7 +54,7 @@ def _save_registry(registry: dict) -> None:
         from .content_sync import sync_to_s3
         sync_to_s3(ASSETS_FILE)
     except Exception:
-        pass  # Never let S3 sync failure break a local write
+        logger.warning("S3 sync failed for asset registry", exc_info=True)
 
 
 def compute_hash(data: bytes) -> str:

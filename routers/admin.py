@@ -4,6 +4,7 @@ import os
 import tempfile
 import threading
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -37,15 +38,55 @@ from utils.s3 import CLOUDFRONT_DOMAIN
 
 logger = logging.getLogger(__name__)
 
-# Processing progress tracker: { slug: { status, stage, progress, video, error } }
-_processing_progress = {}
 
-# Temp video sources for thumbnail preview:
-# { temp_id: { path, timestamp, frames, frames_complete, is_remote } }
-_temp_video_files = {}
+class SessionStore:
+    """Thread-safe dict wrapper for in-memory session data.
 
-# HLS encoding sessions: { session_id: { status, stage, progress, hls_url, temp_id, slug, timestamp, error } }
-_hls_sessions = {}
+    All background threads (thumbnail extraction, HLS encoding, video
+    processing) read and write session dicts concurrently with the async
+    request handlers.  A lock serialises every access so that callers
+    never observe a partially-updated dict.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._data: dict[str, dict] = {}
+
+    def get(self, key: str) -> Optional[dict]:
+        with self._lock:
+            entry = self._data.get(key)
+            return dict(entry) if entry is not None else None
+
+    def set(self, key: str, value: dict) -> None:
+        with self._lock:
+            self._data[key] = value
+
+    def update(self, key: str, updates: dict) -> None:
+        with self._lock:
+            if key in self._data:
+                self._data[key].update(updates)
+
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._data.pop(key, None)
+
+    def pop(self, key: str) -> Optional[dict]:
+        with self._lock:
+            return self._data.pop(key, None)
+
+    def __contains__(self, key: str) -> bool:
+        with self._lock:
+            return key in self._data
+
+    def items_snapshot(self) -> list[tuple[str, dict]]:
+        """Return a snapshot of all items (safe to iterate outside the lock)."""
+        with self._lock:
+            return [(k, dict(v)) for k, v in self._data.items()]
+
+
+_processing_progress = SessionStore()
+_temp_video_files = SessionStore()
+_hls_sessions = SessionStore()
 
 TIMELINE_INITIAL_FRAME_COUNT = 6
 TIMELINE_TOTAL_FRAME_COUNT = 20
@@ -70,13 +111,10 @@ def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
                 width=TIMELINE_FRAME_WIDTH,
                 height=TIMELINE_FRAME_HEIGHT,
             )
-            if temp_id in _temp_video_files:
-                _temp_video_files[temp_id]["frames"] = all_frames
-                _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, {"frames": all_frames, "frames_complete": True})
         except Exception as e:
             logger.warning(f"Background thumbnail extraction failed: {e}")
-            if temp_id in _temp_video_files:
-                _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, {"frames_complete": True})
 
     thread = threading.Thread(target=extract_remaining_frames, daemon=True)
     thread.start()
@@ -465,18 +503,18 @@ async def video_thumbnails(request: Request):
 
         # Generate unique temp_id and store the temp file path
         temp_id = secrets.token_urlsafe(16)
-        _temp_video_files[temp_id] = {
+        _temp_video_files.set(temp_id, {
             "path": temp_path,
             "timestamp": datetime.now(),
             "frames": first_frames,  # Will be extended with more frames
             "frames_complete": False,
             "is_remote": False,
-        }
+        })
 
         if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
             _start_background_thumbnail_extraction(temp_path, temp_id)
         else:
-            _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, {"frames_complete": True})
 
         response = {
             "success": True,
@@ -488,7 +526,7 @@ async def video_thumbnails(request: Request):
         # Auto-start HLS encoding if project_slug provided
         if project_slug:
             hls_session_id = secrets.token_urlsafe(16)
-            _hls_sessions[hls_session_id] = {
+            _hls_sessions.set(hls_session_id, {
                 "status": "processing",
                 "stage": "Starting HLS encoding...",
                 "progress": 0,
@@ -497,40 +535,34 @@ async def video_thumbnails(request: Request):
                 "slug": project_slug,
                 "timestamp": datetime.now(),
                 "error": None,
-            }
+            })
 
             def run_hls_encoding():
                 from utils.video import generate_hls_only
 
                 def progress_callback(stage, progress):
-                    if hls_session_id in _hls_sessions:
-                        _hls_sessions[hls_session_id]["stage"] = stage
-                        _hls_sessions[hls_session_id]["progress"] = progress
+                    _hls_sessions.update(hls_session_id, {"stage": stage, "progress": progress})
 
                 try:
-                    # Note: Don't delete old files here - they're cleaned up after save
-                    # to prevent data loss if user cancels mid-upload
                     hls_url = generate_hls_only(
                         temp_path,
                         project_slug,
                         trim_start=0,
                         progress_callback=progress_callback,
                     )
-                    if hls_session_id in _hls_sessions:
-                        _hls_sessions[hls_session_id].update({
-                            "status": "complete",
-                            "stage": "HLS complete!",
-                            "progress": 100,
-                            "hls_url": hls_url,
-                        })
+                    _hls_sessions.update(hls_session_id, {
+                        "status": "complete",
+                        "stage": "HLS complete!",
+                        "progress": 100,
+                        "hls_url": hls_url,
+                    })
                 except Exception as e:
                     logger.exception("HLS encoding failed")
-                    if hls_session_id in _hls_sessions:
-                        _hls_sessions[hls_session_id].update({
-                            "status": "error",
-                            "stage": "HLS encoding failed",
-                            "error": str(e),
-                        })
+                    _hls_sessions.update(hls_session_id, {
+                        "status": "error",
+                        "stage": "HLS encoding failed",
+                        "error": str(e),
+                    })
 
             hls_thread = threading.Thread(target=run_hls_encoding, daemon=True)
             hls_thread.start()
@@ -581,18 +613,18 @@ async def video_thumbnails_existing(request: Request):
         )
 
         temp_id = secrets.token_urlsafe(16)
-        _temp_video_files[temp_id] = {
+        _temp_video_files.set(temp_id, {
             "path": hls_url,
             "timestamp": datetime.now(),
             "frames": first_frames,
             "frames_complete": False,
             "is_remote": True,
-        }
+        })
 
         if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
             _start_background_thumbnail_extraction(hls_url, temp_id)
         else:
-            _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, {"frames_complete": True})
 
         return {
             "success": True,
@@ -614,7 +646,7 @@ async def get_more_thumbnails(temp_id: str):
     Client polls this endpoint until complete=true.
     """
     temp_info = _temp_video_files.get(temp_id)
-    if not temp_info:
+    if temp_info is None:
         raise HTTPException(status_code=404, detail="Invalid or expired temp_id")
 
     return {
@@ -630,7 +662,7 @@ async def get_hls_progress(session_id: str):
     Returns current status, stage, progress percentage, and hls_url when complete.
     """
     session = _hls_sessions.get(session_id)
-    if not session:
+    if session is None:
         return JSONResponse({
             "status": "unknown",
             "stage": "Session not found",
@@ -680,7 +712,7 @@ async def generate_sprite_sheet_endpoint(request: Request):
 
     # Get the temp video file
     temp_info = _temp_video_files.get(temp_id)
-    if not temp_info:
+    if temp_info is None:
         raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
 
     temp_path = temp_info["path"]
@@ -707,7 +739,7 @@ async def generate_sprite_sheet_endpoint(request: Request):
             waited = 0
             while waited < max_wait:
                 session = _hls_sessions.get(hls_session_id)
-                if not session:
+                if session is None:
                     break
                 if session["status"] == "complete":
                     hls_url = session.get("hls_url")
@@ -757,9 +789,9 @@ async def generate_sprite_sheet_endpoint(request: Request):
                     os.unlink(temp_path)
                 except Exception:
                     pass
-            del _temp_video_files[temp_id]
-        if hls_session_id and hls_session_id in _hls_sessions:
-            del _hls_sessions[hls_session_id]
+            _temp_video_files.delete(temp_id)
+        if hls_session_id:
+            _hls_sessions.delete(hls_session_id)
 
 
 @router.post("/process-hero-video")
@@ -790,7 +822,7 @@ async def process_hero_video(request: Request):
     if temp_id:
         # Use existing temp file from thumbnail extraction
         temp_info = _temp_video_files.get(temp_id)
-        if not temp_info:
+        if temp_info is None:
             raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
         temp_path = temp_info["path"]
         if not os.path.exists(temp_path):
@@ -814,24 +846,21 @@ async def process_hero_video(request: Request):
             raise HTTPException(status_code=500, detail="Video upload failed")
 
     # Initialize progress tracking
-    _processing_progress[project_slug] = {
+    _processing_progress.set(project_slug, {
         "status": "processing",
         "stage": "Starting...",
         "progress": 0,
         "video": None,
         "error": None,
-    }
+    })
 
     def progress_callback(stage: str, progress: float):
-        _processing_progress[project_slug]["stage"] = stage
-        _processing_progress[project_slug]["progress"] = progress
+        _processing_progress.update(project_slug, {"stage": stage, "progress": progress})
 
     def run_processing():
         from utils.video import process_hero_video as process_video
 
         try:
-            # Note: Don't delete old files here - they're cleaned up after save
-            # to prevent data loss if user cancels mid-upload
             result = process_video(
                 temp_path,
                 project_slug,
@@ -841,7 +870,7 @@ async def process_hero_video(request: Request):
                 progress_callback=progress_callback,
             )
 
-            _processing_progress[project_slug].update({
+            _processing_progress.update(project_slug, {
                 "status": "complete",
                 "stage": "Complete!",
                 "progress": 100,
@@ -853,7 +882,7 @@ async def process_hero_video(request: Request):
             })
         except Exception as e:
             logger.exception("Hero video processing failed")
-            _processing_progress[project_slug].update({
+            _processing_progress.update(project_slug, {
                 "status": "error",
                 "stage": "Failed",
                 "error": str(e),
@@ -863,8 +892,8 @@ async def process_hero_video(request: Request):
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             # Remove from temp files dict if it was using a temp_id
-            if temp_id and temp_id in _temp_video_files:
-                del _temp_video_files[temp_id]
+            if temp_id:
+                _temp_video_files.delete(temp_id)
 
     # Start processing in background thread
     thread = threading.Thread(target=run_processing, daemon=True)
@@ -877,7 +906,7 @@ async def process_hero_video(request: Request):
 async def get_hero_video_progress(slug: str):
     """Get processing progress for a hero video."""
     progress = _processing_progress.get(slug)
-    if not progress:
+    if progress is None:
         return JSONResponse({"status": "unknown", "stage": "No processing in progress", "progress": 0})
 
     response = {
@@ -888,12 +917,11 @@ async def get_hero_video_progress(slug: str):
 
     if progress["status"] == "complete" and progress.get("video"):
         response["video"] = progress["video"]
-        # Clean up progress entry after delivering result
-        del _processing_progress[slug]
+        _processing_progress.delete(slug)
 
     if progress["status"] == "error":
         response["error"] = progress.get("error", "Unknown error")
-        del _processing_progress[slug]
+        _processing_progress.delete(slug)
 
     return response
 
@@ -944,9 +972,9 @@ def cleanup_old_temp_videos():
     from datetime import timedelta
 
     now = datetime.now()
-    expired_ids = []
+    expired_count = 0
 
-    for temp_id, temp_info in _temp_video_files.items():
+    for temp_id, temp_info in _temp_video_files.items_snapshot():
         age = now - temp_info["timestamp"]
         if age > timedelta(hours=1):
             temp_path = temp_info["path"]
@@ -956,38 +984,30 @@ def cleanup_old_temp_videos():
                     logger.info(f"Cleaned up expired temp video file: {temp_path}")
                 except Exception as e:
                     logger.warning(f"Failed to delete temp file {temp_path}: {e}")
-            expired_ids.append(temp_id)
+            _temp_video_files.delete(temp_id)
+            expired_count += 1
 
-    # Remove expired entries from the dict
-    for temp_id in expired_ids:
-        del _temp_video_files[temp_id]
-
-    if expired_ids:
-        logger.info(f"Cleaned up {len(expired_ids)} expired temp video file(s)")
+    if expired_count:
+        logger.info(f"Cleaned up {expired_count} expired temp video file(s)")
 
     # Clean up orphaned HLS sessions
-    expired_hls_ids = []
-    for session_id, session in _hls_sessions.items():
+    expired_hls_count = 0
+    for session_id, session in _hls_sessions.items_snapshot():
         age = now - session["timestamp"]
         if age > timedelta(hours=1):
-            # If HLS completed but sprite was never requested, clean up orphaned version
-            # We use cleanup_old_hls_versions to preserve any currently-saved video
             if session["status"] == "complete" and session.get("slug"):
                 try:
-                    # Load project to get currently saved HLS URL
                     project = load_project(session["slug"])
                     current_hls = project.get("video_link") if project else None
                     cleanup_old_hls_versions(session["slug"], current_hls)
                     logger.info(f"Cleaned up orphaned HLS versions for slug: {session['slug']}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up HLS files for {session['slug']}: {e}")
-            expired_hls_ids.append(session_id)
+            _hls_sessions.delete(session_id)
+            expired_hls_count += 1
 
-    for session_id in expired_hls_ids:
-        del _hls_sessions[session_id]
-
-    if expired_hls_ids:
-        logger.info(f"Cleaned up {len(expired_hls_ids)} expired HLS session(s)")
+    if expired_hls_count:
+        logger.info(f"Cleaned up {expired_hls_count} expired HLS session(s)")
 
 
 # Clean up any leftover temp files on startup

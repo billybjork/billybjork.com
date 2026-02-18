@@ -43,201 +43,114 @@ export function generateBlockId(index: number): string {
 
 // ========== BLOCK DETECTION ==========
 
-interface PartialBlock {
-  id: string;
-  type?: BlockType;
-  content?: string;
-  src?: string;
-  alt?: string;
-  style?: string | null;
-  align?: Alignment;
-  language?: string;
-  code?: string;
-  html?: string;
-  left?: Block;
-  right?: Block;
-}
-
 /**
- * Detect and set block type based on content
+ * Detect block type from trimmed content and return a fully typed Block.
+ * Pure function: inspects content, returns a new Block without mutation.
  */
-function detectBlockType(block: PartialBlock, trimmed: string): void {
-  // Check for HTML block first (<!-- html --> ... <!-- /html -->)
+function detectBlock(id: string, trimmed: string): Block {
+  // HTML block: <!-- html --> ... <!-- /html -->
   if (trimmed.startsWith(HTML_START) && trimmed.endsWith(HTML_END)) {
-    block.type = 'html';
-    block.html = trimmed.slice(HTML_START.length, -HTML_END.length).trim();
-    return;
+    return {
+      id,
+      type: 'html',
+      html: trimmed.slice(HTML_START.length, -HTML_END.length).trim(),
+      align: 'left',
+    } as HtmlBlock;
   }
 
-  // Check for code block first (```language)
+  // Code block: ```language
   if (trimmed.startsWith('```')) {
-    block.type = 'code';
     const match = trimmed.match(/^```(\w*)\n?([\s\S]*?)\n?```$/);
-    if (match) {
-      block.language = match[1] || 'text';
-      block.code = match[2] || '';
-    } else {
-      block.language = 'text';
-      block.code = trimmed.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
-    }
-    return;
+    return {
+      id,
+      type: 'code',
+      language: match?.[1] || 'text',
+      code: match?.[2] ?? trimmed.replace(/^```\w*\n?/, '').replace(/\n?```$/, ''),
+    } as CodeBlock;
   }
 
-  // Check for image: ![alt](url) or <img>
+  // Image: ![alt](url) or <img>
   if (trimmed.startsWith('<img') || /^!\[.*?\]\(.*?\)$/.test(trimmed)) {
-    block.type = 'image';
     if (trimmed.startsWith('<img')) {
       const srcMatch = trimmed.match(/src="([^"]*)"/);
       const altMatch = trimmed.match(/alt="([^"]*)"/);
       const styleMatch = trimmed.match(/style="([^"]*)"/);
-      block.src = srcMatch?.[1] ?? '';
-      block.alt = altMatch?.[1] ?? '';
-      block.style = styleMatch?.[1] ?? null;
-      block.align = parseAlignmentFromStyle(block.style);
-    } else {
-      const mdMatch = trimmed.match(/!\[(.*?)\]\((.*?)\)/);
-      block.src = mdMatch?.[2] ?? '';
-      block.alt = mdMatch?.[1] ?? '';
-      block.style = null;
-      block.align = 'left';
+      const style = styleMatch?.[1] ?? null;
+      return {
+        id,
+        type: 'image',
+        src: srcMatch?.[1] ?? '',
+        alt: altMatch?.[1] ?? '',
+        style,
+        align: parseAlignmentFromStyle(style),
+      } as ImageBlock;
     }
-    return;
+    const mdMatch = trimmed.match(/!\[(.*?)\]\((.*?)\)/);
+    return {
+      id,
+      type: 'image',
+      src: mdMatch?.[2] ?? '',
+      alt: mdMatch?.[1] ?? '',
+      style: null,
+      align: 'left',
+    } as ImageBlock;
   }
 
-  // Check for video: <video> tag
+  // Video: <video> tag
   if (trimmed.startsWith('<video')) {
-    block.type = 'video';
     const srcMatch = trimmed.match(/src="([^"]*)"/);
     const styleMatch = trimmed.match(/style="([^"]*)"/);
-    block.src = srcMatch?.[1] ?? '';
-    block.style = styleMatch?.[1] ?? null;
-    block.align = parseAlignmentFromStyle(block.style);
-    return;
+    const style = styleMatch?.[1] ?? null;
+    return {
+      id,
+      type: 'video',
+      src: srcMatch?.[1] ?? '',
+      style,
+      align: parseAlignmentFromStyle(style),
+    } as VideoBlock;
   }
 
-  // Check for callout: <div class="callout"> with optional style
+  // Callout: <div class="callout"> with optional style
   if (trimmed.startsWith('<div class="callout"')) {
-    block.type = 'callout';
-    // Match with or without style attribute
     const contentMatch = trimmed.match(/<div class="callout"(?:\s+style="([^"]*)")?>([\s\S]*?)<\/div>/);
-    if (contentMatch) {
-      block.align = contentMatch[1] ? parseTextAlignmentFromStyle(contentMatch[1]) : 'left';
-      block.content = contentMatch[2]?.trim() ?? '';
-    } else {
-      block.content = '';
-      block.align = 'left';
-    }
-    return;
+    return {
+      id,
+      type: 'callout',
+      align: contentMatch?.[1] ? parseTextAlignmentFromStyle(contentMatch[1]) : 'left',
+      content: contentMatch?.[2]?.trim() ?? '',
+    } as CalloutBlock;
   }
 
-  // Check for divider: ---, ***, ___
+  // Divider: ---, ***, ___
   if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) {
-    block.type = 'divider';
-    return;
+    return { id, type: 'divider' } as DividerBlock;
   }
 
-  // Check for text block with paired comment-based alignment markers
+  // Text with comment-based alignment markers
   if (trimmed.startsWith('<!-- align:')) {
-    block.type = 'text';
     const alignMatch = trimmed.match(/^<!-- align:(center|right) -->\n?([\s\S]*?)\n?<!-- \/align -->$/);
-    if (alignMatch) {
-      block.align = alignMatch[1] as Alignment;
-      block.content = alignMatch[2]?.trim() ?? '';
-    } else {
-      block.align = 'left';
-    }
-    return;
+    return {
+      id,
+      type: 'text',
+      align: (alignMatch?.[1] as Alignment) ?? 'left',
+      content: alignMatch?.[2]?.trim() ?? trimmed,
+    } as TextBlock;
   }
 
-  // Legacy: text block with div alignment wrapper (backward compatibility)
-  if (trimmed.startsWith('<div style="text-align:') || trimmed.startsWith('<div style="text-align :')) {
-    block.type = 'text';
-    const styleMatch = trimmed.match(/<div style="([^"]*)">([\s\S]*?)<\/div>/);
-    if (styleMatch) {
-      block.align = parseTextAlignmentFromStyle(styleMatch[1]);
-      block.content = styleMatch[2]?.trim() ?? '';
-    } else {
-      block.align = 'left';
-    }
-    return;
-  }
-
-  // Default to text block
-  block.type = 'text';
-  block.align = 'left';
+  // Default: plain text block
+  return {
+    id,
+    type: 'text',
+    content: trimmed,
+    align: 'left',
+  } as TextBlock;
 }
 
 /**
  * Parse a single block from raw content
  */
 export function parseSingleBlock(content: string, index: number): Block {
-  const trimmed = content.trim();
-  const block: PartialBlock = {
-    id: generateBlockId(index),
-    content: trimmed
-  };
-  detectBlockType(block, trimmed);
-
-  // Convert partial block to proper Block type based on detected type
-  switch (block.type) {
-    case 'text':
-      return {
-        id: block.id,
-        type: 'text',
-        content: block.content ?? '',
-        align: block.align ?? 'left',
-      } as TextBlock;
-    case 'image':
-      return {
-        id: block.id,
-        type: 'image',
-        src: block.src ?? '',
-        alt: block.alt ?? '',
-        style: block.style ?? null,
-        align: block.align ?? 'left',
-      } as ImageBlock;
-    case 'video':
-      return {
-        id: block.id,
-        type: 'video',
-        src: block.src ?? '',
-        style: block.style ?? null,
-        align: block.align ?? 'left',
-      } as VideoBlock;
-    case 'code':
-      return {
-        id: block.id,
-        type: 'code',
-        code: block.code ?? '',
-        language: block.language ?? 'text',
-      } as CodeBlock;
-    case 'html':
-      return {
-        id: block.id,
-        type: 'html',
-        html: block.html ?? '',
-        align: block.align ?? 'left',
-      } as HtmlBlock;
-    case 'callout':
-      return {
-        id: block.id,
-        type: 'callout',
-        content: block.content ?? '',
-        align: block.align ?? 'left',
-      } as CalloutBlock;
-    case 'divider':
-      return {
-        id: block.id,
-        type: 'divider',
-      } as DividerBlock;
-    default:
-      return {
-        id: block.id,
-        type: 'text',
-        content: block.content ?? '',
-        align: 'left',
-      } as TextBlock;
-  }
+  return detectBlock(generateBlockId(index), content.trim());
 }
 
 // ========== PARSING ==========
@@ -284,10 +197,6 @@ export function parseIntoBlocks(markdown: string): Block[] {
   return blocks.length ? blocks : [{ id: generateBlockId(0), type: 'text', content: '', align: 'left' } as TextBlock];
 }
 
-// Backwards compatibility alias
-export function parseMarkdown(markdown: string): Block[] {
-  return parseIntoBlocks(markdown);
-}
 
 // ========== FORMATTING ==========
 
@@ -435,8 +344,6 @@ export function createBlock<T extends BlockType>(
   }
 }
 
-// Backwards compatibility alias
-export const createEmptyBlock = createBlock;
 
 // ========== PUBLIC API (for window.EditBlocks compatibility) ==========
 
@@ -451,7 +358,6 @@ const EditBlocks = {
 
   // Parsing
   parseIntoBlocks,
-  parseMarkdown,
   parseSingleBlock,
 
   // Formatting
@@ -465,7 +371,6 @@ const EditBlocks = {
 
   // Factory
   createBlock,
-  createEmptyBlock,
   generateBlockId,
 };
 
