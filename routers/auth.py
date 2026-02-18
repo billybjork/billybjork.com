@@ -98,7 +98,7 @@ async def login_page(request: Request, error: int = 0):
         return RedirectResponse("/", status_code=303)
 
     error_html = '<p class="error">Invalid token</p>' if error else ""
-    return HTMLResponse(LOGIN_HTML.format(error=error_html))
+    return HTMLResponse(LOGIN_HTML.replace("{error}", error_html))
 
 
 @router.post("/login")
