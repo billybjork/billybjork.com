@@ -127,13 +127,13 @@ async def save_project_endpoint(request: Request):
         raise HTTPException(status_code=404, detail="Project not found. Use create-project for new projects.")
 
     old_refs = extract_cloudfront_urls(old_project.get("markdown_content", ""))
-        # Include video frontmatter URLs
-        if old_project.get("video_link"):
-            old_refs.add(old_project["video_link"])
-        if old_project.get("thumbnail_link"):
-            old_refs.add(old_project["thumbnail_link"])
-        if old_project.get("sprite_sheet_link"):
-            old_refs.add(old_project["sprite_sheet_link"])
+    # Include video frontmatter URLs
+    if old_project.get("video_link"):
+        old_refs.add(old_project["video_link"])
+    if old_project.get("thumbnail_link"):
+        old_refs.add(old_project["thumbnail_link"])
+    if old_project.get("sprite_sheet_link"):
+        old_refs.add(old_project["sprite_sheet_link"])
 
     frontmatter = {
         "name": data.get("name", slug),
