@@ -38,8 +38,8 @@ const ProjectCreate: ProjectCreateState & {
           </div>
           <div class="edit-form-group">
             <label for="project-slug">URL Slug</label>
-            <input type="text" id="project-slug" name="slug" required placeholder="my-new-project" pattern="[a-z0-9\\-]+">
-            <span class="edit-form-hint">Lowercase letters, numbers, and hyphens only</span>
+            <input type="text" id="project-slug" name="slug" required placeholder="my-new-project" pattern="[a-z0-9][a-z0-9_\\-]*">
+            <span class="edit-form-hint">Must start with letter/number. Lowercase, numbers, hyphens, underscores only.</span>
           </div>
           <div class="edit-form-group">
             <label for="project-date">Date</label>
@@ -95,7 +95,8 @@ const ProjectCreate: ProjectCreateState & {
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
-      .trim();
+      .replace(/^[-_]+/, '')  // Remove leading hyphens/underscores
+      .replace(/[-_]+$/, ''); // Remove trailing hyphens/underscores
   },
 
   /**
@@ -174,7 +175,8 @@ const ProjectCreate: ProjectCreateState & {
       window.location.href = withShowDrafts(`/${data.slug}`);
     } catch (error) {
       console.error('Create project error:', error);
-      showNotification('Failed to create project', 'error');
+      const message = error instanceof Error ? error.message : 'Failed to create project';
+      showNotification(message, 'error');
     }
   },
 

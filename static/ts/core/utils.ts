@@ -777,7 +777,15 @@ export async function fetchJSON<T>(url: string, options: FetchJSONOptions = {}):
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    // Try to extract error detail from response
+    let detail = '';
+    try {
+      const errorData = await response.json();
+      detail = errorData.detail || '';
+    } catch {
+      // Ignore JSON parse errors
+    }
+    throw new Error(detail || `HTTP error! status: ${response.status}`);
   }
 
   return await response.json() as T;

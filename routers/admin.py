@@ -2,6 +2,7 @@ import io
 import logging
 import os
 import tempfile
+import threading
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -56,8 +57,6 @@ def _is_remote_video_source(path: str) -> bool:
 
 
 def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
-    import threading
-
     from utils.video import extract_thumbnail_frames
 
     def extract_remaining_frames():
@@ -124,9 +123,10 @@ async def save_project_endpoint(request: Request):
 
     # Load old project to track removed references
     old_project = load_project(slug)
-    old_refs = set()
-    if old_project:
-        old_refs = extract_cloudfront_urls(old_project.get("markdown_content", ""))
+    if not old_project:
+        raise HTTPException(status_code=404, detail="Project not found. Use create-project for new projects.")
+
+    old_refs = extract_cloudfront_urls(old_project.get("markdown_content", ""))
         # Include video frontmatter URLs
         if old_project.get("video_link"):
             old_refs.add(old_project["video_link"])
@@ -184,6 +184,7 @@ async def create_project(request: Request):
     """Create a new project."""
     data = await request.json()
     slug = data.get("slug")
+    logger.info(f"create-project request: slug={slug!r}, name={data.get('name')!r}")
 
     if not slug:
         raise HTTPException(status_code=400, detail="Slug is required")
@@ -703,8 +704,6 @@ async def process_hero_video(request: Request):
 
     Accepts either a file upload OR a temp_id from a previous thumbnail extraction.
     """
-    import threading
-
     form = await request.form()
     file = form.get("file")
     temp_id = form.get("temp_id")
