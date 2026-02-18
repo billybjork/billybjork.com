@@ -35,6 +35,7 @@ enum SaveState {
   SAVING = 'saving',
   SAVED = 'saved',
   ERROR = 'error',
+  CONFLICT = 'conflict',
 }
 
 interface DragState {
@@ -64,6 +65,9 @@ const AUTO_SAVE_DELAY = 2000;
 const RETRY_DELAY = 5000;
 const SAVED_FADE_DELAY = 3000;
 
+// Revision tracking for conflict detection
+let currentRevision: string | null = null;
+
 // Drag & Drop state
 const dragState: DragState = {
   sourceIndex: null,
@@ -87,7 +91,9 @@ export async function init(slug: string): Promise<void> {
   isActive = true;
 
   try {
-    projectData = await fetchJSON<ProjectData>(`/api/project/${slug}`);
+    const data = await fetchJSON<ProjectData & { revision?: string }>(`/api/project/${slug}`);
+    projectData = data;
+    currentRevision = data.revision ?? null;
     setupEditor(projectData);
 
     const url = new URL(window.location.href);
@@ -113,7 +119,9 @@ export async function initAbout(): Promise<void> {
   isActive = true;
 
   try {
-    projectData = await fetchJSON<AboutData>('/api/about');
+    const data = await fetchJSON<AboutData & { revision?: string }>('/api/about');
+    projectData = data;
+    currentRevision = data.revision ?? null;
     setupEditor(projectData);
 
     const url = new URL(window.location.href);
@@ -236,6 +244,94 @@ function setupEditor(data: ProjectData | AboutData): void {
   window.addEventListener('beforeunload', handleBeforeUnload);
 }
 
+// ========== CONFLICT RESOLUTION ==========
+
+/**
+ * Show a conflict banner when another session modified the content.
+ * Offers two options: force-overwrite with local changes, or reload
+ * from server.
+ */
+function showConflictBanner(): void {
+  // Remove any existing banner
+  document.querySelector('.edit-conflict-banner')?.remove();
+
+  const banner = document.createElement('div');
+  banner.className = 'edit-conflict-banner';
+  banner.innerHTML = `
+    <span class="edit-conflict-message">Content was modified in another session</span>
+    <button class="edit-conflict-btn edit-conflict-keep">Keep mine</button>
+    <button class="edit-conflict-btn edit-conflict-reload">Load theirs</button>
+  `;
+
+  // Style the banner inline (no need for a separate CSS addition)
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 20px;background:#7c2d12;color:#fff;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+
+  const keepBtn = banner.querySelector('.edit-conflict-keep') as HTMLButtonElement;
+  const reloadBtn = banner.querySelector('.edit-conflict-reload') as HTMLButtonElement;
+
+  [keepBtn, reloadBtn].forEach(btn => {
+    btn.style.cssText = 'padding:6px 16px;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:transparent;color:#fff;font-size:13px;cursor:pointer';
+  });
+
+  keepBtn.addEventListener('click', async () => {
+    banner.remove();
+    // Force-save: skip conflict check by sending force flag
+    const markdown = blocksToMarkdown(blocks);
+    try {
+      let response: Response;
+      if (editMode === 'about') {
+        response = await fetch('/api/save-about', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markdown, force: true }),
+        });
+      } else {
+        const saveData = {
+          slug: projectSlug,
+          name: (projectData as ProjectData)?.title || '',
+          date: (projectData as ProjectData)?.created_at || '',
+          pinned: false,
+          draft: (projectData as ProjectData)?.status === 'draft',
+          youtube: '',
+          video: '',
+          markdown,
+          force: true,
+        };
+        response = await fetch('/api/save-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(saveData),
+        });
+      }
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.revision) {
+          currentRevision = result.revision;
+        }
+        isDirty = false;
+        setSaveState(SaveState.SAVED);
+        showNotification('Changes saved (overwritten)', 'success');
+      } else {
+        setSaveState(SaveState.ERROR);
+        showNotification('Force save failed', 'error');
+      }
+    } catch {
+      setSaveState(SaveState.ERROR);
+      showNotification('Force save failed', 'error');
+    }
+  });
+
+  reloadBtn.addEventListener('click', () => {
+    banner.remove();
+    // Reload from server — just re-initialize the editor
+    cleanup();
+    window.location.reload();
+  });
+
+  document.body.appendChild(banner);
+}
+
 /**
  * Cleanup and exit edit mode
  */
@@ -262,6 +358,10 @@ export function cleanup(): void {
 
   // Reset save state
   saveState = SaveState.UNCHANGED;
+  currentRevision = null;
+
+  // Remove conflict banner if present
+  document.querySelector('.edit-conflict-banner')?.remove();
 
   document.removeEventListener('keydown', handleGlobalKeydown);
   window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -340,6 +440,11 @@ function updateToolbarStatus(): void {
         status.style.color = '#ef4444';
         saveBtn?.classList.add('has-error');
         break;
+      case SaveState.CONFLICT:
+        status.textContent = 'Conflict';
+        status.style.color = '#f97316';
+        saveBtn?.classList.add('has-error');
+        break;
     }
   }
 }
@@ -389,7 +494,7 @@ function scheduleAutoSave(): void {
  * Perform auto-save (silent, no toast)
  */
 async function performAutoSave(): Promise<void> {
-  if (!isDirty || saveState === SaveState.SAVING) return;
+  if (!isDirty || saveState === SaveState.SAVING || saveState === SaveState.CONFLICT) return;
 
   // Don't auto-save if project data isn't loaded (prevents creating orphaned files)
   if (editMode === 'project' && !projectData) {
@@ -412,7 +517,10 @@ async function performAutoSave(): Promise<void> {
       response = await fetch('/api/save-about', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown }),
+        body: JSON.stringify({
+          markdown,
+          base_revision: currentRevision,
+        }),
         signal: abortController.signal,
       });
     } else {
@@ -427,6 +535,7 @@ async function performAutoSave(): Promise<void> {
         youtube: project.youtube || '',
         video: project.video,
         markdown: markdown,
+        base_revision: currentRevision,
       };
 
       response = await fetch('/api/save-project', {
@@ -437,8 +546,20 @@ async function performAutoSave(): Promise<void> {
       });
     }
 
+    if (response.status === 409) {
+      // Conflict: another session modified the content
+      setSaveState(SaveState.CONFLICT);
+      showConflictBanner();
+      return;
+    }
+
     if (!response.ok) {
       throw new Error(`Save failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.revision) {
+      currentRevision = result.revision;
     }
 
     isDirty = false;
@@ -1587,7 +1708,10 @@ async function handleSave(): Promise<void> {
       response = await fetch('/api/save-about', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ markdown }),
+        body: JSON.stringify({
+          markdown,
+          base_revision: currentRevision,
+        }),
       });
     } else {
       // Preserve all existing project data, only update markdown
@@ -1601,6 +1725,7 @@ async function handleSave(): Promise<void> {
         youtube: project.youtube || '',
         video: project.video,
         markdown: markdown,
+        base_revision: currentRevision,
       };
 
       response = await fetch('/api/save-project', {
@@ -1610,8 +1735,19 @@ async function handleSave(): Promise<void> {
       });
     }
 
+    if (response.status === 409) {
+      setSaveState(SaveState.CONFLICT);
+      showConflictBanner();
+      return;
+    }
+
     if (!response.ok) {
       throw new Error(`Save failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.revision) {
+      currentRevision = result.revision;
     }
 
     isDirty = false;

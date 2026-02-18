@@ -45,10 +45,16 @@ def _load_registry() -> dict:
 
 
 def _save_registry(registry: dict) -> None:
-    """Save the asset registry to disk."""
+    """Save the asset registry to disk and sync to S3."""
     CONTENT_DIR.mkdir(parents=True, exist_ok=True)
     with open(ASSETS_FILE, "w", encoding="utf-8") as f:
         json.dump(registry, f, indent=2)
+
+    try:
+        from .content_sync import sync_to_s3
+        sync_to_s3(ASSETS_FILE)
+    except Exception:
+        pass  # Never let S3 sync failure break a local write
 
 
 def compute_hash(data: bytes) -> str:

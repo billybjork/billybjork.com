@@ -9,17 +9,11 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from config import templates
-from dependencies import get_general_info
+from dependencies import get_general_info, is_edit_mode
 from utils.analytics import get_project_stats, record_view
 from utils.content import load_about, load_all_projects, load_project, ProjectInfo
 
 router = APIRouter()
-
-
-def _is_localhost(request: Request) -> bool:
-    """Check if request is from localhost by TCP peer address."""
-    client_host = request.client.host if request.client else None
-    return client_host in ("127.0.0.1", "::1")
 
 
 def extract_meta_description(html_content: str, word_limit: int = 25) -> str:
@@ -63,7 +57,7 @@ async def read_root(
     show_drafts: bool = Query(False),
 ):
     try:
-        is_dev_mode = _is_localhost(request)
+        is_dev_mode = is_edit_mode(request)
         show_drafts_only = show_drafts and is_dev_mode
         if show_drafts_only:
             all_projects = [
@@ -130,8 +124,8 @@ async def redirect_about():
 @router.get("/me", response_class=HTMLResponse)
 async def read_about(request: Request):
     general_info = get_general_info()
-    about_html, _ = load_about()
-    is_dev_mode = _is_localhost(request)
+    about_html, _, _ = load_about()
+    is_dev_mode = is_edit_mode(request)
 
     return templates.TemplateResponse(
         "about.html",
@@ -164,7 +158,7 @@ async def read_project(
         project = ProjectInfo.from_dict(project_data)
         general_info = get_general_info()
         is_open = not close
-        is_dev_mode = _is_localhost(request)
+        is_dev_mode = is_edit_mode(request)
         meta_description = extract_meta_description(project.html_content)
         show_drafts_only = show_drafts and is_dev_mode
         is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"

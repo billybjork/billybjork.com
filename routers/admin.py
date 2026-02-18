@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from dependencies import require_dev_mode
+from dependencies import require_edit_mode
 from utils.assets import (
     cleanup_old_hls_versions,
     cleanup_orphans,
@@ -21,6 +21,9 @@ from utils.assets import (
 )
 from utils.media_paths import content_image_key, misc_image_key
 from utils.content import (
+    ABOUT_FILE,
+    PROJECTS_DIR,
+    content_revision,
     delete_project,
     load_about,
     load_project,
@@ -82,7 +85,7 @@ def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
 router = APIRouter(
     prefix="/api",
     tags=["admin"],
-    dependencies=[Depends(require_dev_mode)],
+    dependencies=[Depends(require_edit_mode)],
 )
 
 
@@ -107,19 +110,38 @@ async def get_project(slug: str):
         },
         "markdown": project_data.get("markdown_content", ""),
         "html": project_data.get("html_content", ""),
+        "revision": project_data.get("revision"),
     }
 
 
 @router.post("/save-project")
 async def save_project_endpoint(request: Request):
-    """Save project content."""
+    """Save project content with optimistic conflict detection."""
     data = await request.json()
     slug = data.get("slug")
+    base_revision = data.get("base_revision")
 
     if not slug:
         raise HTTPException(status_code=400, detail="Slug is required")
     if not validate_slug(slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
+
+    # Conflict check: if client sent a base_revision, verify it still matches
+    if base_revision and not data.get("force"):
+        filepath = PROJECTS_DIR / f"{slug}.md"
+        current_revision = content_revision(filepath)
+        if current_revision and base_revision != current_revision:
+            current_project = load_project(slug)
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "conflict": True,
+                    "server_revision": current_revision,
+                    "server_markdown": current_project.get("markdown_content", "") if current_project else "",
+                    "your_markdown": data.get("markdown", ""),
+                    "message": "Content was modified by another session",
+                },
+            )
 
     # Load old project to track removed references
     old_project = load_project(slug)
@@ -176,7 +198,10 @@ async def save_project_endpoint(request: Request):
     # Clean up old HLS versions (keeps only the current version)
     cleanup_old_hls_versions(slug, video.get("hls"))
 
-    return {"success": True, "slug": slug}
+    # Return new revision for the client to use in subsequent saves
+    filepath = PROJECTS_DIR / f"{slug}.md"
+    new_revision = content_revision(filepath)
+    return {"success": True, "slug": slug, "revision": new_revision}
 
 
 @router.post("/create-project")
@@ -241,18 +266,35 @@ async def delete_project_endpoint(slug: str):
 @router.get("/about")
 async def get_about():
     """Get about page content for editing."""
-    html_content, markdown_content = load_about()
-    return {"html": html_content, "markdown": markdown_content}
+    html_content, markdown_content, revision = load_about()
+    return {"html": html_content, "markdown": markdown_content, "revision": revision}
 
 
 @router.post("/save-about")
 async def save_about_endpoint(request: Request):
-    """Save about page content and cleanup orphaned assets."""
+    """Save about page content with conflict detection and cleanup orphaned assets."""
     data = await request.json()
     markdown_content = data.get("markdown", "")
+    base_revision = data.get("base_revision")
+
+    # Conflict check
+    if base_revision and not data.get("force"):
+        current_revision = content_revision(ABOUT_FILE)
+        if current_revision and base_revision != current_revision:
+            _, current_markdown, _ = load_about()
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "conflict": True,
+                    "server_revision": current_revision,
+                    "server_markdown": current_markdown,
+                    "your_markdown": markdown_content,
+                    "message": "About page was modified by another session",
+                },
+            )
 
     # Load old about content to track removed references
-    _, old_markdown = load_about()
+    _, old_markdown, _ = load_about()
     old_refs = extract_cloudfront_urls(old_markdown)
 
     save_about(markdown_content)
@@ -264,7 +306,8 @@ async def save_about_endpoint(request: Request):
     if keys_to_check:
         cleanup_orphans(keys_to_check)
 
-    return {"success": True}
+    new_revision = content_revision(ABOUT_FILE)
+    return {"success": True, "revision": new_revision}
 
 
 @router.get("/settings")

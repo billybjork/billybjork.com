@@ -39,11 +39,12 @@ export function generateId(): string {
 }
 
 /**
- * Check if we're in dev mode (localhost)
+ * Check if we're in edit mode (server-side authenticated).
+ * The server sets data-edit-mode="true" on <body> when the user is
+ * authenticated (either localhost or valid remote session cookie).
  */
 export function isDevMode(): boolean {
-  const host = window.location.hostname;
-  return host === 'localhost' || host === '127.0.0.1';
+  return document.body?.dataset.editMode === 'true';
 }
 
 /**

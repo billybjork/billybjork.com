@@ -47,7 +47,8 @@
 
     {% block additional_head %}{% endblock %}
 </head>
-<body data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}"
+<body data-edit-mode="{{ 'true' if is_dev_mode else 'false' }}"
+      data-isolation-mode="{{ 'true' if isolation_mode else 'false' }}"
       data-project-url-sync="{{ 'false' if project_url_sync is defined and not project_url_sync else 'true' }}"
       data-hls-js-src="https://cdn.jsdelivr.net/npm/hls.js@1.5.12">
     <header id="main-header">
