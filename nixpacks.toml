@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python39", "nodejs_18", "curl"]
+nixPkgs = ["python312", "nodejs_20", "curl"]
 
 [phases.install]
 cmds = [

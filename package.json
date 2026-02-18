@@ -2,6 +2,9 @@
   "name": "billybjork-frontend",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
