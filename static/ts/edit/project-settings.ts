@@ -1769,6 +1769,7 @@ const ProjectSettings: ProjectSettingsState & {
     const data = {
       name: formData.get('name'),
       slug: formData.get('slug'),
+      original_slug: this.projectSlug,
       date: formData.get('date'),
       youtube: formData.get('youtube') || null,
       draft: formData.get('draft') === 'on',
@@ -1779,10 +1780,13 @@ const ProjectSettings: ProjectSettingsState & {
     };
 
     try {
-      await fetchJSON('/api/save-project', {
+      const result = await fetchJSON<{ revision?: string }>('/api/save-project', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+      if (result.revision && this.projectData) {
+        this.projectData.revision = result.revision;
+      }
 
       showNotification('Settings saved!', 'success');
 
@@ -1807,21 +1811,18 @@ const ProjectSettings: ProjectSettingsState & {
 
     const data = {
       ...this.projectData,
+      original_slug: this.projectSlug,
       video: videoData,
       base_revision: this.projectData.revision,
     };
 
-    try {
-      const result = await fetchJSON<{ revision?: string }>('/api/save-project', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      // Update revision for subsequent saves
-      if (result.revision) {
-        this.projectData.revision = result.revision;
-      }
-    } catch (error) {
-      console.error('Save video data error:', error);
+    const result = await fetchJSON<{ revision?: string }>('/api/save-project', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    // Update revision for subsequent saves
+    if (result.revision) {
+      this.projectData.revision = result.revision;
     }
   },
 

@@ -119,7 +119,7 @@ async def login(request: Request):
         sign_cookie("editor"),
         max_age=COOKIE_MAX_AGE,
         httponly=True,
-        secure=True,
+        secure=(request.url.scheme == "https"),
         samesite="strict",
     )
     logger.info("Edit mode login successful")

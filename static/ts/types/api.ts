@@ -18,10 +18,12 @@ export interface ProjectData {
   video?: VideoData;
   markdown: string;
   html?: string;
+  revision?: string;
 }
 
 export interface AboutData {
   markdown: string;
+  revision?: string;
 }
 
 export interface ApiErrorResponse {

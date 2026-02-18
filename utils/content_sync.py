@@ -9,6 +9,7 @@ Uses the same S3 client, bucket, and credentials as media uploads.
 """
 import logging
 from pathlib import Path
+from pathlib import PurePosixPath
 
 from .s3 import S3_BUCKET, get_s3_client
 
@@ -93,10 +94,10 @@ def sync_from_s3() -> int:
             for obj in page.get("Contents", []):
                 s3_key = obj["Key"]
                 relative = s3_key[len(S3_CONTENT_PREFIX):]
-                if not relative:
+                local_path = _safe_local_content_path(relative)
+                if not local_path:
                     continue
 
-                local_path = CONTENT_DIR / relative
                 local_path.parent.mkdir(parents=True, exist_ok=True)
 
                 s3.download_file(S3_BUCKET, s3_key, str(local_path))
@@ -117,3 +118,29 @@ def _content_type(path: Path) -> str:
     if suffix == ".json":
         return "application/json; charset=utf-8"
     return "application/octet-stream"
+
+
+def _safe_local_content_path(relative_key: str) -> Path | None:
+    """Map an S3 key suffix to a safe local path under CONTENT_DIR."""
+    if not relative_key:
+        return None
+
+    # Skip directory placeholders
+    if relative_key.endswith("/"):
+        return None
+
+    # S3 keys are POSIX-style paths; reject traversal or absolute paths.
+    pure = PurePosixPath(relative_key)
+    if pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts):
+        logger.warning("Skipping unsafe content key: %s", relative_key)
+        return None
+
+    local_path = (CONTENT_DIR / Path(*pure.parts)).resolve()
+    content_root = CONTENT_DIR.resolve()
+    try:
+        local_path.relative_to(content_root)
+    except ValueError:
+        logger.warning("Skipping out-of-root content key: %s", relative_key)
+        return None
+
+    return local_path

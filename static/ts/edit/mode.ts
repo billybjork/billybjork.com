@@ -246,6 +246,33 @@ function setupEditor(data: ProjectData | AboutData): void {
 
 // ========== CONFLICT RESOLUTION ==========
 
+function buildProjectSavePayload(markdown: string, options: { force?: boolean } = {}): Record<string, unknown> {
+  if (editMode !== 'project' || !projectSlug || !projectData) {
+    throw new Error('Project data is not loaded');
+  }
+
+  const project = projectData as ProjectData;
+  const payload: Record<string, unknown> = {
+    slug: projectSlug,
+    original_slug: projectSlug,
+    name: project.name,
+    date: project.date,
+    pinned: project.pinned ?? false,
+    draft: project.draft ?? false,
+    youtube: project.youtube || '',
+    video: project.video ?? {},
+    markdown,
+  };
+
+  if (options.force) {
+    payload.force = true;
+  } else {
+    payload.base_revision = currentRevision;
+  }
+
+  return payload;
+}
+
 /**
  * Show a conflict banner when another session modified the content.
  * Offers two options: force-overwrite with local changes, or reload
@@ -286,17 +313,7 @@ function showConflictBanner(): void {
           body: JSON.stringify({ markdown, force: true }),
         });
       } else {
-        const saveData = {
-          slug: projectSlug,
-          name: (projectData as ProjectData)?.title || '',
-          date: (projectData as ProjectData)?.created_at || '',
-          pinned: false,
-          draft: (projectData as ProjectData)?.status === 'draft',
-          youtube: '',
-          video: '',
-          markdown,
-          force: true,
-        };
+        const saveData = buildProjectSavePayload(markdown, { force: true });
         response = await fetch('/api/save-project', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -524,19 +541,7 @@ async function performAutoSave(): Promise<void> {
         signal: abortController.signal,
       });
     } else {
-      // Preserve all existing project data, only update markdown
-      const project = projectData as ProjectData;
-      const saveData = {
-        slug: projectSlug,
-        name: project.name,
-        date: project.date,
-        pinned: project.pinned ?? false,
-        draft: project.draft ?? false,
-        youtube: project.youtube || '',
-        video: project.video,
-        markdown: markdown,
-        base_revision: currentRevision,
-      };
+      const saveData = buildProjectSavePayload(markdown);
 
       response = await fetch('/api/save-project', {
         method: 'POST',
@@ -1714,19 +1719,7 @@ async function handleSave(): Promise<void> {
         }),
       });
     } else {
-      // Preserve all existing project data, only update markdown
-      const project = projectData as ProjectData;
-      const saveData = {
-        slug: projectSlug,
-        name: project.name,
-        date: project.date,
-        pinned: project.pinned ?? false,
-        draft: project.draft ?? false,
-        youtube: project.youtube || '',
-        video: project.video,
-        markdown: markdown,
-        base_revision: currentRevision,
-      };
+      const saveData = buildProjectSavePayload(markdown);
 
       response = await fetch('/api/save-project', {
         method: 'POST',

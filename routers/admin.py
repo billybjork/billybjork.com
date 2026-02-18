@@ -119,19 +119,29 @@ async def save_project_endpoint(request: Request):
     """Save project content with optimistic conflict detection."""
     data = await request.json()
     slug = data.get("slug")
+    original_slug = data.get("original_slug") or slug
     base_revision = data.get("base_revision")
 
     if not slug:
         raise HTTPException(status_code=400, detail="Slug is required")
     if not validate_slug(slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
+    if not original_slug:
+        raise HTTPException(status_code=400, detail="Original slug is required")
+    if not validate_slug(original_slug):
+        raise HTTPException(status_code=400, detail="Invalid original slug format")
+    if original_slug != slug and load_project(slug):
+        raise HTTPException(
+            status_code=400,
+            detail="Project with this slug already exists",
+        )
 
     # Conflict check: if client sent a base_revision, verify it still matches
     if base_revision and not data.get("force"):
-        filepath = PROJECTS_DIR / f"{slug}.md"
+        filepath = PROJECTS_DIR / f"{original_slug}.md"
         current_revision = content_revision(filepath)
         if current_revision and base_revision != current_revision:
-            current_project = load_project(slug)
+            current_project = load_project(original_slug)
             return JSONResponse(
                 status_code=409,
                 content={
@@ -144,9 +154,12 @@ async def save_project_endpoint(request: Request):
             )
 
     # Load old project to track removed references
-    old_project = load_project(slug)
+    old_project = load_project(original_slug)
     if not old_project:
-        raise HTTPException(status_code=404, detail="Project not found. Use create-project for new projects.")
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found. Use create-project for new projects.",
+        )
 
     old_refs = extract_cloudfront_urls(old_project.get("markdown_content", ""))
     # Include video frontmatter URLs
@@ -181,6 +194,10 @@ async def save_project_endpoint(request: Request):
     markdown_content = data.get("markdown", "")
     save_project(slug, frontmatter, markdown_content)
 
+    # If slug changed, remove the previous file after successful write.
+    if original_slug != slug:
+        delete_project(original_slug)
+
     # Cleanup orphaned assets
     new_refs = extract_cloudfront_urls(markdown_content)
     if video.get("hls"):
@@ -195,8 +212,15 @@ async def save_project_endpoint(request: Request):
     if keys_to_check:
         cleanup_orphans(keys_to_check)
 
-    # Clean up old HLS versions (keeps only the current version)
-    cleanup_old_hls_versions(slug, video.get("hls"))
+    # Clean up old HLS versions (keeps only the current version).
+    # On slug rename, clean up under the original slug namespace.
+    cleanup_slug = slug
+    cleanup_hls = video.get("hls")
+    if original_slug != slug:
+        cleanup_slug = original_slug
+        if not isinstance(cleanup_hls, str) or f"/videos/{original_slug}/" not in cleanup_hls:
+            cleanup_hls = None
+    cleanup_old_hls_versions(cleanup_slug, cleanup_hls)
 
     # Return new revision for the client to use in subsequent saves
     filepath = PROJECTS_DIR / f"{slug}.md"
