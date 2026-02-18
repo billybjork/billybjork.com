@@ -146,7 +146,7 @@ Thumbs.db
 
 .zshrc
 
-# Working directory for sprite generation
+# Working directory
 workdir/
 
 # Node.js / TypeScript
