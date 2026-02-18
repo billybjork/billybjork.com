@@ -19,6 +19,7 @@ import {
   showNotification,
   fetchJSON,
 } from '../core/utils';
+import { createSandboxedIframe, cleanupIframe } from '../utils/html-sandbox';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
 import EditSlash from './slash';
 import EditMedia from './media';
@@ -390,6 +391,12 @@ function scheduleAutoSave(): void {
 async function performAutoSave(): Promise<void> {
   if (!isDirty || saveState === SaveState.SAVING) return;
 
+  // Don't auto-save if project data isn't loaded (prevents creating orphaned files)
+  if (editMode === 'project' && !projectData) {
+    console.warn('Auto-save skipped: project data not loaded');
+    return;
+  }
+
   if (abortController) {
     abortController.abort();
   }
@@ -409,14 +416,16 @@ async function performAutoSave(): Promise<void> {
         signal: abortController.signal,
       });
     } else {
+      // Preserve all existing project data, only update markdown
+      const project = projectData as ProjectData;
       const saveData = {
         slug: projectSlug,
-        name: (projectData as ProjectData)?.title || '',
-        date: (projectData as ProjectData)?.created_at || '',
-        pinned: false,
-        draft: (projectData as ProjectData)?.status === 'draft',
-        youtube: '',
-        video: '',
+        name: project.name,
+        date: project.date,
+        pinned: project.pinned ?? false,
+        draft: project.draft ?? false,
+        youtube: project.youtube || '',
+        video: project.video,
         markdown: markdown,
       };
 
@@ -1155,7 +1164,7 @@ function renderDividerBlock(): HTMLElement {
 }
 
 /**
- * Render HTML block
+ * Render HTML block with iframe sandbox for isolation
  */
 function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
   const wrapper = document.createElement('div');
@@ -1165,17 +1174,43 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
     wrapper.style.textAlign = block.align;
   }
 
-  const preview = document.createElement('div');
-  preview.className = 'html-block-preview';
-  preview.innerHTML = block.html || '<p style="color: #666;">Empty HTML block</p>';
-  wrapper.appendChild(preview);
+  // Preview container (for iframe or empty placeholder)
+  const previewContainer = document.createElement('div');
+  previewContainer.className = 'html-block-preview-container';
+  wrapper.appendChild(previewContainer);
 
+  let iframe: HTMLIFrameElement | null = null;
+
+  function renderPreview(html: string): void {
+    // Clean up existing iframe
+    if (iframe) {
+      cleanupIframe(iframe);
+      iframe.remove();
+      iframe = null;
+    }
+
+    // Empty block: show placeholder, not iframe
+    if (!html.trim()) {
+      previewContainer.innerHTML = '<p class="html-block-empty">Empty HTML block</p>';
+      return;
+    }
+
+    previewContainer.innerHTML = '';
+    iframe = createSandboxedIframe(html, { allowFullscreen: true });
+    previewContainer.appendChild(iframe);
+  }
+
+  // Initial preview
+  renderPreview(block.html || '');
+
+  // Toggle button
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'html-toggle-btn';
   toggleBtn.textContent = 'Edit HTML';
   toggleBtn.type = 'button';
   wrapper.appendChild(toggleBtn);
 
+  // Textarea
   const textarea = document.createElement('textarea');
   textarea.className = 'html-textarea';
   textarea.value = block.html || '';
@@ -1187,18 +1222,21 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
   toggleBtn.addEventListener('click', () => {
     isEditing = !isEditing;
     if (isEditing) {
-      preview.style.display = 'none';
+      // Switch to edit mode
+      previewContainer.style.display = 'none';
       textarea.style.display = 'block';
       toggleBtn.textContent = 'Preview';
       textarea.focus();
     } else {
-      preview.style.display = 'block';
+      // Switch to preview mode - update iframe now
+      previewContainer.style.display = 'block';
       textarea.style.display = 'none';
       toggleBtn.textContent = 'Edit HTML';
-      preview.innerHTML = textarea.value || '<p style="color: #666;">Empty HTML block</p>';
+      renderPreview(textarea.value);
     }
   });
 
+  // Update block data on textarea changes (no iframe update - wait for preview toggle)
   setupAutoResizeTextarea(textarea, (value) => {
     const currentBlock = blocks[index];
     if (currentBlock && currentBlock.type === 'html') {
@@ -1552,14 +1590,16 @@ async function handleSave(): Promise<void> {
         body: JSON.stringify({ markdown }),
       });
     } else {
+      // Preserve all existing project data, only update markdown
+      const project = projectData as ProjectData;
       const saveData = {
         slug: projectSlug,
-        name: (projectData as ProjectData)?.title || '',
-        date: (projectData as ProjectData)?.created_at || '',
-        pinned: false,
-        draft: (projectData as ProjectData)?.status === 'draft',
-        youtube: '',
-        video: '',
+        name: project.name,
+        date: project.date,
+        pinned: project.pinned ?? false,
+        draft: project.draft ?? false,
+        youtube: project.youtube || '',
+        video: project.video,
         markdown: markdown,
       };
 

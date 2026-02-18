@@ -2,6 +2,7 @@
 Content management utilities for file-based CMS.
 Handles loading and saving markdown files with YAML frontmatter.
 """
+import base64
 import json
 import re
 from dataclasses import dataclass, field
@@ -74,19 +75,36 @@ def serialize_frontmatter(frontmatter: dict, markdown_content: str) -> str:
     return f"---\n{frontmatter_str}---\n\n{markdown_content}"
 
 
+def process_html_blocks(content: str) -> str:
+    """
+    Replace <!-- html -->...<!-- /html --> with base64-encoded placeholders.
+    Uses line-anchored markers with non-greedy capture.
+    """
+    # Pattern: markers can have flexible whitespace, capture content between them
+    pattern = r'<!--\s*html\s*-->\s*\n?(.*?)\n?\s*<!--\s*/html\s*-->'
+
+    def replace(m):
+        html = m.group(1)
+        # Base64 encode to avoid attribute escaping issues
+        encoded = base64.b64encode(html.encode('utf-8')).decode('ascii')
+        return f'<div class="html-block-sandbox" data-html-b64="{encoded}"></div>'
+
+    return re.sub(pattern, replace, content, flags=re.DOTALL)
+
+
 def markdown_to_html(md_content: str) -> str:
     """
     Convert markdown content to HTML.
     Handles block separators and preserves HTML tags.
     """
+    # Process HTML blocks BEFORE markdown conversion (converts to base64 placeholders)
+    md_content = process_html_blocks(md_content)
+
     # Remove block separators for rendering
     md_content = re.sub(r'<!--\s*block\s*-->', '', md_content)
 
     # Remove row/col markers for rendering
     md_content = re.sub(r'<!--\s*/?(row|col)\s*-->', '', md_content)
-
-    # Remove html markers for rendering (keep content between them)
-    md_content = re.sub(r'<!--\s*/?(html)\s*-->', '', md_content)
 
     # Convert markdown to HTML
     md = markdown.Markdown(extensions=[

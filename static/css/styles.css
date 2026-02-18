@@ -1007,3 +1007,14 @@ hr::after {
     text-align: center;
     padding: 20px;
 }
+
+/* =========================
+   HTML Block Sandbox (public pages)
+   ========================= */
+
+.project-content .html-block-sandbox {
+    width: 100%;
+    min-height: 100px;
+    border: none;
+    display: block;
+}

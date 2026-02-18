@@ -1461,18 +1461,26 @@ body.modal-open {
     gap: 6px;
 }
 
-.html-block-preview {
+.html-block-preview-container {
+    width: 100%;
+}
+
+.html-block-wrapper .html-block-sandbox {
+    width: 100%;
+    min-height: 60px;
+    border: 1px solid #222;
+    border-radius: 6px;
+    background: #0d0d0d;
+}
+
+.html-block-empty {
+    color: #666;
+    font-style: italic;
     padding: 16px;
+    margin: 0;
     background: #0d0d0d;
     border: 1px solid #222;
     border-radius: 6px;
-    min-height: 60px;
-}
-
-.html-block-preview:empty::before {
-    content: 'Empty HTML block';
-    color: #666;
-    font-style: italic;
 }
 
 .html-toggle-btn {
