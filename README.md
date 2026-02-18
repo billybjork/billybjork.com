@@ -1,29 +1,40 @@
 # billybjork.com
 
-Personal portfolio site with file-based CMS and in-browser editing.
+Personal portfolio site with a file-based CMS, in-browser block editor, and S3-backed media/content persistence.
 
 ## Setup
 
+### Requirements
+
+- Python 3.12+
+- Node.js 20+
+- ffmpeg (required for video processing)
+- ImageMagick (optional; sprite generation falls back to ffmpeg)
+
+### Install
+
 ```bash
-# Install dependencies
 uv sync
+npm install
+```
 
-# Configure environment
-cp .env.example .env  # Edit with your credentials
+### Run Locally
 
-# Run development server
+```bash
+# Build frontend bundles once
+npm run build
+
+# Start API/app server
 uv run uvicorn main:app --reload
 ```
 
-### Requirements
+For frontend changes during development, run `npm run watch` in a second terminal.
 
-- Python 3.9+
-- ffmpeg (for video processing)
-- ImageMagick (optional, for sprite sheets - falls back to ffmpeg)
+## Environment Variables
 
-### Environment Variables
+Core infra:
 
-```
+```env
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_REGION=us-west-1
@@ -32,27 +43,58 @@ CLOUDFRONT_DOMAIN=d17y8p6t5eu2ht.cloudfront.net
 STATIC_VERSION=
 ```
 
-### Static Asset Caching
+Edit mode/auth:
 
-Static assets served from `/static/*` now include a version query (`?v=`) for cache busting. In production, set `STATIC_VERSION` (e.g., git SHA or deploy timestamp) to invalidate cached assets on deploy. If `STATIC_VERSION` is unset, the app uses file mtimes for local development.
-
-The app sends long-lived cache headers for `/static/*`:
-
-```
-Cache-Control: public, max-age=31536000, immutable
+```env
+EDIT_TOKEN=
+COOKIE_SECRET=
+LOCALHOST_EDIT_BYPASS=
 ```
 
-For CloudFront/S3 assets (sprite sheets, etc.), ensure the CDN/origin sets the same long-lived `Cache-Control` and invalidate on updates. Use a CloudFront Response Headers Policy or object metadata.
+- `EDIT_TOKEN`: enables remote edit login at `/edit/login`.
+- `COOKIE_SECRET`: required in production; used to sign `bb_edit` cookie.
+- `LOCALHOST_EDIT_BYPASS`:
+  - if `EDIT_TOKEN` is set, default is `false`
+  - if `EDIT_TOKEN` is unset, default is `true` (local-only workflow)
+
+## Edit Mode
+
+### Modes
+
+- Local-only mode (no `EDIT_TOKEN`): localhost editing works without login.
+- Remote mode (`EDIT_TOKEN` set): authenticate at `/edit/login`, logout at `/edit/logout`.
+
+Admin APIs are gated server-side; UI visibility is controlled by server-auth state, not hostname checks.
+
+### Conflict Handling
+
+Edits use optimistic locking with per-file revision hashes:
+
+- Save request includes `base_revision`
+- Server returns `409` on mismatch
+- UI offers:
+  - `Keep mine` (force save)
+  - `Load theirs` (reload server state)
+
+### Content Persistence
+
+Content files are still stored under `content/`, but are synchronized to S3:
+
+- On save: write local file, then sync to S3
+- On startup (when `EDIT_TOKEN` is set): hydrate `content/` from S3
+- On delete: archive project markdown under `content-archive/` in S3 before removal
+
+This keeps a file-based workflow while surviving redeploys.
 
 ## Content Structure
 
-```
+```text
 content/
-├── about.md           # About page (markdown + frontmatter)
-├── assets.json        # Asset registry (hashes, sizes)
-├── settings.json      # Site settings (social links, etc.)
-└── projects/          # Project pages
-    └── {slug}.md      # Each project as markdown + YAML frontmatter
+├── about.md
+├── assets.json
+├── settings.json
+└── projects/
+    └── {slug}.md
 ```
 
 ### Project Frontmatter
@@ -68,20 +110,11 @@ video:
   hls: https://cdn.example.com/videos/slug/master.m3u8
   thumbnail: https://cdn.example.com/videos/slug/thumb.webp
   spriteSheet: https://cdn.example.com/videos/slug/sprite.jpg
-youtube: https://youtube.com/watch?v=...  # Optional
+youtube: https://youtube.com/watch?v=...
 ---
 
 Markdown content here...
 ```
-
-## Edit Mode
-
-Edit mode is available on localhost only. Access any page and use the floating edit button to:
-
-- Edit content blocks (text, images, videos, code)
-- Manage project settings (name, date, visibility)
-- Upload and process hero videos
-- Upload images (auto-converted to WebP)
 
 ## Media Processing
 
@@ -93,23 +126,25 @@ All media is processed server-side and uploaded to S3/CloudFront.
 | Content videos | Compress | MP4 @ 720p, crf 28 |
 | Hero videos | Full pipeline | HLS adaptive + sprite sheet + thumbnail |
 
-### Media Storage Paths
+Canonical S3 prefixes used by edit mode:
 
-Canonical S3 prefixes used by edit mode and ingestion:
+- `images/project-content/`
+- `images/misc/`
+- `images/sprite-sheets/`
+- `images/thumbnails/`
+- `videos/{slug}/`
+- `videos_mp4/`
 
-- `images/project-content/` for inline content images (default for `/api/upload-media`)
-- `images/misc/` for site-level assets (optional `scope=misc` to `/api/upload-media`)
-- `images/sprite-sheets/` for hero video sprite sheets
-- `images/thumbnails/` for hero video thumbnails
-- `videos/{slug}/` for HLS assets (`master.m3u8`, segments)
-- `videos_mp4/` for inline MP4 uploads (`/api/process-content-video`)
+## Static Asset Caching
 
-### Hero Video Pipeline
+`/static/*` includes a `?v=` query param for cache busting.
 
-When uploading a hero video, the system generates:
+- Set `STATIC_VERSION` in production (git SHA/deploy timestamp).
+- If unset, local file mtimes are used in development.
+- Static responses use:
 
-1. **HLS streams** - Adaptive bitrate (240p to source resolution)
-2. **Sprite sheet** - 60 frames at 20fps for hover preview
-3. **Thumbnail** - WebP poster image
+```text
+Cache-Control: public, max-age=31536000, immutable
+```
 
-See `utils/video.py` for processing details.
+For CloudFront/S3 assets, set equivalent long-lived cache headers and invalidate updated paths when needed.
