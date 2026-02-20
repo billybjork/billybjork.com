@@ -10,9 +10,7 @@ video:
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/japan-simulated_1771554215_sprite_sheet.jpg
 ---
 
-<!-- block -->
-
-![]()
+Test block
 
 <!-- block -->
 
