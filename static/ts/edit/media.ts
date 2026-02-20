@@ -5,7 +5,6 @@
 
 import type { Block, ImageBlock, VideoBlock, BlockType } from '../types/blocks';
 import { showNotification } from '../core/utils';
-import { createBlock } from './blocks';
 
 // ========== TYPES ==========
 
@@ -36,10 +35,16 @@ interface StyleMap {
   [key: string]: string | undefined;
 }
 
+interface UpdateBlockOptions {
+  render?: boolean;
+  markDirty?: boolean;
+}
+
 // Callbacks for integration with edit mode
 interface EditModeCallbacks {
-  updateBlock: (index: number, updates: Partial<Block>) => void;
-  insertBlockAfter: (blockId: string, type: BlockType) => void;
+  updateBlock: (index: number, updates: Partial<Block>, options?: UpdateBlockOptions) => void;
+  insertBlock: (index: number, type: BlockType, props?: Partial<Block>) => void;
+  insertBlockAfter: (blockId: string, type: BlockType, props?: Partial<Block>) => void;
   getBlocks: () => Block[];
   renderBlocks: () => void;
   markDirty: () => void;
@@ -302,7 +307,12 @@ function handleResize(e: MouseEvent): void {
   element.style.width = `${Math.round(newWidth)}px`;
   element.style.height = 'auto';
 
-  applyWidthToBlock(block, newWidth, maxWidth);
+  const style = getResizedStyle(block.style, newWidth, maxWidth);
+  const blockIndex = callbacks?.getBlocks().findIndex((item) => item.id === block.id) ?? -1;
+  if (blockIndex >= 0) {
+    callbacks?.updateBlock(blockIndex, { style }, { render: false, markDirty: false });
+  }
+  selectedMedia.block = { ...block, style };
   updateHandlePositions();
 }
 
@@ -320,8 +330,12 @@ function stopResize(): void {
     const lastWidth = resizeState?.lastWidth;
     const maxWidth = resizeState?.maxWidth;
     if (lastWidth && maxWidth) {
-      applyWidthToBlock(selectedMedia.block, lastWidth, maxWidth);
-      if (!styleHasWidth(selectedMedia.block.style)) {
+      const style = getResizedStyle(selectedMedia.block.style, lastWidth, maxWidth);
+      const blockIndex = callbacks?.getBlocks().findIndex((item) => item.id === selectedMedia?.block.id) ?? -1;
+      if (blockIndex >= 0) {
+        callbacks?.updateBlock(blockIndex, { style }, { render: false, markDirty: false });
+      }
+      if (!styleHasWidth(style)) {
         selectedMedia.element.style.width = '';
         selectedMedia.element.style.height = '';
       }
@@ -367,16 +381,14 @@ function serializeStyle(styles: StyleMap): string {
 }
 
 /**
- * Apply width to block style while preserving unrelated properties
+ * Build a resized style string while preserving unrelated properties.
  */
-function applyWidthToBlock(
-  block: ImageBlock | VideoBlock,
+function getResizedStyle(
+  style: string | null | undefined,
   width: number,
   maxWidth: number
-): void {
-  if (!block) return;
-
-  const styles = parseStyle(block.style);
+): string | null {
+  const styles = parseStyle(style);
 
   delete styles['margin-left'];
   delete styles['margin-right'];
@@ -394,7 +406,7 @@ function applyWidthToBlock(
   }
 
   const styleString = serializeStyle(styles);
-  block.style = styleString || null;
+  return styleString || null;
 }
 
 /**
@@ -586,27 +598,19 @@ export async function handleVideoUpload(file: File, afterBlockId: string | null 
  * Insert image block into editor
  */
 function insertImageBlock(url: string, alt: string = '', afterBlockId: string | null = null): void {
-  const newBlock = createBlock('image', {
-    src: url,
-    alt: alt.replace(/\.[^/.]+$/, ''),
-  });
+  const cleanAlt = alt.replace(/\.[^/.]+$/, '');
 
   if (afterBlockId) {
-    callbacks?.insertBlockAfter(afterBlockId, 'image');
-    // Update the last block with the image data
-    const blocks = callbacks?.getBlocks() ?? [];
-    const lastBlock = blocks[blocks.length - 1];
-    if (lastBlock && lastBlock.type === 'image') {
-      (lastBlock as ImageBlock).src = url;
-      (lastBlock as ImageBlock).alt = alt.replace(/\.[^/.]+$/, '');
-      callbacks?.renderBlocks();
-    }
+    callbacks?.insertBlockAfter(afterBlockId, 'image', {
+      src: url,
+      alt: cleanAlt,
+    });
   } else {
-    // Add to end
-    const blocks = callbacks?.getBlocks() ?? [];
-    blocks.push(newBlock);
-    callbacks?.renderBlocks();
-    callbacks?.markDirty();
+    const index = callbacks?.getBlocks().length ?? 0;
+    callbacks?.insertBlock(index, 'image', {
+      src: url,
+      alt: cleanAlt,
+    });
   }
 }
 
@@ -614,24 +618,11 @@ function insertImageBlock(url: string, alt: string = '', afterBlockId: string | 
  * Insert video block into editor
  */
 function insertVideoBlock(url: string, afterBlockId: string | null = null): void {
-  const newBlock = createBlock('video', {
-    src: url,
-  });
-
   if (afterBlockId) {
-    callbacks?.insertBlockAfter(afterBlockId, 'video');
-    // Update the last block with the video data
-    const blocks = callbacks?.getBlocks() ?? [];
-    const lastBlock = blocks[blocks.length - 1];
-    if (lastBlock && lastBlock.type === 'video') {
-      (lastBlock as VideoBlock).src = url;
-      callbacks?.renderBlocks();
-    }
+    callbacks?.insertBlockAfter(afterBlockId, 'video', { src: url });
   } else {
-    const blocks = callbacks?.getBlocks() ?? [];
-    blocks.push(newBlock);
-    callbacks?.renderBlocks();
-    callbacks?.markDirty();
+    const index = callbacks?.getBlocks().length ?? 0;
+    callbacks?.insertBlock(index, 'video', { src: url });
   }
 }
 

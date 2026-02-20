@@ -44,6 +44,20 @@ interface DragState {
   isDragging: boolean;
 }
 
+interface UpdateBlockOptions {
+  render?: boolean;
+  markDirty?: boolean;
+}
+
+type SaveAction =
+  | { type: 'edit' }
+  | { type: 'save_start' }
+  | { type: 'save_ok' }
+  | { type: 'save_error' }
+  | { type: 'conflict' }
+  | { type: 'fade' }
+  | { type: 'reset' };
+
 // ========== STATE ==========
 
 let blocks: Block[] = [];
@@ -216,6 +230,7 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Initialize media handling
   EditMedia.init({
     updateBlock,
+    insertBlock,
     insertBlockAfter,
     getBlocks: () => blocks,
     renderBlocks,
@@ -230,6 +245,7 @@ function setupEditor(data: ProjectData | AboutData): void {
     renderBlocks,
     markDirty,
   });
+  EditUndo.saveState();
 
   // Add keyboard listener
   document.addEventListener('keydown', handleGlobalKeydown);
@@ -327,14 +343,14 @@ function showConflictBanner(): void {
           currentRevision = result.revision;
         }
         isDirty = false;
-        setSaveState(SaveState.SAVED);
+        dispatchSaveAction({ type: 'save_ok' });
         showNotification('Changes saved (overwritten)', 'success');
       } else {
-        setSaveState(SaveState.ERROR);
+        dispatchSaveAction({ type: 'save_error' });
         showNotification('Force save failed', 'error');
       }
     } catch {
-      setSaveState(SaveState.ERROR);
+      dispatchSaveAction({ type: 'save_error' });
       showNotification('Force save failed', 'error');
     }
   });
@@ -374,7 +390,7 @@ export function cleanup(): void {
   }
 
   // Reset save state
-  saveState = SaveState.UNCHANGED;
+  dispatchSaveAction({ type: 'reset' });
   currentRevision = null;
 
   // Remove conflict banner if present
@@ -467,26 +483,83 @@ function updateToolbarStatus(): void {
 }
 
 /**
- * Set the save state and update UI
+ * Pure save-state reducer.
  */
-function setSaveState(state: SaveState): void {
-  saveState = state;
+function nextSaveState(state: SaveState, action: SaveAction): SaveState {
+  switch (action.type) {
+    case 'edit':
+      return SaveState.PENDING;
+    case 'save_start':
+      return state === SaveState.CONFLICT ? state : SaveState.SAVING;
+    case 'save_ok':
+      return SaveState.SAVED;
+    case 'save_error':
+      return SaveState.ERROR;
+    case 'conflict':
+      return SaveState.CONFLICT;
+    case 'fade':
+      return state === SaveState.SAVED ? SaveState.UNCHANGED : state;
+    case 'reset':
+      return SaveState.UNCHANGED;
+    default:
+      return state;
+  }
+}
+
+/**
+ * Dispatch a save action and trigger side effects from the resulting transition.
+ */
+function dispatchSaveAction(action: SaveAction): void {
+  const nextState = nextSaveState(saveState, action);
+  saveState = nextState;
   updateToolbarStatus();
 
   // Clear fade timer if not in SAVED state
-  if (state !== SaveState.SAVED && savedFadeTimer) {
+  if (nextState !== SaveState.SAVED && savedFadeTimer) {
     clearTimeout(savedFadeTimer);
     savedFadeTimer = null;
   }
 
   // Schedule fade for SAVED state
-  if (state === SaveState.SAVED) {
+  if (nextState === SaveState.SAVED) {
+    if (savedFadeTimer) {
+      clearTimeout(savedFadeTimer);
+    }
     savedFadeTimer = setTimeout(() => {
-      if (saveState === SaveState.SAVED) {
-        setSaveState(SaveState.UNCHANGED);
-      }
+      dispatchSaveAction({ type: 'fade' });
     }, SAVED_FADE_DELAY);
   }
+}
+
+function applyBlocksUpdate(nextBlocks: Block[], options: UpdateBlockOptions = {}): void {
+  const { render = true, markDirty: shouldMarkDirty = true } = options;
+  blocks = nextBlocks;
+  if (shouldMarkDirty) {
+    markDirty();
+  }
+  if (render) {
+    renderBlocks();
+  }
+}
+
+function updateTopLevelBlock(
+  index: number,
+  updater: (block: Block) => Block,
+  options: UpdateBlockOptions = {}
+): boolean {
+  const currentBlock = blocks[index];
+  if (!currentBlock) return false;
+
+  const updatedBlock = updater(currentBlock);
+  if (updatedBlock === currentBlock) return false;
+  const nextBlocks = blocks.slice();
+  nextBlocks[index] = updatedBlock;
+  applyBlocksUpdate(nextBlocks, options);
+  return true;
+}
+
+function createBlockWithProps(type: BlockType, props: Partial<Block> = {}): Block {
+  return createBlock(type as never, props as never) as Block;
 }
 
 /**
@@ -524,7 +597,7 @@ async function performAutoSave(): Promise<void> {
   }
   abortController = new AbortController();
 
-  setSaveState(SaveState.SAVING);
+  dispatchSaveAction({ type: 'save_start' });
 
   try {
     const markdown = blocksToMarkdown(blocks);
@@ -553,7 +626,7 @@ async function performAutoSave(): Promise<void> {
 
     if (response.status === 409) {
       // Conflict: another session modified the content
-      setSaveState(SaveState.CONFLICT);
+      dispatchSaveAction({ type: 'conflict' });
       showConflictBanner();
       return;
     }
@@ -568,14 +641,14 @@ async function performAutoSave(): Promise<void> {
     }
 
     isDirty = false;
-    setSaveState(SaveState.SAVED);
+    dispatchSaveAction({ type: 'save_ok' });
 
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       return;
     }
     console.error('Auto-save error:', error);
-    setSaveState(SaveState.ERROR);
+    dispatchSaveAction({ type: 'save_error' });
 
     retryTimer = setTimeout(() => {
       if (saveState === SaveState.ERROR && isDirty) {
@@ -689,12 +762,10 @@ function createAlignmentToolbar(block: Block, index: number): HTMLElement {
  * Set alignment for a block
  */
 function setBlockAlignment(index: number, align: Alignment): void {
-  const block = blocks[index];
-  if (block && 'align' in block) {
-    (block as { align: Alignment }).align = align;
-    markDirty();
-    renderBlocks();
-  }
+  updateTopLevelBlock(
+    index,
+    (block) => ('align' in block ? { ...block, align } as Block : block),
+  );
 }
 
 /**
@@ -750,7 +821,19 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
   let activeLineIndex: number | null = null;
 
   const updateBlockContent = (): void => {
-    block.content = lines.join('\n');
+    const nextContent = lines.join('\n');
+    const currentBlock = blocks[index];
+    if (currentBlock?.type === 'text') {
+      updateTopLevelBlock(
+        index,
+        (existing) => (existing.type === 'text' ? { ...existing, content: nextContent } : existing),
+        { render: false },
+      );
+      return;
+    }
+
+    // Row children are edited by reference today; keep behavior for nested blocks.
+    block.content = nextContent;
     markDirty();
   };
 
@@ -1147,11 +1230,7 @@ function renderImageBlock(block: ImageBlock, index: number): HTMLElement {
     altInput.placeholder = 'Image description...';
     altInput.value = block.alt || '';
     altInput.addEventListener('input', () => {
-      const currentBlock = blocks[index];
-      if (currentBlock && currentBlock.type === 'image') {
-        (currentBlock as ImageBlock).alt = altInput.value;
-        markDirty();
-      }
+      updateBlock(index, { alt: altInput.value }, { render: false });
     });
     wrapper.appendChild(altInput);
   } else {
@@ -1197,11 +1276,7 @@ function renderCodeBlock(block: CodeBlock, index: number): HTMLElement {
     langSelect.appendChild(option);
   });
   langSelect.addEventListener('change', () => {
-    const currentBlock = blocks[index];
-    if (currentBlock && currentBlock.type === 'code') {
-      (currentBlock as CodeBlock).language = langSelect.value;
-      markDirty();
-    }
+    updateBlock(index, { language: langSelect.value }, { render: false });
   });
   wrapper.appendChild(langSelect);
 
@@ -1212,11 +1287,7 @@ function renderCodeBlock(block: CodeBlock, index: number): HTMLElement {
   textarea.spellcheck = false;
 
   setupAutoResizeTextarea(textarea, (value) => {
-    const currentBlock = blocks[index];
-    if (currentBlock && currentBlock.type === 'code') {
-      (currentBlock as CodeBlock).code = value;
-      markDirty();
-    }
+    updateBlock(index, { code: value }, { render: false });
   });
 
   textarea.addEventListener('keydown', (e) => {
@@ -1248,11 +1319,7 @@ function renderCalloutBlock(block: CalloutBlock, index: number): HTMLElement {
   }
 
   setupAutoResizeTextarea(textarea, (value) => {
-    const currentBlock = blocks[index];
-    if (currentBlock && currentBlock.type === 'callout') {
-      (currentBlock as CalloutBlock).content = value;
-      markDirty();
-    }
+    updateBlock(index, { content: value }, { render: false });
   });
 
   wrapper.appendChild(textarea);
@@ -1364,11 +1431,7 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
 
   // Update block data on textarea changes (no iframe update - wait for preview toggle)
   setupAutoResizeTextarea(textarea, (value) => {
-    const currentBlock = blocks[index];
-    if (currentBlock && currentBlock.type === 'html') {
-      (currentBlock as HtmlBlock).html = value;
-      markDirty();
-    }
+    updateBlock(index, { html: value }, { render: false });
   });
 
   return wrapper;
@@ -1537,11 +1600,11 @@ function handleDrop(e: DragEvent, _index: number): void {
   }
 
   if (fromIndex !== toIndex) {
-    const [movedBlock] = blocks.splice(fromIndex, 1);
+    const nextBlocks = blocks.slice();
+    const [movedBlock] = nextBlocks.splice(fromIndex, 1);
     if (movedBlock) {
-      blocks.splice(toIndex, 0, movedBlock);
-      markDirty();
-      renderBlocks();
+      nextBlocks.splice(toIndex, 0, movedBlock);
+      applyBlocksUpdate(nextBlocks);
     }
   }
 
@@ -1553,19 +1616,19 @@ function handleDrop(e: DragEvent, _index: number): void {
 /**
  * Insert a new block at the specified index
  */
-export function insertBlock(index: number, type: BlockType): void {
-  const newBlock = createBlock(type);
-
-  blocks.splice(index, 0, newBlock);
-  markDirty();
-  renderBlocks();
+export function insertBlock(index: number, type: BlockType, props: Partial<Block> = {}): void {
+  const newBlock = createBlockWithProps(type, props);
+  const insertIndex = Math.max(0, Math.min(index, blocks.length));
+  const nextBlocks = blocks.slice();
+  nextBlocks.splice(insertIndex, 0, newBlock);
+  applyBlocksUpdate(nextBlocks);
 
   if (type === 'text' || type === 'callout') {
     setTimeout(() => {
       const textarea = container?.querySelector<HTMLTextAreaElement>(
-        `[data-block-index="${index}"] .text-line-input, ` +
-        `[data-block-index="${index}"] .block-textarea, ` +
-        `[data-block-index="${index}"] .callout-textarea`
+        `[data-block-index="${insertIndex}"] .text-line-input, ` +
+        `[data-block-index="${insertIndex}"] .block-textarea, ` +
+        `[data-block-index="${insertIndex}"] .callout-textarea`
       );
       if (textarea) textarea.focus();
     }, 50);
@@ -1575,10 +1638,10 @@ export function insertBlock(index: number, type: BlockType): void {
 /**
  * Insert block after the specified block ID
  */
-export function insertBlockAfter(blockId: string, type: BlockType): void {
+export function insertBlockAfter(blockId: string, type: BlockType, props: Partial<Block> = {}): void {
   const index = blocks.findIndex(b => b.id === blockId);
   if (index !== -1) {
-    insertBlock(index + 1, type);
+    insertBlock(index + 1, type, props);
   }
 }
 
@@ -1587,12 +1650,12 @@ export function insertBlockAfter(blockId: string, type: BlockType): void {
  */
 export function deleteBlock(index: number): void {
   if (blocks.length <= 1) {
-    blocks[0] = createBlock('text');
+    applyBlocksUpdate([createBlock('text') as Block]);
   } else {
-    blocks.splice(index, 1);
+    const nextBlocks = blocks.slice();
+    nextBlocks.splice(index, 1);
+    applyBlocksUpdate(nextBlocks);
   }
-  markDirty();
-  renderBlocks();
 }
 
 // ========== SLASH COMMAND HANDLER ==========
@@ -1619,9 +1682,7 @@ function handleSlashCommand(
     const execData = data as SlashExecuteData;
     if (execData.replaceBlockIndex !== null) {
       const focusIndex = execData.replaceBlockIndex;
-      blocks[focusIndex] = createBlock(execData.commandId);
-      markDirty();
-      renderBlocks();
+      updateTopLevelBlock(focusIndex, () => createBlock(execData.commandId) as Block);
       if (execData.commandId === 'text' || execData.commandId === 'callout') {
         setTimeout(() => {
           const textarea = container?.querySelector<HTMLTextAreaElement>(
@@ -1637,10 +1698,11 @@ function handleSlashCommand(
     }
   } else if (action === 'updateContent') {
     const updateData = data as SlashUpdateData;
-    const block = blocks[updateData.index];
-    if (block && 'content' in block) {
-      (block as TextBlock | CalloutBlock).content = updateData.content;
-    }
+    updateTopLevelBlock(
+      updateData.index,
+      (block) => ('content' in block ? { ...block, content: updateData.content } as Block : block),
+      { render: false, markDirty: false },
+    );
   }
 }
 
@@ -1654,6 +1716,22 @@ function handleGlobalKeydown(e: KeyboardEvent): void {
 
   if (EditSlash.isActive()) {
     if (EditSlash.handleKeydown(e)) return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      EditUndo.redo();
+    } else {
+      EditUndo.undo();
+    }
+    return;
+  }
+
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    EditUndo.redo();
+    return;
   }
 
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -1675,7 +1753,8 @@ function handleGlobalKeydown(e: KeyboardEvent): void {
  */
 export function markDirty(): void {
   isDirty = true;
-  setSaveState(SaveState.PENDING);
+  EditUndo.saveState();
+  dispatchSaveAction({ type: 'edit' });
   scheduleAutoSave();
 }
 
@@ -1703,7 +1782,7 @@ async function handleSave(): Promise<void> {
     abortController.abort();
   }
 
-  setSaveState(SaveState.SAVING);
+  dispatchSaveAction({ type: 'save_start' });
 
   try {
     const markdown = blocksToMarkdown(blocks);
@@ -1729,7 +1808,7 @@ async function handleSave(): Promise<void> {
     }
 
     if (response.status === 409) {
-      setSaveState(SaveState.CONFLICT);
+      dispatchSaveAction({ type: 'conflict' });
       showConflictBanner();
       return;
     }
@@ -1744,14 +1823,14 @@ async function handleSave(): Promise<void> {
     }
 
     isDirty = false;
-    setSaveState(SaveState.SAVED);
+    dispatchSaveAction({ type: 'save_ok' });
 
     cleanup();
     window.location.reload();
 
   } catch (error) {
     console.error('Save error:', error);
-    setSaveState(SaveState.ERROR);
+    dispatchSaveAction({ type: 'save_error' });
     showNotification('Failed to save', 'error');
   }
 }
@@ -1774,13 +1853,32 @@ function handleCancel(): void {
 /**
  * Update a block's data
  */
-export function updateBlock(index: number, updates: Partial<Block>): void {
-  const block = blocks[index];
-  if (block) {
-    Object.assign(block, updates);
-    markDirty();
-    renderBlocks();
-  }
+export function updateBlock(
+  index: number,
+  updates: Partial<Block>,
+  options: UpdateBlockOptions = {}
+): void {
+  updateTopLevelBlock(index, (block) => {
+    switch (block.type) {
+      case 'text':
+        return { ...block, ...(updates as Partial<TextBlock>) };
+      case 'image':
+        return { ...block, ...(updates as Partial<ImageBlock>) };
+      case 'video':
+        return { ...block, ...(updates as Partial<VideoBlock>) };
+      case 'code':
+        return { ...block, ...(updates as Partial<CodeBlock>) };
+      case 'html':
+        return { ...block, ...(updates as Partial<HtmlBlock>) };
+      case 'callout':
+        return { ...block, ...(updates as Partial<CalloutBlock>) };
+      case 'row':
+        return { ...block, ...(updates as Partial<RowBlock>) };
+      case 'divider':
+      default:
+        return { ...block };
+    }
+  }, options);
 }
 
 // ========== PUBLIC API ==========
