@@ -34,7 +34,7 @@ canvas{width:100%;height:100%;display:block;touch-action:none;position:absolute;
   right:0;
   padding:12px;
   display:flex;
-  justify-content:space-between;
+  justify-content:flex-end;
   align-items:center;
   color:rgba(255,255,255,0.5);
   font:11px/1.4 system-ui,-apple-system,sans-serif;
@@ -75,7 +75,6 @@ body.loaded #hint{opacity:1}
     Loading splat...
   </div>
   <div id="ui">
-    <span id="info"></span>
     <span id="hint">Move cursor to look, drag/touch to orbit, scroll/pinch to zoom</span>
   </div>
 </div>
@@ -147,7 +146,6 @@ O=vec4(C.rgb*a,a);
 class SplatViewer{
 constructor(canvas){
 this.c=canvas;
-this.infoEl=document.getElementById('info');
 this.loadingEl=document.getElementById('loading');
 this.gl=canvas.getContext('webgl2',{antialias:false,alpha:false,premultipliedAlpha:true,powerPreference:'high-performance'});
 if(!this.gl)throw new Error('WebGL2 not supported');
@@ -168,7 +166,6 @@ this.viewMode='scene';
 this.fullTarget=[0,0,0];
 this.fullDistance=2;
 this.flipX180=true;
-this.quantizedPct=0;
 this.controlMode='guided';
 this.guidedLimits={pitch:0.34,yaw:0.62,zoom:0.38};
 this.guidedSnap=0.011;
@@ -368,7 +365,6 @@ arr=new Uint8Array(await new Response(stream).arrayBuffer());
 const magic=String.fromCharCode(...arr.slice(0,4));
 let parsed;
 if(magic==='QSPL'){
-this.quantizedPct=100;
 const view=new DataView(arr.buffer,arr.byteOffset,arr.byteLength);
 this.cnt=view.getUint32(4,true);
 const payloadOffset=arr.byteOffset+32;
@@ -376,7 +372,6 @@ const payloadLength=Math.max(arr.byteLength-32,0);
 if(payloadLength<this.cnt*20)throw new Error('QSPL payload is truncated');
 parsed=this.parseQ(new Uint8Array(arr.buffer,payloadOffset,payloadLength),this.cnt);
 }else{
-this.quantizedPct=0;
 this.cnt=Math.floor(arr.byteLength/32);
 parsed=this.parseS(arr,this.cnt);
 }
@@ -398,7 +393,6 @@ this.setHomeFromCurrent();
 this.loadingEl.style.display='none';
 document.body.classList.add('loaded');
 this.c.style.cursor='grab';
-this.updateInfo();
 }
 
 parseS(d,n){
@@ -645,7 +639,6 @@ this.homeTarget=[this.homeTarget[0],-this.homeTarget[1],-this.homeTarget[2]];
 this.sortDirty=true;
 const cam=this.cameraState();
 this.sortAndUpload(cam.eye,cam.forward,true);
-this.updateInfo();
 }
 
 focusForegroundFromCurrentSort(isAuto){
@@ -683,7 +676,6 @@ this.distance=this.zoomTarget;
 this.viewMode='foreground';
 if(!isAuto)this.setHomeFromCurrent();
 this.sortDirty=true;
-this.updateInfo();
 }
 
 resetView(){
@@ -700,7 +692,6 @@ this.zoomTarget=this.distance;
 this.viewMode='scene';
 }
 this.sortDirty=true;
-this.updateInfo();
 }
 
 cameraState(){
@@ -801,13 +792,6 @@ const l=Math.hypot(v[0],v[1],v[2])||1;
 return[v[0]/l,v[1]/l,v[2]/l];
 }
 
-updateInfo(){
-if(!this.infoEl)return;
-const count=this.cnt?this.cnt.toLocaleString()+' splats':'0 splats';
-const quant=Math.round(this.quantizedPct)+'% quantized';
-this.infoEl.textContent=count+' · '+quant;
-}
-
 render(){
 const gl=this.gl;
 gl.clearColor(0.039,0.039,0.059,1);
@@ -831,7 +815,6 @@ const zooming=Math.abs(this.zoomTarget-this.distance)>0.01||now-this.lastInterac
 const sortWait=zooming?Math.max(this.sortInterval,this.zoomSortInterval):this.sortInterval;
 if(this.sortDirty&&(now-this.lastSortAt>sortWait)){
 this.sortAndUpload(cam.eye,cam.forward,false);
-this.updateInfo();
 }
 
 const ar=this.c.width/this.c.height;
