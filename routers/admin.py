@@ -3,7 +3,9 @@ import logging
 import os
 import tempfile
 import threading
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -37,15 +39,143 @@ from utils.s3 import CLOUDFRONT_DOMAIN
 
 logger = logging.getLogger(__name__)
 
-# Processing progress tracker: { slug: { status, stage, progress, video, error } }
-_processing_progress = {}
+@dataclass
+class ProcessingProgressState:
+    status: str = "processing"
+    stage: str = "Starting..."
+    progress: float = 0
+    video: Optional[dict[str, str]] = None
+    error: Optional[str] = None
+    timestamp: datetime = field(default_factory=datetime.now)
 
-# Temp video sources for thumbnail preview:
-# { temp_id: { path, timestamp, frames, frames_complete, is_remote } }
-_temp_video_files = {}
 
-# HLS encoding sessions: { session_id: { status, stage, progress, hls_url, temp_id, slug, timestamp, error } }
-_hls_sessions = {}
+@dataclass
+class TempVideoState:
+    path: str
+    frames: list[str]
+    frames_complete: bool = False
+    is_remote: bool = False
+    timestamp: datetime = field(default_factory=datetime.now)
+
+
+@dataclass
+class HlsSessionState:
+    status: str = "processing"
+    stage: str = "Starting HLS encoding..."
+    progress: float = 0
+    hls_url: Optional[str] = None
+    temp_id: Optional[str] = None
+    slug: str = ""
+    error: Optional[str] = None
+    timestamp: datetime = field(default_factory=datetime.now)
+
+
+class ProcessingProgressStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._items: dict[str, ProcessingProgressState] = {}
+
+    def create(self, slug: str, **kwargs: Any) -> None:
+        with self._lock:
+            self._items[slug] = ProcessingProgressState(**kwargs)
+
+    def update(self, slug: str, **kwargs: Any) -> bool:
+        with self._lock:
+            state = self._items.get(slug)
+            if not state:
+                return False
+            for key, value in kwargs.items():
+                setattr(state, key, value)
+            return True
+
+    def get(self, slug: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            state = self._items.get(slug)
+            return asdict(state) if state else None
+
+    def pop(self, slug: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            state = self._items.pop(slug, None)
+            return asdict(state) if state else None
+
+
+class TempVideoStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._items: dict[str, TempVideoState] = {}
+
+    def create(self, temp_id: str, **kwargs: Any) -> None:
+        with self._lock:
+            self._items[temp_id] = TempVideoState(**kwargs)
+
+    def update(self, temp_id: str, **kwargs: Any) -> bool:
+        with self._lock:
+            state = self._items.get(temp_id)
+            if not state:
+                return False
+            for key, value in kwargs.items():
+                setattr(state, key, value)
+            return True
+
+    def get(self, temp_id: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            state = self._items.get(temp_id)
+            return asdict(state) if state else None
+
+    def pop(self, temp_id: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            state = self._items.pop(temp_id, None)
+            return asdict(state) if state else None
+
+    def delete(self, temp_id: str) -> bool:
+        with self._lock:
+            return self._items.pop(temp_id, None) is not None
+
+    def exists(self, temp_id: str) -> bool:
+        with self._lock:
+            return temp_id in self._items
+
+    def snapshot(self) -> list[tuple[str, dict[str, Any]]]:
+        with self._lock:
+            return [(temp_id, asdict(state)) for temp_id, state in self._items.items()]
+
+
+class HlsSessionStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._items: dict[str, HlsSessionState] = {}
+
+    def create(self, session_id: str, **kwargs: Any) -> None:
+        with self._lock:
+            self._items[session_id] = HlsSessionState(**kwargs)
+
+    def update(self, session_id: str, **kwargs: Any) -> bool:
+        with self._lock:
+            state = self._items.get(session_id)
+            if not state:
+                return False
+            for key, value in kwargs.items():
+                setattr(state, key, value)
+            return True
+
+    def get(self, session_id: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            state = self._items.get(session_id)
+            return asdict(state) if state else None
+
+    def delete(self, session_id: str) -> bool:
+        with self._lock:
+            return self._items.pop(session_id, None) is not None
+
+    def snapshot(self) -> list[tuple[str, dict[str, Any]]]:
+        with self._lock:
+            return [(session_id, asdict(state)) for session_id, state in self._items.items()]
+
+
+# Thread-safe process state stores
+_processing_progress = ProcessingProgressStore()
+_temp_video_files = TempVideoStore()
+_hls_sessions = HlsSessionStore()
 
 TIMELINE_INITIAL_FRAME_COUNT = 6
 TIMELINE_TOTAL_FRAME_COUNT = 20
@@ -59,6 +189,77 @@ def _is_remote_video_source(path: str) -> bool:
     )
 
 
+def _validate_save_project_input(data: dict[str, Any]) -> tuple[str, str]:
+    """Pure input validation for project save payload."""
+    slug_raw = data.get("slug")
+    original_slug_raw = data.get("original_slug") or slug_raw
+
+    if not isinstance(slug_raw, str) or not slug_raw:
+        raise HTTPException(status_code=400, detail="Slug is required")
+    if not isinstance(original_slug_raw, str) or not original_slug_raw:
+        raise HTTPException(status_code=400, detail="Original slug is required")
+
+    slug = slug_raw.strip()
+    original_slug = original_slug_raw.strip()
+    if not validate_slug(slug):
+        raise HTTPException(status_code=400, detail="Invalid slug format")
+    if not validate_slug(original_slug):
+        raise HTTPException(status_code=400, detail="Invalid original slug format")
+
+    return slug, original_slug
+
+
+def _build_project_frontmatter(
+    data: dict[str, Any], slug: str
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Pure transformation from request data to frontmatter + normalized video payload."""
+    frontmatter: dict[str, Any] = {
+        "name": data.get("name", slug),
+        "slug": slug,
+        "date": data.get("date"),
+        "pinned": data.get("pinned", False),
+        "draft": data.get("draft", False),
+    }
+
+    raw_video = data.get("video", {})
+    video = raw_video if isinstance(raw_video, dict) else {}
+    normalized_video: dict[str, str] = {}
+    for key in ("hls", "thumbnail", "spriteSheet"):
+        value = video.get(key)
+        if isinstance(value, str) and value:
+            normalized_video[key] = value
+
+    if normalized_video:
+        frontmatter["video"] = normalized_video
+
+    youtube = data.get("youtube")
+    if youtube:
+        frontmatter["youtube"] = youtube
+
+    return frontmatter, normalized_video
+
+
+def _collect_asset_refs(markdown_content: str, video: Optional[dict[str, Any]] = None) -> set[str]:
+    """Pure extraction of referenced asset URLs from markdown and video metadata."""
+    refs = extract_cloudfront_urls(markdown_content or "")
+    if isinstance(video, dict):
+        for key in ("hls", "thumbnail", "spriteSheet"):
+            value = video.get(key)
+            if isinstance(value, str) and value:
+                refs.add(value)
+    return refs
+
+
+def _extract_s3_keys(urls: set[str]) -> set[str]:
+    """Pure conversion from URL set to S3 key set."""
+    keys = set()
+    for url in urls:
+        key = extract_s3_key(url)
+        if key:
+            keys.add(key)
+    return keys
+
+
 def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
     from utils.video import extract_thumbnail_frames
 
@@ -70,13 +271,12 @@ def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
                 width=TIMELINE_FRAME_WIDTH,
                 height=TIMELINE_FRAME_HEIGHT,
             )
-            if temp_id in _temp_video_files:
-                _temp_video_files[temp_id]["frames"] = all_frames
-                _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(
+                temp_id, frames=all_frames, frames_complete=True
+            )
         except Exception as e:
             logger.warning(f"Background thumbnail extraction failed: {e}")
-            if temp_id in _temp_video_files:
-                _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, frames_complete=True)
 
     thread = threading.Thread(target=extract_remaining_frames, daemon=True)
     thread.start()
@@ -118,18 +318,12 @@ async def get_project(slug: str):
 async def save_project_endpoint(request: Request):
     """Save project content with optimistic conflict detection."""
     data = await request.json()
-    slug = data.get("slug")
-    original_slug = data.get("original_slug") or slug
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
+    slug, original_slug = _validate_save_project_input(data)
     base_revision = data.get("base_revision")
 
-    if not slug:
-        raise HTTPException(status_code=400, detail="Slug is required")
-    if not validate_slug(slug):
-        raise HTTPException(status_code=400, detail="Invalid slug format")
-    if not original_slug:
-        raise HTTPException(status_code=400, detail="Original slug is required")
-    if not validate_slug(original_slug):
-        raise HTTPException(status_code=400, detail="Invalid original slug format")
     if original_slug != slug and load_project(slug):
         raise HTTPException(
             status_code=400,
@@ -161,37 +355,19 @@ async def save_project_endpoint(request: Request):
             detail="Project not found. Use create-project for new projects.",
         )
 
-    old_refs = extract_cloudfront_urls(old_project.get("markdown_content", ""))
-    # Include video frontmatter URLs
-    if old_project.get("video_link"):
-        old_refs.add(old_project["video_link"])
-    if old_project.get("thumbnail_link"):
-        old_refs.add(old_project["thumbnail_link"])
-    if old_project.get("sprite_sheet_link"):
-        old_refs.add(old_project["sprite_sheet_link"])
-
-    frontmatter = {
-        "name": data.get("name", slug),
-        "slug": slug,
-        "date": data.get("date"),
-        "pinned": data.get("pinned", False),
-        "draft": data.get("draft", False),
+    old_video = {
+        "hls": old_project.get("video_link"),
+        "thumbnail": old_project.get("thumbnail_link"),
+        "spriteSheet": old_project.get("sprite_sheet_link"),
     }
+    old_refs = _collect_asset_refs(old_project.get("markdown_content", ""), old_video)
 
-    video = data.get("video", {})
-    if not isinstance(video, dict):
-        video = {}
-    if video.get("hls") or video.get("thumbnail") or video.get("spriteSheet"):
-        frontmatter["video"] = {
-            "hls": video.get("hls"),
-            "thumbnail": video.get("thumbnail"),
-            "spriteSheet": video.get("spriteSheet"),
-        }
-
-    if data.get("youtube"):
-        frontmatter["youtube"] = data.get("youtube")
+    frontmatter, video = _build_project_frontmatter(data, slug)
 
     markdown_content = data.get("markdown", "")
+    if not isinstance(markdown_content, str):
+        raise HTTPException(status_code=400, detail="Markdown must be a string")
+
     save_project(slug, frontmatter, markdown_content)
 
     # If slug changed, remove the previous file after successful write.
@@ -199,16 +375,9 @@ async def save_project_endpoint(request: Request):
         delete_project(original_slug)
 
     # Cleanup orphaned assets
-    new_refs = extract_cloudfront_urls(markdown_content)
-    if video.get("hls"):
-        new_refs.add(video["hls"])
-    if video.get("thumbnail"):
-        new_refs.add(video["thumbnail"])
-    if video.get("spriteSheet"):
-        new_refs.add(video["spriteSheet"])
-
+    new_refs = _collect_asset_refs(markdown_content, video)
     removed_urls = old_refs - new_refs
-    keys_to_check = {extract_s3_key(url) for url in removed_urls if extract_s3_key(url)}
+    keys_to_check = _extract_s3_keys(removed_urls)
     if keys_to_check:
         cleanup_orphans(keys_to_check)
 
@@ -264,20 +433,18 @@ async def delete_project_endpoint(slug: str):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Collect all CloudFront URLs from this project
-    project_refs = extract_cloudfront_urls(project.get("markdown_content", ""))
-    if project.get("video_link"):
-        project_refs.add(project["video_link"])
-    if project.get("thumbnail_link"):
-        project_refs.add(project["thumbnail_link"])
-    if project.get("sprite_sheet_link"):
-        project_refs.add(project["sprite_sheet_link"])
+    project_video = {
+        "hls": project.get("video_link"),
+        "thumbnail": project.get("thumbnail_link"),
+        "spriteSheet": project.get("sprite_sheet_link"),
+    }
+    project_refs = _collect_asset_refs(project.get("markdown_content", ""), project_video)
 
     # Delete the project file first
     delete_project(slug)
 
     # Cleanup orphaned assets (assets not referenced elsewhere)
-    keys_to_check = {extract_s3_key(url) for url in project_refs if extract_s3_key(url)}
+    keys_to_check = _extract_s3_keys(project_refs)
     if keys_to_check:
         cleanup_orphans(keys_to_check)
 
@@ -298,7 +465,12 @@ async def get_about():
 async def save_about_endpoint(request: Request):
     """Save about page content with conflict detection and cleanup orphaned assets."""
     data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
     markdown_content = data.get("markdown", "")
+    if not isinstance(markdown_content, str):
+        raise HTTPException(status_code=400, detail="Markdown must be a string")
     base_revision = data.get("base_revision")
 
     # Conflict check
@@ -319,14 +491,14 @@ async def save_about_endpoint(request: Request):
 
     # Load old about content to track removed references
     _, old_markdown, _ = load_about()
-    old_refs = extract_cloudfront_urls(old_markdown)
+    old_refs = _collect_asset_refs(old_markdown)
 
     save_about(markdown_content)
 
     # Cleanup orphaned assets
-    new_refs = extract_cloudfront_urls(markdown_content)
+    new_refs = _collect_asset_refs(markdown_content)
     removed_urls = old_refs - new_refs
-    keys_to_check = {extract_s3_key(url) for url in removed_urls if extract_s3_key(url)}
+    keys_to_check = _extract_s3_keys(removed_urls)
     if keys_to_check:
         cleanup_orphans(keys_to_check)
 
@@ -465,18 +637,18 @@ async def video_thumbnails(request: Request):
 
         # Generate unique temp_id and store the temp file path
         temp_id = secrets.token_urlsafe(16)
-        _temp_video_files[temp_id] = {
-            "path": temp_path,
-            "timestamp": datetime.now(),
-            "frames": first_frames,  # Will be extended with more frames
-            "frames_complete": False,
-            "is_remote": False,
-        }
+        _temp_video_files.create(
+            temp_id,
+            path=temp_path,
+            frames=first_frames,  # Will be extended with more frames
+            frames_complete=False,
+            is_remote=False,
+        )
 
         if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
             _start_background_thumbnail_extraction(temp_path, temp_id)
         else:
-            _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, frames_complete=True)
 
         response = {
             "success": True,
@@ -488,24 +660,26 @@ async def video_thumbnails(request: Request):
         # Auto-start HLS encoding if project_slug provided
         if project_slug:
             hls_session_id = secrets.token_urlsafe(16)
-            _hls_sessions[hls_session_id] = {
-                "status": "processing",
-                "stage": "Starting HLS encoding...",
-                "progress": 0,
-                "hls_url": None,
-                "temp_id": temp_id,
-                "slug": project_slug,
-                "timestamp": datetime.now(),
-                "error": None,
-            }
+            _hls_sessions.create(
+                hls_session_id,
+                status="processing",
+                stage="Starting HLS encoding...",
+                progress=0,
+                hls_url=None,
+                temp_id=temp_id,
+                slug=project_slug,
+                error=None,
+            )
 
             def run_hls_encoding():
                 from utils.video import generate_hls_only
 
                 def progress_callback(stage, progress):
-                    if hls_session_id in _hls_sessions:
-                        _hls_sessions[hls_session_id]["stage"] = stage
-                        _hls_sessions[hls_session_id]["progress"] = progress
+                    _hls_sessions.update(
+                        hls_session_id,
+                        stage=stage,
+                        progress=progress,
+                    )
 
                 try:
                     # Note: Don't delete old files here - they're cleaned up after save
@@ -516,21 +690,21 @@ async def video_thumbnails(request: Request):
                         trim_start=0,
                         progress_callback=progress_callback,
                     )
-                    if hls_session_id in _hls_sessions:
-                        _hls_sessions[hls_session_id].update({
-                            "status": "complete",
-                            "stage": "HLS complete!",
-                            "progress": 100,
-                            "hls_url": hls_url,
-                        })
+                    _hls_sessions.update(
+                        hls_session_id,
+                        status="complete",
+                        stage="HLS complete!",
+                        progress=100,
+                        hls_url=hls_url,
+                    )
                 except Exception as e:
                     logger.exception("HLS encoding failed")
-                    if hls_session_id in _hls_sessions:
-                        _hls_sessions[hls_session_id].update({
-                            "status": "error",
-                            "stage": "HLS encoding failed",
-                            "error": str(e),
-                        })
+                    _hls_sessions.update(
+                        hls_session_id,
+                        status="error",
+                        stage="HLS encoding failed",
+                        error=str(e),
+                    )
 
             hls_thread = threading.Thread(target=run_hls_encoding, daemon=True)
             hls_thread.start()
@@ -581,18 +755,18 @@ async def video_thumbnails_existing(request: Request):
         )
 
         temp_id = secrets.token_urlsafe(16)
-        _temp_video_files[temp_id] = {
-            "path": hls_url,
-            "timestamp": datetime.now(),
-            "frames": first_frames,
-            "frames_complete": False,
-            "is_remote": True,
-        }
+        _temp_video_files.create(
+            temp_id,
+            path=hls_url,
+            frames=first_frames,
+            frames_complete=False,
+            is_remote=True,
+        )
 
         if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
             _start_background_thumbnail_extraction(hls_url, temp_id)
         else:
-            _temp_video_files[temp_id]["frames_complete"] = True
+            _temp_video_files.update(temp_id, frames_complete=True)
 
         return {
             "success": True,
@@ -751,15 +925,17 @@ async def generate_sprite_sheet_endpoint(request: Request):
         raise HTTPException(status_code=500, detail=f"Sprite sheet generation failed: {str(e)}")
     finally:
         # Clean up temp file and sessions
-        if temp_id in _temp_video_files:
-            if not is_remote and os.path.exists(temp_path):
+        removed_temp = _temp_video_files.pop(temp_id)
+        if removed_temp:
+            removed_path = removed_temp["path"]
+            removed_is_remote = removed_temp.get("is_remote", False) or _is_remote_video_source(removed_path)
+            if not removed_is_remote and os.path.exists(removed_path):
                 try:
-                    os.unlink(temp_path)
+                    os.unlink(removed_path)
                 except Exception:
                     pass
-            del _temp_video_files[temp_id]
-        if hls_session_id and hls_session_id in _hls_sessions:
-            del _hls_sessions[hls_session_id]
+        if hls_session_id:
+            _hls_sessions.delete(hls_session_id)
 
 
 @router.post("/process-hero-video")
@@ -814,17 +990,17 @@ async def process_hero_video(request: Request):
             raise HTTPException(status_code=500, detail="Video upload failed")
 
     # Initialize progress tracking
-    _processing_progress[project_slug] = {
-        "status": "processing",
-        "stage": "Starting...",
-        "progress": 0,
-        "video": None,
-        "error": None,
-    }
+    _processing_progress.create(
+        project_slug,
+        status="processing",
+        stage="Starting...",
+        progress=0,
+        video=None,
+        error=None,
+    )
 
     def progress_callback(stage: str, progress: float):
-        _processing_progress[project_slug]["stage"] = stage
-        _processing_progress[project_slug]["progress"] = progress
+        _processing_progress.update(project_slug, stage=stage, progress=progress)
 
     def run_processing():
         from utils.video import process_hero_video as process_video
@@ -841,30 +1017,32 @@ async def process_hero_video(request: Request):
                 progress_callback=progress_callback,
             )
 
-            _processing_progress[project_slug].update({
-                "status": "complete",
-                "stage": "Complete!",
-                "progress": 100,
-                "video": {
+            _processing_progress.update(
+                project_slug,
+                status="complete",
+                stage="Complete!",
+                progress=100,
+                video={
                     "hls": result["hls"],
                     "thumbnail": result["thumbnail"],
                     "spriteSheet": result["spriteSheet"],
                 },
-            })
+            )
         except Exception as e:
             logger.exception("Hero video processing failed")
-            _processing_progress[project_slug].update({
-                "status": "error",
-                "stage": "Failed",
-                "error": str(e),
-            })
+            _processing_progress.update(
+                project_slug,
+                status="error",
+                stage="Failed",
+                error=str(e),
+            )
         finally:
             # Clean up temp file
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             # Remove from temp files dict if it was using a temp_id
-            if temp_id and temp_id in _temp_video_files:
-                del _temp_video_files[temp_id]
+            if temp_id:
+                _temp_video_files.delete(temp_id)
 
     # Start processing in background thread
     thread = threading.Thread(target=run_processing, daemon=True)
@@ -889,11 +1067,11 @@ async def get_hero_video_progress(slug: str):
     if progress["status"] == "complete" and progress.get("video"):
         response["video"] = progress["video"]
         # Clean up progress entry after delivering result
-        del _processing_progress[slug]
+        _processing_progress.pop(slug)
 
     if progress["status"] == "error":
         response["error"] = progress.get("error", "Unknown error")
-        del _processing_progress[slug]
+        _processing_progress.pop(slug)
 
     return response
 
@@ -941,14 +1119,13 @@ def cleanup_old_temp_videos():
     For HLS sessions that completed but sprite sheet was never requested,
     this also deletes the orphaned HLS files from S3.
     """
-    from datetime import timedelta
-
     now = datetime.now()
+    expiry = timedelta(hours=1)
     expired_ids = []
 
-    for temp_id, temp_info in _temp_video_files.items():
+    for temp_id, temp_info in _temp_video_files.snapshot():
         age = now - temp_info["timestamp"]
-        if age > timedelta(hours=1):
+        if age > expiry:
             temp_path = temp_info["path"]
             if not (temp_info.get("is_remote", False) or _is_remote_video_source(temp_path)) and os.path.exists(temp_path):
                 try:
@@ -960,16 +1137,16 @@ def cleanup_old_temp_videos():
 
     # Remove expired entries from the dict
     for temp_id in expired_ids:
-        del _temp_video_files[temp_id]
+        _temp_video_files.delete(temp_id)
 
     if expired_ids:
         logger.info(f"Cleaned up {len(expired_ids)} expired temp video file(s)")
 
     # Clean up orphaned HLS sessions
     expired_hls_ids = []
-    for session_id, session in _hls_sessions.items():
+    for session_id, session in _hls_sessions.snapshot():
         age = now - session["timestamp"]
-        if age > timedelta(hours=1):
+        if age > expiry:
             # If HLS completed but sprite was never requested, clean up orphaned version
             # We use cleanup_old_hls_versions to preserve any currently-saved video
             if session["status"] == "complete" and session.get("slug"):
@@ -984,7 +1161,7 @@ def cleanup_old_temp_videos():
             expired_hls_ids.append(session_id)
 
     for session_id in expired_hls_ids:
-        del _hls_sessions[session_id]
+        _hls_sessions.delete(session_id)
 
     if expired_hls_ids:
         logger.info(f"Cleaned up {len(expired_hls_ids)} expired HLS session(s)")
