@@ -16,6 +16,14 @@ from utils.content import load_about, load_all_projects, load_project, ProjectIn
 router = APIRouter()
 
 
+def is_partial_request(request: Request) -> bool:
+    """Return True when the request is expected to receive HTML fragments only."""
+    partial = request.query_params.get("_partial", "").strip().lower()
+    if partial in {"1", "true", "yes", "on"}:
+        return True
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
 def extract_meta_description(html_content: str, word_limit: int = 25) -> str:
     """Extract the first `word_limit` words from HTML content for meta description."""
     if not html_content:
@@ -80,7 +88,7 @@ async def read_root(
         has_more = end_idx < len(all_projects)
         general_info = get_general_info()
 
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        if is_partial_request(request):
             return templates.TemplateResponse(
                 "projects_infinite_scroll.html",
                 {
@@ -161,9 +169,9 @@ async def read_project(
         is_dev_mode = is_edit_mode(request)
         meta_description = extract_meta_description(project.html_content)
         show_drafts_only = show_drafts and is_dev_mode
-        is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        is_partial = is_partial_request(request)
 
-        if is_ajax and not is_open:
+        if is_partial and not is_open:
             return Response(content="", status_code=200)
 
         # Record page view (analytics never breaks the site)
@@ -185,7 +193,7 @@ async def read_project(
             except Exception:
                 pass
 
-        if is_ajax:
+        if is_partial:
             return templates.TemplateResponse(
                 "project_details.html",
                 {

@@ -90,7 +90,10 @@ function showNotification(message: string, isError: boolean = false): void {
  * Fetch HTML content from a URL
  */
 async function fetchHTML(url: string, signal?: AbortSignal): Promise<string> {
-  const response = await fetch(url, {
+  const requestUrl = new URL(url, window.location.origin);
+  requestUrl.searchParams.set('_partial', '1');
+
+  const response = await fetch(requestUrl.toString(), {
     method: 'GET',
     headers: {
       'X-Requested-With': 'XMLHttpRequest',
