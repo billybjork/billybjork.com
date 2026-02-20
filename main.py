@@ -27,9 +27,15 @@ init_db()
 if os.environ.get("EDIT_TOKEN"):
     try:
         from utils.content_sync import sync_from_s3
-        count = sync_from_s3()
-        if count:
-            logger.info("Startup: synced %d content file(s) from S3", count)
+        policy = os.environ.get("CONTENT_STARTUP_SYNC_POLICY", "guarded").strip().lower()
+
+        if policy in {"off", "disabled", "none"}:
+            logger.info("Startup: content sync from S3 disabled by CONTENT_STARTUP_SYNC_POLICY=%s", policy)
+        else:
+            require_marker = policy not in {"always", "legacy"}
+            count = sync_from_s3(require_marker=require_marker)
+            if count:
+                logger.info("Startup: synced %d content file(s) from S3", count)
     except Exception:
         logger.exception("Startup S3 content sync failed (using local files)")
 

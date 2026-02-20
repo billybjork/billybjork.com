@@ -49,6 +49,7 @@ Edit mode/auth:
 EDIT_TOKEN=
 COOKIE_SECRET=
 LOCALHOST_EDIT_BYPASS=
+CONTENT_STARTUP_SYNC_POLICY=guarded
 ```
 
 - `EDIT_TOKEN`: enables remote edit login at `/edit/login`.
@@ -56,6 +57,10 @@ LOCALHOST_EDIT_BYPASS=
 - `LOCALHOST_EDIT_BYPASS`:
   - if `EDIT_TOKEN` is set, default is `false`
   - if `EDIT_TOKEN` is unset, default is `true` (local-only workflow)
+- `CONTENT_STARTUP_SYNC_POLICY`:
+  - `guarded` (default): sync from S3 only when canonical marker exists
+  - `always`: always sync from S3 at startup (legacy behavior)
+  - `off`: skip startup S3 sync
 
 ## Edit Mode
 
@@ -81,10 +86,35 @@ Edits use optimistic locking with per-file revision hashes:
 Content files are still stored under `content/`, but are synchronized to S3:
 
 - On save: write local file, then sync to S3
-- On startup (when `EDIT_TOKEN` is set): hydrate `content/` from S3
+- On startup (when `EDIT_TOKEN` is set): hydrate `content/` from S3, controlled by `CONTENT_STARTUP_SYNC_POLICY`
 - On delete: archive project markdown under `content-archive/` in S3 before removal
 
 This keeps a file-based workflow while surviving redeploys.
+
+### Canonical Source Guardrails
+
+Recommended model: **S3 is runtime source of truth**, Git is backup/export.
+
+Before relying on startup S3 sync in a new environment, seed S3 explicitly:
+
+```bash
+uv run python -m utils.content_sync seed
+```
+
+Optional strict seed that also removes stale keys:
+
+```bash
+uv run python -m utils.content_sync seed --delete-extra
+```
+
+Check marker/status:
+
+```bash
+uv run python -m utils.content_sync status
+```
+
+The seed command uploads all `content/` files and writes `content/.s3-canonical.json` in S3.  
+With default `CONTENT_STARTUP_SYNC_POLICY=guarded`, startup sync is skipped unless that marker exists.
 
 ## Content Structure
 
