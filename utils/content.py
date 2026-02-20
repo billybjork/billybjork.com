@@ -97,21 +97,18 @@ def process_html_blocks(content: str) -> str:
     return re.sub(pattern, replace, content, flags=re.DOTALL)
 
 
-def markdown_to_html(md_content: str) -> str:
-    """
-    Convert markdown content to HTML.
-    Handles block separators and preserves HTML tags.
-    """
-    # Process HTML blocks BEFORE markdown conversion (converts to base64 placeholders)
-    md_content = process_html_blocks(md_content)
+def strip_block_markers(md_content: str) -> str:
+    """Remove block separator comments from markdown prior to rendering."""
+    return re.sub(r'<!--\s*block\s*-->', '', md_content)
 
-    # Remove block separators for rendering
-    md_content = re.sub(r'<!--\s*block\s*-->', '', md_content)
 
-    # Remove row/col markers for rendering
-    md_content = re.sub(r'<!--\s*/?(row|col)\s*-->', '', md_content)
+def strip_layout_markers(md_content: str) -> str:
+    """Remove row/column layout comments from markdown prior to rendering."""
+    return re.sub(r'<!--\s*/?(row|col)\s*-->', '', md_content)
 
-    # Convert markdown to HTML
+
+def _convert_markdown(md_content: str) -> str:
+    """Convert markdown string to HTML with project-standard extensions."""
     md = markdown.Markdown(extensions=[
         FencedCodeExtension(),
         TableExtension(),
@@ -120,12 +117,29 @@ def markdown_to_html(md_content: str) -> str:
         'smarty',  # Smart quotes and dashes
         'toc',  # Generates IDs for headings (enables anchor links)
     ])
-    html = md.convert(md_content)
+    return md.convert(md_content)
 
-    # Process alignment markers (HTML comments survive markdown conversion)
-    html = re.sub(r'<!-- align:(center|right) -->', r'<div style="text-align: \1">', html)
-    html = re.sub(r'<!-- /align -->', '</div>', html)
 
+def convert_alignment_comments(html_content: str) -> str:
+    """Convert editor alignment comment markers to HTML wrappers."""
+    html_content = re.sub(
+        r'<!-- align:(center|right) -->',
+        r'<div style="text-align: \1">',
+        html_content,
+    )
+    return re.sub(r'<!-- /align -->', '</div>', html_content)
+
+
+def markdown_to_html(md_content: str) -> str:
+    """
+    Convert markdown content to HTML.
+    Handles block separators and preserves HTML tags.
+    """
+    md = process_html_blocks(md_content)
+    md = strip_block_markers(md)
+    md = strip_layout_markers(md)
+    html = _convert_markdown(md)
+    html = convert_alignment_comments(html)
     return html
 
 
