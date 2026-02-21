@@ -320,7 +320,13 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
 
     const initializeVideo = () => {
       updateVideoContainerLayout(videoElement);
-      if (autoplay && !document.body.classList.contains('editing')) {
+      if (document.body.classList.contains('editing')) {
+        videoElement.pause();
+        resolve();
+        return;
+      }
+
+      if (autoplay) {
         videoElement.play().catch(e => {
           if (e.name !== 'AbortError') {
             console.error("Autoplay failed:", e);

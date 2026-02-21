@@ -14,6 +14,7 @@
     --spacing-small: 0.5rem;
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
+    --content-block-space: 1.5rem;
     --transition-duration: 0.3s;
     --transition-ease: ease-in-out;
 }
@@ -538,6 +539,21 @@ footer {
 
 .project-content {
     overflow: hidden;
+}
+
+/* Block spacing - driven by editor block separators */
+.project-content > .content-block + .content-block,
+.project-content > .content-block + .project-links {
+    margin-top: var(--content-block-space);
+}
+
+.project-content > .content-block {
+    margin: 0;
+}
+
+/* Hero video should participate in the same vertical rhythm as content blocks */
+.video-container + .project-content {
+    margin-top: var(--content-block-space);
 }
 
 /* =========================

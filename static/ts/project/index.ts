@@ -20,6 +20,12 @@ function hydrateSandboxes(container: HTMLElement | Document = document): void {
     try {
       const html = atob(encoded);
       const iframe = createSandboxedIframe(html, { allowFullscreen: true });
+      const inlineStyle = el.getAttribute('style');
+      const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
+      iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
+      if (inlineStyle) {
+        iframe.style.cssText += `; ${inlineStyle}`;
+      }
       el.replaceWith(iframe);
     } catch (e) {
       console.error('Failed to decode HTML block:', e);

@@ -48,6 +48,13 @@ export function isDevMode(): boolean {
 }
 
 /**
+ * Check if the inline editor is currently active.
+ */
+export function isEditingActive(): boolean {
+  return document.body?.classList.contains('editing') === true;
+}
+
+/**
  * Check if show drafts is active in the current URL
  */
 export function isShowDraftsActive(): boolean {
@@ -192,8 +199,8 @@ export function createVideoElement(
 ): HTMLVideoElement {
   const video = document.createElement('video');
   video.src = block.src;
-  video.controls = true;
   video.className = 'content-video';
+  applyVideoPlaybackSettings(video, !!block.autoplay);
   if (block.style) video.setAttribute('style', block.style);
   if (block.align) applyAlignment(video, block.align);
 
@@ -204,6 +211,42 @@ export function createVideoElement(
     });
   }
   return video;
+}
+
+/**
+ * Apply standard playback behavior for content videos.
+ */
+export function applyVideoPlaybackSettings(video: HTMLVideoElement, autoplay: boolean): void {
+  const editing = isEditingActive();
+
+  video.loop = autoplay;
+  video.muted = autoplay;
+  video.defaultMuted = autoplay;
+  video.playsInline = editing || autoplay;
+  video.controls = editing || !autoplay;
+  video.autoplay = !editing && autoplay;
+
+  if (video.autoplay) {
+    video.setAttribute('autoplay', '');
+  } else {
+    video.removeAttribute('autoplay');
+  }
+
+  if (autoplay) {
+    video.setAttribute('muted', '');
+  } else {
+    video.removeAttribute('muted');
+  }
+
+  if (video.playsInline) {
+    video.setAttribute('playsinline', '');
+  } else {
+    video.removeAttribute('playsinline');
+  }
+
+  if (editing) {
+    video.pause();
+  }
 }
 
 /**
@@ -819,6 +862,7 @@ export const EditUtils = {
   setupAutoResizeTextarea,
   createImageElement,
   createVideoElement,
+  applyVideoPlaybackSettings,
   applyAlignment,
   getAlignmentStyle,
   parseAlignmentFromStyle,

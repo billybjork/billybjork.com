@@ -20,6 +20,10 @@ const iframeRegistry = new WeakMap<Window, IframeRegistry>();
 // Single global message listener (set up once)
 let listenerInitialized = false;
 
+function isAutoHeightEnabled(iframe: HTMLIFrameElement): boolean {
+  return iframe.dataset.autoHeight !== 'false';
+}
+
 function initGlobalResizeListener(): void {
   if (listenerInitialized) return;
   listenerInitialized = true;
@@ -33,6 +37,7 @@ function initGlobalResizeListener(): void {
 
     // Validate nonce to prevent spoofing
     if (e.data.nonce !== entry.nonce) return;
+    if (!isAutoHeightEnabled(entry.iframe)) return;
 
     entry.iframe.style.height = `${e.data.height}px`;
   });
@@ -86,7 +91,6 @@ export function createSandboxedIframe(
   // Build sandbox attribute
   const sandboxParts = ['allow-scripts'];
   if (options.allowFullscreen !== false) {
-    sandboxParts.push('allow-fullscreen');
     iframe.setAttribute('allow', 'fullscreen');
   }
   if (options.allowPointerLock) sandboxParts.push('allow-pointer-lock');
@@ -95,6 +99,7 @@ export function createSandboxedIframe(
   const nonce = generateNonce();
   iframe.srcdoc = wrapHtmlContent(html, nonce);
   iframe.style.minHeight = `${options.minHeight ?? 60}px`;
+  iframe.dataset.autoHeight = 'true';
 
   // Register for resize messages
   iframe.addEventListener('load', () => {
