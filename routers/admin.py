@@ -29,25 +29,13 @@ from utils.content import (
     delete_project,
     load_about,
     load_project,
-    load_settings,
     save_about,
     save_project,
-    save_settings,
     validate_slug,
 )
 from utils.s3 import CLOUDFRONT_DOMAIN
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class ProcessingProgressState:
-    status: str = "processing"
-    stage: str = "Starting..."
-    progress: float = 0
-    video: Optional[dict[str, str]] = None
-    error: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.now)
-
 
 @dataclass
 class TempVideoState:
@@ -68,35 +56,6 @@ class HlsSessionState:
     slug: str = ""
     error: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.now)
-
-
-class ProcessingProgressStore:
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._items: dict[str, ProcessingProgressState] = {}
-
-    def create(self, slug: str, **kwargs: Any) -> None:
-        with self._lock:
-            self._items[slug] = ProcessingProgressState(**kwargs)
-
-    def update(self, slug: str, **kwargs: Any) -> bool:
-        with self._lock:
-            state = self._items.get(slug)
-            if not state:
-                return False
-            for key, value in kwargs.items():
-                setattr(state, key, value)
-            return True
-
-    def get(self, slug: str) -> Optional[dict[str, Any]]:
-        with self._lock:
-            state = self._items.get(slug)
-            return asdict(state) if state else None
-
-    def pop(self, slug: str) -> Optional[dict[str, Any]]:
-        with self._lock:
-            state = self._items.pop(slug, None)
-            return asdict(state) if state else None
 
 
 class TempVideoStore:
@@ -173,7 +132,6 @@ class HlsSessionStore:
 
 
 # Thread-safe process state stores
-_processing_progress = ProcessingProgressStore()
 _temp_video_files = TempVideoStore()
 _hls_sessions = HlsSessionStore()
 
@@ -504,20 +462,6 @@ async def save_about_endpoint(request: Request):
 
     new_revision = content_revision(ABOUT_FILE)
     return {"success": True, "revision": new_revision}
-
-
-@router.get("/settings")
-async def get_settings():
-    """Get site settings for editing."""
-    return load_settings()
-
-
-@router.post("/save-settings")
-async def save_settings_endpoint(request: Request):
-    """Save site settings."""
-    data = await request.json()
-    save_settings(data)
-    return {"success": True}
 
 
 @router.post("/upload-media")
@@ -936,144 +880,6 @@ async def generate_sprite_sheet_endpoint(request: Request):
                     pass
         if hls_session_id:
             _hls_sessions.delete(hls_session_id)
-
-
-@router.post("/process-hero-video")
-async def process_hero_video(request: Request):
-    """Process a hero video: generate HLS, sprite sheet, and thumbnail.
-
-    Streams the upload in 1 MB chunks to avoid loading the entire file into RAM.
-    Processing runs in a background thread with progress tracking.
-
-    Accepts either a file upload OR a temp_id from a previous thumbnail extraction.
-    """
-    form = await request.form()
-    file = form.get("file")
-    temp_id = form.get("temp_id")
-    project_slug = form.get("project_slug")
-    sprite_start = float(form.get("sprite_start", 0))
-    sprite_duration = float(form.get("sprite_duration", 3))
-
-    if not project_slug:
-        raise HTTPException(status_code=400, detail="project_slug is required")
-    if not validate_slug(project_slug):
-        raise HTTPException(status_code=400, detail="Invalid slug format")
-
-    # Use existing temp file if temp_id provided, otherwise expect file upload
-    temp_path = None
-    use_existing_temp = False
-
-    if temp_id:
-        # Use existing temp file from thumbnail extraction
-        temp_info = _temp_video_files.get(temp_id)
-        if not temp_info:
-            raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
-        temp_path = temp_info["path"]
-        if not os.path.exists(temp_path):
-            raise HTTPException(status_code=400, detail="Temp file not found")
-        use_existing_temp = True
-    else:
-        # Backwards compatible: accept file upload
-        if not file:
-            raise HTTPException(status_code=400, detail="Either file or temp_id is required")
-        try:
-            # Stream upload to temp file in 1 MB chunks
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-                while True:
-                    chunk = await file.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    temp_file.write(chunk)
-                temp_path = temp_file.name
-        except Exception as e:
-            logger.exception("Hero video upload failed")
-            raise HTTPException(status_code=500, detail="Video upload failed")
-
-    # Initialize progress tracking
-    _processing_progress.create(
-        project_slug,
-        status="processing",
-        stage="Starting...",
-        progress=0,
-        video=None,
-        error=None,
-    )
-
-    def progress_callback(stage: str, progress: float):
-        _processing_progress.update(project_slug, stage=stage, progress=progress)
-
-    def run_processing():
-        from utils.video import process_hero_video as process_video
-
-        try:
-            # Note: Don't delete old files here - they're cleaned up after save
-            # to prevent data loss if user cancels mid-upload
-            result = process_video(
-                temp_path,
-                project_slug,
-                trim_start=0,
-                sprite_start=sprite_start,
-                sprite_duration=sprite_duration,
-                progress_callback=progress_callback,
-            )
-
-            _processing_progress.update(
-                project_slug,
-                status="complete",
-                stage="Complete!",
-                progress=100,
-                video={
-                    "hls": result["hls"],
-                    "thumbnail": result["thumbnail"],
-                    "spriteSheet": result["spriteSheet"],
-                },
-            )
-        except Exception as e:
-            logger.exception("Hero video processing failed")
-            _processing_progress.update(
-                project_slug,
-                status="error",
-                stage="Failed",
-                error=str(e),
-            )
-        finally:
-            # Clean up temp file
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-            # Remove from temp files dict if it was using a temp_id
-            if temp_id:
-                _temp_video_files.delete(temp_id)
-
-    # Start processing in background thread
-    thread = threading.Thread(target=run_processing, daemon=True)
-    thread.start()
-
-    return {"success": True, "message": "Upload received, processing started"}
-
-
-@router.get("/process-hero-video/progress/{slug}")
-async def get_hero_video_progress(slug: str):
-    """Get processing progress for a hero video."""
-    progress = _processing_progress.get(slug)
-    if not progress:
-        return JSONResponse({"status": "unknown", "stage": "No processing in progress", "progress": 0})
-
-    response = {
-        "status": progress["status"],
-        "stage": progress["stage"],
-        "progress": progress["progress"],
-    }
-
-    if progress["status"] == "complete" and progress.get("video"):
-        response["video"] = progress["video"]
-        # Clean up progress entry after delivering result
-        _processing_progress.pop(slug)
-
-    if progress["status"] == "error":
-        response["error"] = progress.get("error", "Unknown error")
-        _processing_progress.pop(slug)
-
-    return response
 
 
 @router.post("/process-content-video")

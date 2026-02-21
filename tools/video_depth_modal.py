@@ -105,9 +105,7 @@ def run_depth_inference(
             - depth_npz: list of (frame_idx, npz_bytes) tuples if save_npz
             - metadata: processing info
     """
-    import os
     import tempfile
-    import cv2
     import numpy as np
     from pathlib import Path
 
@@ -268,9 +266,6 @@ def run_depth_inference(
             # This guarantees perfect 1:1 alignment with depth frames
             rgb_frames_dir = output_dir / "rgb_frames"
             rgb_frames_dir.mkdir()
-
-            from PIL import Image
-            import io
 
             src_video = output_dir / f"{stem}_src.mp4"
             if src_video.exists():

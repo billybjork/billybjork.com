@@ -14,7 +14,7 @@ from config import templates
 from middleware.cache_control import CacheControlMiddleware
 from middleware.forwarded_proto import ForwardedProtoMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
-from routers import admin, api, auth, feed, pages, test, valentine
+from routers import admin, auth, feed, pages, test, valentine
 from utils.analytics import init_db
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,6 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Include routers
-app.include_router(api.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(feed.router)

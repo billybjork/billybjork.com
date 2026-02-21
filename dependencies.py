@@ -124,12 +124,6 @@ def require_edit_mode(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Not authorized")
 
 
-# ── kept for backwards compat (old name used in existing imports) ──
-def require_dev_mode(request: Request) -> None:
-    """Alias for require_edit_mode — kept so existing imports don't break."""
-    require_edit_mode(request)
-
-
 def get_general_info() -> GeneralInfo:
     """Load general info as a compatibility object."""
     settings = load_settings()
