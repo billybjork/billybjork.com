@@ -32,6 +32,7 @@ export const COL_SEPARATOR = '<!-- col -->';
 export const HTML_START = '<!-- html -->';
 export const HTML_END = '<!-- /html -->';
 const HTML_BLOCK_PATTERN = /^<!--\s*html(?:\s+style="([^"]*)")?\s*-->\s*([\s\S]*?)\s*<!--\s*\/html\s*-->$/;
+const TRAILING_CAPTION_PATTERN = /\n*<p\s+class=(["'])media-caption\1>([\s\S]*?)<\/p>\s*$/i;
 
 // ========== BLOCK ID GENERATION ==========
 
@@ -51,6 +52,7 @@ interface PartialBlock {
   src?: string;
   alt?: string;
   style?: string | null;
+  caption?: string;
   align?: Alignment;
   autoplay?: boolean;
   language?: string;
@@ -74,6 +76,52 @@ function buildHtmlStartMarker(style: string | null | undefined): string {
   const cleanStyle = (style ?? '').trim();
   if (!cleanStyle) return HTML_START;
   return `<!-- html style="${encodeHtmlCommentStyle(cleanStyle)}" -->`;
+}
+
+function isCaptionCapableType(type: BlockType | undefined): type is 'image' | 'video' | 'html' {
+  return type === 'image' || type === 'video' || type === 'html';
+}
+
+interface CaptionExtractionResult {
+  content: string;
+  caption: string | null;
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, '\'')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function extractTrailingCaption(content: string): CaptionExtractionResult {
+  const match = content.match(TRAILING_CAPTION_PATTERN);
+  if (!match) {
+    return { content, caption: null };
+  }
+
+  const index = match.index ?? content.length;
+  return {
+    content: content.slice(0, index).trim(),
+    caption: decodeHtmlEntities((match[2] ?? '').trim()),
+  };
+}
+
+function formatCaptionParagraph(caption: string | null | undefined): string {
+  const cleanCaption = (caption ?? '').trim();
+  if (!cleanCaption) return '';
+  return `\n<p class="media-caption">${escapeHtml(cleanCaption)}</p>`;
 }
 
 /**
@@ -198,7 +246,18 @@ export function parseSingleBlock(content: string, index: number): Block {
     id: generateBlockId(index),
     content: trimmed
   };
-  detectBlockType(block, trimmed);
+  const extractedCaption = extractTrailingCaption(trimmed);
+  if (extractedCaption.caption !== null) {
+    const probeBlock: PartialBlock = { id: block.id };
+    detectBlockType(probeBlock, extractedCaption.content);
+    if (isCaptionCapableType(probeBlock.type)) {
+      Object.assign(block, probeBlock, { caption: extractedCaption.caption });
+    } else {
+      detectBlockType(block, trimmed);
+    }
+  } else {
+    detectBlockType(block, trimmed);
+  }
 
   // Convert partial block to proper Block type based on detected type
   switch (block.type) {
@@ -216,6 +275,7 @@ export function parseSingleBlock(content: string, index: number): Block {
         src: block.src ?? '',
         alt: block.alt ?? '',
         style: block.style ?? null,
+        caption: block.caption ?? '',
         align: block.align ?? 'left',
       } as ImageBlock;
     case 'video':
@@ -224,6 +284,7 @@ export function parseSingleBlock(content: string, index: number): Block {
         type: 'video',
         src: block.src ?? '',
         style: block.style ?? null,
+        caption: block.caption ?? '',
         align: block.align ?? 'left',
         autoplay: block.autoplay ?? false,
       } as VideoBlock;
@@ -240,6 +301,7 @@ export function parseSingleBlock(content: string, index: number): Block {
         type: 'html',
         html: block.html ?? '',
         style: block.style ?? null,
+        caption: block.caption ?? '',
         align: block.align ?? 'left',
       } as HtmlBlock;
     case 'callout':
@@ -322,13 +384,14 @@ export function parseMarkdown(markdown: string): Block[] {
 export function formatImageMarkdown(block: ImageBlock): string {
   const hasSize = block.style && (block.style.includes('width') || block.style.includes('max-width'));
   const hasAlignment = block.align && block.align !== 'left';
+  const captionMarkup = formatCaptionParagraph(block.caption);
 
   if (hasSize || hasAlignment) {
     const finalStyle = buildMediaStyleString(block);
-    return `<img src="${block.src}" alt="${block.alt || ''}" style="${finalStyle}">`;
+    return `<img src="${block.src}" alt="${block.alt || ''}" style="${finalStyle}">${captionMarkup}`;
   }
   // Use markdown syntax for unsized, left-aligned images
-  return `![${block.alt || ''}](${block.src})`;
+  return `![${block.alt || ''}](${block.src})${captionMarkup}`;
 }
 
 /**
@@ -338,12 +401,13 @@ export function formatVideoMarkdown(block: VideoBlock): string {
   const playbackAttrs = block.autoplay ? 'autoplay loop muted playsinline' : 'controls';
   const hasSize = block.style && (block.style.includes('width') || block.style.includes('max-width'));
   const hasAlignment = block.align && block.align !== 'left';
+  const captionMarkup = formatCaptionParagraph(block.caption);
 
   if (hasSize || hasAlignment) {
     const finalStyle = buildMediaStyleString(block);
-    return `<video src="${block.src}" ${playbackAttrs} style="${finalStyle}"></video>`;
+    return `<video src="${block.src}" ${playbackAttrs} style="${finalStyle}"></video>${captionMarkup}`;
   }
-  return `<video src="${block.src}" ${playbackAttrs}></video>`;
+  return `<video src="${block.src}" ${playbackAttrs}></video>${captionMarkup}`;
 }
 
 /**
@@ -371,12 +435,13 @@ export function formatCalloutHtml(block: CalloutBlock): string {
 export function formatHtmlBlock(block: HtmlBlock): string {
   const htmlContent = block.html || '';
   const startMarker = buildHtmlStartMarker(block.style);
+  const captionMarkup = formatCaptionParagraph(block.caption);
   // Wrap in alignment div if not left-aligned
   if (block.align && block.align !== 'left') {
     const alignStyle = getTextAlignmentStyle(block.align);
-    return `${startMarker}\n<div style="${alignStyle}">\n${htmlContent}\n</div>\n${HTML_END}`;
+    return `${startMarker}\n<div style="${alignStyle}">\n${htmlContent}\n</div>\n${HTML_END}${captionMarkup}`;
   }
-  return `${startMarker}\n${htmlContent}\n${HTML_END}`;
+  return `${startMarker}\n${htmlContent}\n${HTML_END}${captionMarkup}`;
 }
 
 /**
@@ -438,13 +503,13 @@ export function createBlock<T extends BlockType>(
     case 'text':
       return { ...base, content: '', align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'image':
-      return { ...base, src: '', alt: '', style: null, align: 'left', ...props } as Extract<Block, { type: T }>;
+      return { ...base, src: '', alt: '', style: null, caption: '', align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'video':
-      return { ...base, src: '', style: null, align: 'left', autoplay: false, ...props } as Extract<Block, { type: T }>;
+      return { ...base, src: '', style: null, caption: '', align: 'left', autoplay: false, ...props } as Extract<Block, { type: T }>;
     case 'code':
       return { ...base, language: 'javascript', code: '', ...props } as Extract<Block, { type: T }>;
     case 'html':
-      return { ...base, html: '', style: null, align: 'left', ...props } as Extract<Block, { type: T }>;
+      return { ...base, html: '', style: null, caption: '', align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'callout':
       return { ...base, content: '', align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'row':

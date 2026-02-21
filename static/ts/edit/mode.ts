@@ -7,13 +7,11 @@
 import type { Block, BlockType, Alignment, TextBlock, ImageBlock, VideoBlock, CodeBlock, HtmlBlock, CalloutBlock, RowBlock } from '../types/blocks';
 import type { ProjectData, AboutData } from '../types/api';
 import {
-  generateId,
   isDevMode,
   setupAutoResizeTextarea,
   createImageElement,
   createVideoElement,
   applyVideoPlaybackSettings,
-  applyAlignment,
   insertTextWithUndo,
   handleFormattingShortcuts,
   handleListShortcuts,
@@ -23,8 +21,20 @@ import {
 import { createSandboxedIframe, cleanupIframe } from '../utils/html-sandbox';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
 import EditSlash from './slash';
-import EditMedia from './media';
+import EditMedia, { type VideoUploadProgressUpdate } from './media';
 import EditUndo from './undo';
+
+// ========== ICONS ==========
+
+const ICONS = {
+  dragHandle: '<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>',
+  delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>',
+  columns: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 8 16 13"/><line x1="21" y1="8" x2="3" y2="8"/><polyline points="8 21 3 16 8 11"/><line x1="3" y1="16" x2="21" y2="16"/></svg>',
+  divider: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>',
+};
 
 // ========== TYPES ==========
 
@@ -48,6 +58,13 @@ interface DragState {
 interface UpdateBlockOptions {
   render?: boolean;
   markDirty?: boolean;
+}
+
+type RowColumnSide = 'left' | 'right';
+
+interface BlockContext {
+  index: number;
+  rowSide?: RowColumnSide;
 }
 
 type SaveAction =
@@ -559,6 +576,61 @@ function updateTopLevelBlock(
   return true;
 }
 
+function applyBlockUpdates(block: Block, updates: Partial<Block>): Block {
+  switch (block.type) {
+    case 'text':
+      return { ...block, ...(updates as Partial<TextBlock>) };
+    case 'image':
+      return { ...block, ...(updates as Partial<ImageBlock>) };
+    case 'video':
+      return { ...block, ...(updates as Partial<VideoBlock>) };
+    case 'code':
+      return { ...block, ...(updates as Partial<CodeBlock>) };
+    case 'html':
+      return { ...block, ...(updates as Partial<HtmlBlock>) };
+    case 'callout':
+      return { ...block, ...(updates as Partial<CalloutBlock>) };
+    case 'row':
+      return { ...block, ...(updates as Partial<RowBlock>) };
+    case 'divider':
+    default:
+      return { ...block };
+  }
+}
+
+function updateBlockInContext(
+  context: BlockContext,
+  updater: (block: Block) => Block,
+  options: UpdateBlockOptions = {}
+): boolean {
+  const rowSide = context.rowSide;
+  if (rowSide) {
+    return updateTopLevelBlock(
+      context.index,
+      (parentBlock) => {
+        if (parentBlock.type !== 'row') return parentBlock;
+        const currentChild = parentBlock[rowSide];
+        const updatedChild = updater(currentChild);
+        if (updatedChild === currentChild) return parentBlock;
+        return rowSide === 'left'
+          ? { ...parentBlock, left: updatedChild }
+          : { ...parentBlock, right: updatedChild };
+      },
+      options,
+    );
+  }
+
+  return updateTopLevelBlock(context.index, updater, options);
+}
+
+function updateBlockFieldsInContext(
+  context: BlockContext,
+  updates: Partial<Block>,
+  options: UpdateBlockOptions = {}
+): void {
+  updateBlockInContext(context, (block) => applyBlockUpdates(block, updates), options);
+}
+
 function createBlockWithProps(type: BlockType, props: Partial<Block> = {}): Block {
   return createBlock(type as never, props as never) as Block;
 }
@@ -700,7 +772,7 @@ function createBlockWrapper(block: Block, index: number): HTMLElement {
   // Drag handle
   const handle = document.createElement('div');
   handle.className = 'block-handle';
-  handle.innerHTML = '\u22ee\u22ee';
+  handle.innerHTML = ICONS.dragHandle;
   handle.draggable = true;
   handle.addEventListener('dragstart', (e) => handleDragStart(e, index));
   handle.addEventListener('dragend', handleDragEnd);
@@ -709,18 +781,18 @@ function createBlockWrapper(block: Block, index: number): HTMLElement {
   // Block content
   const content = document.createElement('div');
   content.className = 'block-content';
-  content.appendChild(renderBlockContent(block, index));
+  content.appendChild(renderBlockContent(block, { index }));
   wrapper.appendChild(content);
 
-  // Alignment toolbar (for most block types, except divider and code)
-  if (block.type !== 'divider' && block.type !== 'code') {
-    wrapper.appendChild(createAlignmentToolbar(block, index));
+  // Alignment toolbar (for top-level non-row text/media/callout/html blocks)
+  if (block.type !== 'divider' && block.type !== 'code' && block.type !== 'row') {
+    wrapper.appendChild(createAlignmentToolbar(block, { index }));
   }
 
   // Delete button
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'block-delete-btn';
-  deleteBtn.innerHTML = '\u00d7';
+  deleteBtn.innerHTML = ICONS.delete;
   deleteBtn.title = 'Delete block';
   deleteBtn.addEventListener('click', () => deleteBlock(index));
   wrapper.appendChild(deleteBtn);
@@ -736,7 +808,7 @@ function createBlockWrapper(block: Block, index: number): HTMLElement {
 /**
  * Create alignment toolbar with left/center/right buttons
  */
-function createAlignmentToolbar(block: Block, index: number): HTMLElement {
+function createAlignmentToolbar(block: Block, context: BlockContext): HTMLElement {
   const alignToolbar = document.createElement('div');
   alignToolbar.className = 'block-align-toolbar';
 
@@ -756,7 +828,7 @@ function createAlignmentToolbar(block: Block, index: number): HTMLElement {
     btn.type = 'button';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      setBlockAlignment(index, value);
+      setBlockAlignment(context, value);
     });
     alignToolbar.appendChild(btn);
   });
@@ -767,9 +839,9 @@ function createAlignmentToolbar(block: Block, index: number): HTMLElement {
 /**
  * Set alignment for a block
  */
-function setBlockAlignment(index: number, align: Alignment): void {
-  updateTopLevelBlock(
-    index,
+function setBlockAlignment(context: BlockContext, align: Alignment): void {
+  updateBlockInContext(
+    context,
     (block) => ('align' in block ? { ...block, align } as Block : block),
   );
 }
@@ -777,36 +849,36 @@ function setBlockAlignment(index: number, align: Alignment): void {
 /**
  * Render block content based on type
  */
-function renderBlockContent(block: Block, index: number): HTMLElement {
+function renderBlockContent(block: Block, context: BlockContext): HTMLElement {
   switch (block.type) {
     case 'text':
-      return renderTextBlock(block, index);
+      return renderTextBlock(block, context);
     case 'image':
-      return renderImageBlock(block, index);
+      return renderImageBlock(block, context);
     case 'video':
-      return renderVideoBlock(block, index);
+      return renderVideoBlock(block, context);
     case 'code':
-      return renderCodeBlock(block, index);
+      return renderCodeBlock(block, context);
     case 'html':
-      return renderHtmlBlock(block, index);
+      return renderHtmlBlock(block, context);
     case 'callout':
-      return renderCalloutBlock(block, index);
+      return renderCalloutBlock(block, context);
     case 'row':
-      return renderRowBlock(block, index);
+      return renderRowBlock(block, context.index);
     case 'divider':
       return renderDividerBlock();
     default:
-      return renderTextBlock(block as TextBlock, index);
+      return renderTextBlock(block as TextBlock, context);
   }
 }
 
 /**
  * Render text block
  */
-function renderTextBlock(block: TextBlock, index: number): HTMLElement {
+function renderTextBlock(block: TextBlock, context: BlockContext): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'text-block-wrapper';
-  wrapper.appendChild(createLineEditor(block, index));
+  wrapper.appendChild(createLineEditor(block, context));
   return wrapper;
 }
 
@@ -831,7 +903,7 @@ interface LinePreviewResult {
 /**
  * Create a line-based editor for a text block
  */
-function createLineEditor(block: TextBlock, index: number): HTMLElement {
+function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement {
   const lineContainer = document.createElement('div');
   lineContainer.className = 'text-block-lines';
 
@@ -843,22 +915,15 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
   if (!lines.length) lines = [''];
 
   let activeLineIndex: number | null = null;
+  const slashEnabled = !context.rowSide;
 
   const updateBlockContent = (): void => {
     const nextContent = lines.join('\n');
-    const currentBlock = blocks[index];
-    if (currentBlock?.type === 'text') {
-      updateTopLevelBlock(
-        index,
-        (existing) => (existing.type === 'text' ? { ...existing, content: nextContent } : existing),
-        { render: false },
-      );
-      return;
-    }
-
-    // Row children are edited by reference today; keep behavior for nested blocks.
-    block.content = nextContent;
-    markDirty();
+    updateBlockInContext(
+      context,
+      (existing) => (existing.type === 'text' ? { ...existing, content: nextContent } : existing),
+      { render: false },
+    );
   };
 
   const renderLines = (focusLineIndex: number | null = null, focusCaret: number | { start: number; end?: number } | null = null): void => {
@@ -923,7 +988,9 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
 
     textarea.addEventListener('input', () => {
       const newValue = textarea.value;
-      EditSlash.handleTextareaInput(textarea, index);
+      if (slashEnabled) {
+        EditSlash.handleTextareaInput(textarea, context.index);
+      }
 
       if (newValue.includes('\n')) {
         const splitLines = newValue.split('\n');
@@ -940,7 +1007,7 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
     });
 
     textarea.addEventListener('keydown', (e) => {
-      if (EditSlash.isActive()) {
+      if (slashEnabled && EditSlash.isActive()) {
         if (EditSlash.handleKeydown(e)) return;
       }
 
@@ -1246,10 +1313,22 @@ function sanitizeUrl(url: string): string | null {
   return null;
 }
 
+function createMediaCaptionInput(caption: string | undefined, context: BlockContext): HTMLInputElement {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'media-caption-input';
+  input.placeholder = 'Caption (optional)...';
+  input.value = caption || '';
+  input.addEventListener('input', () => {
+    updateBlockFieldsInContext(context, { caption: input.value }, { render: false });
+  });
+  return input;
+}
+
 /**
  * Render image block
  */
-function renderImageBlock(block: ImageBlock, index: number): HTMLElement {
+function renderImageBlock(block: ImageBlock, context: BlockContext): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'image-block-wrapper';
 
@@ -1266,11 +1345,12 @@ function renderImageBlock(block: ImageBlock, index: number): HTMLElement {
     altInput.placeholder = 'Image description...';
     altInput.value = block.alt || '';
     altInput.addEventListener('input', () => {
-      updateBlock(index, { alt: altInput.value }, { render: false });
+      updateBlockFieldsInContext(context, { alt: altInput.value }, { render: false });
     });
     wrapper.appendChild(altInput);
+    wrapper.appendChild(createMediaCaptionInput(block.caption, context));
   } else {
-    wrapper.appendChild(createUploadZone(index, 'image'));
+    wrapper.appendChild(createUploadZone(context, 'image'));
   }
 
   return wrapper;
@@ -1279,7 +1359,7 @@ function renderImageBlock(block: ImageBlock, index: number): HTMLElement {
 /**
  * Render video block
  */
-function renderVideoBlock(block: VideoBlock, index: number): HTMLElement {
+function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'video-block-wrapper';
 
@@ -1300,7 +1380,7 @@ function renderVideoBlock(block: VideoBlock, index: number): HTMLElement {
     autoplayToggle.addEventListener('change', () => {
       const autoplay = autoplayToggle.checked;
       applyVideoPlaybackSettings(video, autoplay);
-      updateBlock(index, { autoplay }, { render: false });
+      updateBlockFieldsInContext(context, { autoplay }, { render: false });
     });
     optionsRow.appendChild(autoplayToggle);
 
@@ -1310,8 +1390,9 @@ function renderVideoBlock(block: VideoBlock, index: number): HTMLElement {
     optionsRow.appendChild(autoplayLabel);
 
     wrapper.appendChild(optionsRow);
+    wrapper.appendChild(createMediaCaptionInput(block.caption, context));
   } else {
-    wrapper.appendChild(createUploadZone(index, 'video'));
+    wrapper.appendChild(createUploadZone(context, 'video'));
   }
 
   return wrapper;
@@ -1320,7 +1401,7 @@ function renderVideoBlock(block: VideoBlock, index: number): HTMLElement {
 /**
  * Render code block
  */
-function renderCodeBlock(block: CodeBlock, index: number): HTMLElement {
+function renderCodeBlock(block: CodeBlock, context: BlockContext): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'code-block-wrapper';
 
@@ -1335,7 +1416,7 @@ function renderCodeBlock(block: CodeBlock, index: number): HTMLElement {
     langSelect.appendChild(option);
   });
   langSelect.addEventListener('change', () => {
-    updateBlock(index, { language: langSelect.value }, { render: false });
+    updateBlockFieldsInContext(context, { language: langSelect.value }, { render: false });
   });
   wrapper.appendChild(langSelect);
 
@@ -1346,7 +1427,7 @@ function renderCodeBlock(block: CodeBlock, index: number): HTMLElement {
   textarea.spellcheck = false;
 
   setupAutoResizeTextarea(textarea, (value) => {
-    updateBlock(index, { code: value }, { render: false });
+    updateBlockFieldsInContext(context, { code: value }, { render: false });
   });
 
   textarea.addEventListener('keydown', (e) => {
@@ -1364,7 +1445,7 @@ function renderCodeBlock(block: CodeBlock, index: number): HTMLElement {
 /**
  * Render callout block
  */
-function renderCalloutBlock(block: CalloutBlock, index: number): HTMLElement {
+function renderCalloutBlock(block: CalloutBlock, context: BlockContext): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'callout-block-wrapper';
 
@@ -1378,7 +1459,7 @@ function renderCalloutBlock(block: CalloutBlock, index: number): HTMLElement {
   }
 
   setupAutoResizeTextarea(textarea, (value) => {
-    updateBlock(index, { content: value }, { render: false });
+    updateBlockFieldsInContext(context, { content: value }, { render: false });
   });
 
   wrapper.appendChild(textarea);
@@ -1392,16 +1473,36 @@ function renderRowBlock(block: RowBlock, index: number): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'row-block-wrapper';
 
+  const toolbar = document.createElement('div');
+  toolbar.className = 'row-toolbar';
+
+  const swapBtn = document.createElement('button');
+  swapBtn.className = 'row-action-btn';
+  swapBtn.type = 'button';
+  swapBtn.innerHTML = ICONS.swap;
+  swapBtn.title = 'Swap column sides';
+  swapBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    swapRowColumns(index);
+  });
+  toolbar.appendChild(swapBtn);
+  wrapper.appendChild(toolbar);
+
+  const columns = document.createElement('div');
+  columns.className = 'row-columns';
+
   const leftCol = document.createElement('div');
   leftCol.className = 'row-column row-column-left';
-  leftCol.appendChild(renderBlockContent(block.left, index));
+  leftCol.appendChild(renderBlockContent(block.left, { index, rowSide: 'left' }));
 
   const rightCol = document.createElement('div');
   rightCol.className = 'row-column row-column-right';
-  rightCol.appendChild(renderBlockContent(block.right, index));
+  rightCol.appendChild(renderBlockContent(block.right, { index, rowSide: 'right' }));
 
-  wrapper.appendChild(leftCol);
-  wrapper.appendChild(rightCol);
+  columns.appendChild(leftCol);
+  columns.appendChild(rightCol);
+  wrapper.appendChild(columns);
 
   return wrapper;
 }
@@ -1410,15 +1511,16 @@ function renderRowBlock(block: RowBlock, index: number): HTMLElement {
  * Render divider block
  */
 function renderDividerBlock(): HTMLElement {
-  const hr = document.createElement('hr');
-  hr.className = 'block-divider';
-  return hr;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'block-divider';
+  wrapper.innerHTML = ICONS.divider;
+  return wrapper;
 }
 
 /**
  * Render HTML block with iframe sandbox for isolation
  */
-function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
+function renderHtmlBlock(block: HtmlBlock, context: BlockContext): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'html-block-wrapper';
 
@@ -1510,8 +1612,10 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
   textarea.value = block.html || '';
   textarea.placeholder = 'Enter raw HTML...';
   textarea.style.display = 'none';
+  const captionInput = createMediaCaptionInput(block.caption, context);
   wrapper.appendChild(textarea);
   wrapper.appendChild(controls);
+  wrapper.appendChild(captionInput);
 
   toggleBtn.addEventListener('click', () => {
     isEditing = !isEditing;
@@ -1546,7 +1650,7 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
 
   // Update block data on textarea changes (no iframe update - wait for preview toggle)
   setupAutoResizeTextarea(textarea, (value) => {
-    updateBlock(index, { html: value }, { render: false });
+    updateBlockFieldsInContext(context, { html: value }, { render: false });
   });
 
   syncInteractionUi();
@@ -1555,6 +1659,33 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
 }
 
 // ========== MERGE DIVIDER & ADD BLOCK ==========
+
+function canMergeBlocksIntoRow(afterIndex: number): boolean {
+  const leftBlock = blocks[afterIndex - 1];
+  const rightBlock = blocks[afterIndex];
+  if (!leftBlock || !rightBlock) return false;
+  return leftBlock.type !== 'row' && rightBlock.type !== 'row';
+}
+
+function mergeBlocksIntoRow(afterIndex: number): void {
+  if (!canMergeBlocksIntoRow(afterIndex)) return;
+
+  const leftBlock = blocks[afterIndex - 1];
+  const rightBlock = blocks[afterIndex];
+  if (!leftBlock || !rightBlock) return;
+
+  const rowBlock = createBlock('row', { left: leftBlock, right: rightBlock }) as RowBlock;
+  const nextBlocks = blocks.slice();
+  nextBlocks.splice(afterIndex - 1, 2, rowBlock);
+  applyBlocksUpdate(nextBlocks);
+}
+
+function swapRowColumns(index: number): void {
+  updateTopLevelBlock(index, (block) => {
+    if (block.type !== 'row') return block;
+    return { ...block, left: block.right, right: block.left };
+  });
+}
 
 /**
  * Create divider between blocks with add button
@@ -1573,6 +1704,18 @@ function createMergeDivider(afterIndex: number): HTMLElement {
     EditSlash.showFromButton(rect, afterIndex, addBtn);
   });
   divider.appendChild(addBtn);
+
+  if (canMergeBlocksIntoRow(afterIndex)) {
+    const columnsBtn = document.createElement('button');
+    columnsBtn.className = 'merge-columns-btn';
+    columnsBtn.type = 'button';
+    columnsBtn.innerHTML = ICONS.columns;
+    columnsBtn.title = 'Turn these two blocks into columns';
+    columnsBtn.addEventListener('click', () => {
+      mergeBlocksIntoRow(afterIndex);
+    });
+    divider.appendChild(columnsBtn);
+  }
 
   return divider;
 }
@@ -1600,33 +1743,85 @@ function createAddBlockButton(insertIndex: number, position: 'top' | 'bottom' = 
 /**
  * Create upload zone for image/video blocks
  */
-function createUploadZone(index: number, type: 'image' | 'video'): HTMLElement {
+function createUploadZone(context: BlockContext, type: 'image' | 'video'): HTMLElement {
   const zone = document.createElement('div');
   zone.className = 'upload-zone';
+  const isVideo = type === 'video';
   zone.innerHTML = `
-    <div class="upload-icon">${type === 'image' ? '\uD83D\uDDBC' : '\uD83C\uDFAC'}</div>
+    <div class="upload-icon">${isVideo ? ICONS.video : ICONS.image}</div>
     <div class="upload-text">Drop ${type} here or click to upload</div>
-    <input type="file" class="upload-input" accept="${type === 'image' ? 'image/*' : 'video/*'}">
+    ${isVideo
+    ? `<div class="upload-zone-progress" hidden>
+        <div class="upload-zone-progress-bar">
+          <div class="upload-zone-progress-fill"></div>
+        </div>
+        <div class="upload-zone-progress-text" aria-live="polite"></div>
+      </div>`
+    : ''}
+    <input type="file" class="upload-input" accept="${isVideo ? 'video/*' : 'image/*'}">
   `;
+
+  const progressWrap = zone.querySelector<HTMLElement>('.upload-zone-progress');
+  const progressFill = zone.querySelector<HTMLElement>('.upload-zone-progress-fill');
+  const progressText = zone.querySelector<HTMLElement>('.upload-zone-progress-text');
+  let uploadInFlight = false;
+
+  const updateVideoProgress = (update: VideoUploadProgressUpdate): void => {
+    if (!progressWrap || !progressFill || !progressText) return;
+
+    progressWrap.hidden = false;
+    progressFill.style.width = `${Math.max(0, Math.min(100, update.progress))}%`;
+    progressFill.classList.toggle('is-indeterminate', update.stage === 'processing');
+    progressText.textContent = update.message;
+
+    zone.classList.toggle('uploading', update.stage !== 'error' && update.stage !== 'complete');
+    zone.classList.toggle('upload-error', update.stage === 'error');
+  };
+
+  const handleFile = async (file: File): Promise<void> => {
+    if (uploadInFlight) return;
+    uploadInFlight = true;
+    zone.classList.remove('upload-error');
+
+    try {
+      if (type === 'image') {
+        await EditMedia.handleImageUploadForBlock(file, context.index, context.rowSide);
+      } else {
+        updateVideoProgress({
+          stage: 'uploading',
+          progress: 0,
+          message: 'Starting upload...',
+        });
+        await EditMedia.handleVideoUploadForBlock(file, context.index, {
+          rowSide: context.rowSide,
+          onProgress: updateVideoProgress,
+        });
+      }
+    } finally {
+      uploadInFlight = false;
+      input.value = '';
+      if (type === 'image') {
+        zone.classList.remove('uploading');
+      }
+    }
+  };
 
   const input = zone.querySelector<HTMLInputElement>('.upload-input')!;
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (file) {
-      if (type === 'image') {
-        await EditMedia.handleImageUploadForBlock(file, index);
-      } else {
-        await EditMedia.handleVideoUploadForBlock(file, index);
-      }
+      await handleFile(file);
     }
   });
 
   zone.addEventListener('click', (e) => {
+    if (uploadInFlight) return;
     if (e.target !== input) input.click();
   });
 
   zone.addEventListener('dragover', (e) => {
     e.preventDefault();
+    if (uploadInFlight) return;
     zone.classList.add('drag-over');
   });
 
@@ -1636,14 +1831,11 @@ function createUploadZone(index: number, type: 'image' | 'video'): HTMLElement {
 
   zone.addEventListener('drop', async (e) => {
     e.preventDefault();
+    if (uploadInFlight) return;
     zone.classList.remove('drag-over');
     const file = e.dataTransfer?.files[0];
     if (file) {
-      if (type === 'image') {
-        await EditMedia.handleImageUploadForBlock(file, index);
-      } else {
-        await EditMedia.handleVideoUploadForBlock(file, index);
-      }
+      await handleFile(file);
     }
   });
 
@@ -1975,27 +2167,7 @@ export function updateBlock(
   updates: Partial<Block>,
   options: UpdateBlockOptions = {}
 ): void {
-  updateTopLevelBlock(index, (block) => {
-    switch (block.type) {
-      case 'text':
-        return { ...block, ...(updates as Partial<TextBlock>) };
-      case 'image':
-        return { ...block, ...(updates as Partial<ImageBlock>) };
-      case 'video':
-        return { ...block, ...(updates as Partial<VideoBlock>) };
-      case 'code':
-        return { ...block, ...(updates as Partial<CodeBlock>) };
-      case 'html':
-        return { ...block, ...(updates as Partial<HtmlBlock>) };
-      case 'callout':
-        return { ...block, ...(updates as Partial<CalloutBlock>) };
-      case 'row':
-        return { ...block, ...(updates as Partial<RowBlock>) };
-      case 'divider':
-      default:
-        return { ...block };
-    }
-  }, options);
+  updateBlockFieldsInContext({ index }, updates, options);
 }
 
 // ========== PUBLIC API ==========

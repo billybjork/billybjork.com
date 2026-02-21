@@ -185,11 +185,17 @@ body.modal-open {
     cursor: grab;
     color: #444;
     padding: 4px 2px;
-    font-size: 14px;
     line-height: 1;
     user-select: none;
     transition: color 0.2s ease;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.block-handle svg {
+    width: 14px;
+    height: 14px;
 }
 
 .block-handle:hover {
@@ -218,9 +224,13 @@ body.modal-open {
     border-radius: 4px;
     color: #555;
     cursor: pointer;
-    font-size: 18px;
     opacity: 0;
     transition: all 0.2s ease;
+}
+
+.block-delete-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .block-wrapper:hover .block-delete-btn {
@@ -302,7 +312,8 @@ body.modal-open {
     margin: 2px 0;
 }
 
-.merge-add-btn {
+.merge-add-btn,
+.merge-columns-btn {
     width: 22px;
     height: 22px;
     display: flex;
@@ -320,6 +331,21 @@ body.modal-open {
 .merge-add-btn:hover {
     background: #22c55e;
     border-color: #22c55e;
+    color: #fff;
+}
+
+.merge-columns-btn {
+    padding: 0;
+}
+
+.merge-columns-btn svg {
+    width: 13px;
+    height: 13px;
+}
+
+.merge-columns-btn:hover {
+    background: #3b82f6;
+    border-color: #3b82f6;
     color: #fff;
 }
 
@@ -564,6 +590,44 @@ body.modal-open {
 
 .row-block-wrapper {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.row-toolbar {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.row-action-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: #151515;
+    border: 1px solid #2f2f2f;
+    border-radius: 4px;
+    color: #777;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.row-action-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.row-action-btn:hover {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    background: #1b1f2b;
+}
+
+.row-columns {
+    display: flex;
     gap: 12px;
     width: 100%;
 }
@@ -571,6 +635,12 @@ body.modal-open {
 .row-column {
     flex: 1;
     min-width: 0;
+}
+
+@media (max-width: 768px) {
+    .row-columns {
+        flex-direction: column;
+    }
 }
 
 /* ========================================
@@ -592,12 +662,14 @@ body.modal-open {
     width: 100%;
     border: none;
     margin: 0;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.block-divider::after {
-    content: '⁂';
-    font-size: 1.4rem;
+.block-divider svg {
+    width: 20px;
+    height: 20px;
     color: rgba(255, 255, 255, 0.4);
 }
 
@@ -705,6 +777,20 @@ body.modal-open {
     outline: none;
 }
 
+.media-caption-input {
+    padding: 7px 12px;
+    background: #151515;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #b6b6b6;
+    font-size: 12px;
+}
+
+.media-caption-input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
 /* ========================================
    Video Block
    ======================================== */
@@ -757,9 +843,25 @@ body.modal-open {
     background: rgba(59, 130, 246, 0.05);
 }
 
+.upload-zone.uploading {
+    cursor: default;
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.upload-zone.upload-error {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+}
+
 .upload-icon {
-    font-size: 28px;
     margin-bottom: 8px;
+    color: #666;
+}
+
+.upload-icon svg {
+    width: 32px;
+    height: 32px;
 }
 
 .upload-text {
@@ -769,6 +871,53 @@ body.modal-open {
 
 .upload-input {
     display: none;
+}
+
+.upload-zone-progress {
+    width: min(360px, 100%);
+    margin-top: 12px;
+}
+
+.upload-zone-progress-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #222;
+    overflow: hidden;
+}
+
+.upload-zone-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: #3b82f6;
+    transition: width 0.25s ease;
+}
+
+.upload-zone.upload-error .upload-zone-progress-fill {
+    background: #ef4444;
+}
+
+.upload-zone-progress-fill.is-indeterminate {
+    background-image: linear-gradient(90deg, #2563eb, #3b82f6, #60a5fa);
+    background-size: 200% 100%;
+    animation: upload-zone-indeterminate 1s linear infinite;
+}
+
+.upload-zone-progress-text {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #9a9a9a;
+    text-align: center;
+}
+
+@keyframes upload-zone-indeterminate {
+    from {
+        background-position: 0% 0%;
+    }
+
+    to {
+        background-position: 200% 0%;
+    }
 }
 
 /* ========================================
@@ -812,9 +961,13 @@ body.modal-open {
     justify-content: center;
     background: #2a2a2a;
     border-radius: 6px;
-    font-size: 14px;
     color: #888;
     flex-shrink: 0;
+}
+
+.slash-menu-icon svg {
+    width: 16px;
+    height: 16px;
 }
 
 .slash-menu-content {
@@ -836,17 +989,24 @@ body.modal-open {
    Notifications
    ======================================== */
 
-.edit-notification {
+.edit-notification-stack {
     position: fixed;
     bottom: 20px;
     right: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    z-index: 2000;
+}
+
+.edit-notification {
     padding: 12px 20px;
     background: #1a1a1a;
     border: 1px solid #333;
     border-radius: 8px;
     color: #e0e0e0;
     font-size: 14px;
-    z-index: 2000;
     opacity: 0;
     transform: translateY(10px);
     transition: all 0.3s ease;

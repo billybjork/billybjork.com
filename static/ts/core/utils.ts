@@ -3,10 +3,11 @@
  * Shared helper functions for the block editor
  */
 
-import type { Alignment, Block, ImageBlock, VideoBlock } from '../types/blocks';
+import type { Alignment, ImageBlock, VideoBlock } from '../types/blocks';
 import type { FetchJSONOptions } from '../types/api';
 
 type NotificationType = 'info' | 'success' | 'error' | 'warning';
+const EDIT_NOTIFICATION_STACK_ID = 'edit-notification-stack';
 
 interface FormatInfo {
   formatStart: number;
@@ -142,7 +143,18 @@ export function unlockBodyScroll(): void {
   body.style.width = '';
   body.style.overflow = '';
 
-  window.scrollTo(0, scrollY);
+  // Force instant restoration even when global smooth scrolling is enabled.
+  const html = document.documentElement;
+  const previousInlineScrollBehavior = html.style.scrollBehavior;
+  html.style.scrollBehavior = 'auto';
+  window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' });
+  requestAnimationFrame(() => {
+    if (previousInlineScrollBehavior) {
+      html.style.scrollBehavior = previousInlineScrollBehavior;
+    } else {
+      html.style.removeProperty('scroll-behavior');
+    }
+  });
 }
 
 /**
@@ -763,10 +775,18 @@ export function showNotification(
   type: NotificationType = 'info',
   duration: number = 3000
 ): void {
+  let notificationStack = document.getElementById(EDIT_NOTIFICATION_STACK_ID);
+  if (!notificationStack) {
+    notificationStack = document.createElement('div');
+    notificationStack.id = EDIT_NOTIFICATION_STACK_ID;
+    notificationStack.className = 'edit-notification-stack';
+    document.body.appendChild(notificationStack);
+  }
+
   const notification = document.createElement('div');
   notification.className = `edit-notification edit-notification-${type}`;
   notification.textContent = message;
-  document.body.appendChild(notification);
+  notificationStack.appendChild(notification);
 
   requestAnimationFrame(() => {
     notification.classList.add('show');
@@ -774,7 +794,12 @@ export function showNotification(
 
   setTimeout(() => {
     notification.classList.remove('show');
-    setTimeout(() => notification.remove(), 300);
+    setTimeout(() => {
+      notification.remove();
+      if (notificationStack && notificationStack.childElementCount === 0) {
+        notificationStack.remove();
+      }
+    }, 300);
   }, duration);
 }
 

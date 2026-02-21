@@ -21,6 +21,7 @@ export interface ImageBlock extends BaseBlock {
   src: string;
   alt: string;
   style: string | null;
+  caption: string;
   align?: Alignment;
 }
 
@@ -28,6 +29,7 @@ export interface VideoBlock extends BaseBlock {
   type: 'video';
   src: string;
   style: string | null;
+  caption: string;
   align?: Alignment;
   autoplay?: boolean;
 }
@@ -43,6 +45,7 @@ export interface HtmlBlock extends BaseBlock {
   type: 'html';
   html: string;
   style: string | null;
+  caption: string;
   align?: Alignment;
 }
 

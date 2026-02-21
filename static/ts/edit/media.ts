@@ -22,6 +22,7 @@ interface ResizeConfig {
 interface SelectedMedia {
   element: HTMLElement;
   block: ImageBlock | VideoBlock | HtmlBlock;
+  location: BlockLocation | null;
 }
 
 interface ResizeState {
@@ -46,6 +47,13 @@ interface StyleMap {
 interface UpdateBlockOptions {
   render?: boolean;
   markDirty?: boolean;
+}
+
+type RowColumnSide = 'left' | 'right';
+
+interface BlockLocation {
+  index: number;
+  rowSide?: RowColumnSide;
 }
 
 // Callbacks for integration with edit mode
@@ -87,6 +95,63 @@ let boundStopResize: (() => void) | null = null;
 let boundUpdateHandlePositions: (() => void) | null = null;
 let boundDocumentClick: ((e: MouseEvent) => void) | null = null;
 
+function findBlockLocationById(blockId: string): BlockLocation | null {
+  if (!callbacks) return null;
+  const blocks = callbacks.getBlocks();
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    if (!block) continue;
+    if (block.id === blockId) {
+      return { index };
+    }
+    if (block.type === 'row') {
+      if (block.left.id === blockId) {
+        return { index, rowSide: 'left' };
+      }
+      if (block.right.id === blockId) {
+        return { index, rowSide: 'right' };
+      }
+    }
+  }
+  return null;
+}
+
+function resolveBlockLocation(index: number, rowSide?: RowColumnSide): BlockLocation | null {
+  if (!callbacks) return null;
+  const target = callbacks.getBlocks()[index];
+  if (!target) return null;
+  if (!rowSide) return { index };
+  if (target.type !== 'row') return null;
+  return { index, rowSide };
+}
+
+function updateBlockAtLocation(
+  location: BlockLocation,
+  updates: Partial<Block>,
+  options: UpdateBlockOptions = {}
+): void {
+  if (!callbacks) return;
+
+  if (!location.rowSide) {
+    callbacks.updateBlock(location.index, updates, options);
+    return;
+  }
+
+  const parent = callbacks.getBlocks()[location.index];
+  if (!parent || parent.type !== 'row') return;
+
+  const updatedChild = {
+    ...(parent[location.rowSide] as Block),
+    ...updates,
+  } as Block;
+
+  if (location.rowSide === 'left') {
+    callbacks.updateBlock(location.index, { left: updatedChild } as Partial<Block>, options);
+  } else {
+    callbacks.updateBlock(location.index, { right: updatedChild } as Partial<Block>, options);
+  }
+}
+
 // ========== INITIALIZATION ==========
 
 /**
@@ -114,8 +179,14 @@ function setupPasteHandler(): void {
 
         const activeBlock = document.activeElement?.closest('.block-wrapper');
         const blockIndex = activeBlock ? parseInt(activeBlock.getAttribute('data-block-index') ?? '', 10) : null;
+        const activeColumn = document.activeElement?.closest('.row-column-left, .row-column-right');
+        const rowSide: RowColumnSide | undefined = activeColumn?.classList.contains('row-column-left')
+          ? 'left'
+          : activeColumn?.classList.contains('row-column-right')
+            ? 'right'
+            : undefined;
         if (blockIndex !== null && !isNaN(blockIndex)) {
-          await handleImageUploadForBlock(file, blockIndex);
+          await handleImageUploadForBlock(file, blockIndex, rowSide);
         }
         break;
       }
@@ -167,7 +238,7 @@ export function select(element: HTMLElement, block: ImageBlock | VideoBlock | Ht
 
   deselect();
 
-  selectedMedia = { element, block };
+  selectedMedia = { element, block, location: findBlockLocationById(block.id) };
   element.classList.add('media-selected');
   createResizeHandles(element);
   updateHandlePositions();
@@ -408,9 +479,10 @@ function handleResize(e: MouseEvent): void {
     height: isIframe ? newHeight : undefined,
     keepHeight: isIframe,
   });
-  const blockIndex = callbacks?.getBlocks().findIndex((item) => item.id === block.id) ?? -1;
-  if (blockIndex >= 0) {
-    callbacks?.updateBlock(blockIndex, { style }, { render: false, markDirty: false });
+  const location = selectedMedia.location ?? findBlockLocationById(block.id);
+  if (location) {
+    updateBlockAtLocation(location, { style }, { render: false, markDirty: false });
+    selectedMedia.location = location;
   }
   selectedMedia.block = { ...block, style };
   updateHandlePositions();
@@ -436,9 +508,10 @@ function stopResize(): void {
         height: isIframe ? lastHeight : undefined,
         keepHeight: isIframe,
       });
-      const blockIndex = callbacks?.getBlocks().findIndex((item) => item.id === selectedMedia?.block.id) ?? -1;
-      if (blockIndex >= 0) {
-        callbacks?.updateBlock(blockIndex, { style }, { render: false, markDirty: false });
+      const location = selectedMedia.location ?? findBlockLocationById(selectedMedia.block.id);
+      if (location) {
+        updateBlockAtLocation(location, { style }, { render: false, markDirty: false });
+        selectedMedia.location = location;
       }
       if (!styleHasWidth(style) && !styleHasHeight(style)) {
         selectedMedia.element.style.width = '';
@@ -612,21 +685,41 @@ interface UploadResponse {
   url: string;
 }
 
+type VideoUploadStage = 'uploading' | 'processing' | 'complete' | 'error';
+
+export interface VideoUploadProgressUpdate {
+  stage: VideoUploadStage;
+  progress: number;
+  message: string;
+  loadedBytes?: number;
+  totalBytes?: number;
+}
+
+type VideoUploadProgressCallback = (update: VideoUploadProgressUpdate) => void;
+
+interface VideoUploadOptions {
+  rowSide?: RowColumnSide;
+  onProgress?: VideoUploadProgressCallback;
+}
+
 /**
  * Upload file to server
  */
-async function uploadFile(file: File | Blob, type: 'image' | 'video'): Promise<string> {
+async function uploadFile(
+  file: File | Blob,
+  type: 'image' | 'video',
+  onVideoProgress?: VideoUploadProgressCallback
+): Promise<string> {
+  if (type === 'video') {
+    return uploadVideoWithProgress(file, onVideoProgress);
+  }
+
   const formData = new FormData();
   formData.append('file', file);
 
-  // Use appropriate endpoint based on type
-  const endpoint = type === 'video' ? '/api/process-content-video' : '/api/upload-media';
+  formData.append('type', 'image');
 
-  if (type === 'image') {
-    formData.append('type', 'image');
-  }
-
-  const response = await fetch(endpoint, {
+  const response = await fetch('/api/upload-media', {
     method: 'POST',
     body: formData,
   });
@@ -640,12 +733,117 @@ async function uploadFile(file: File | Blob, type: 'image' | 'video'): Promise<s
   return data.url;
 }
 
+function toMb(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
+function emitVideoProgress(
+  callback: VideoUploadProgressCallback | undefined,
+  update: VideoUploadProgressUpdate
+): void {
+  callback?.(update);
+}
+
+function uploadVideoWithProgress(
+  file: File | Blob,
+  onProgress?: VideoUploadProgressCallback
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    xhr.upload.addEventListener('progress', (event: ProgressEvent<EventTarget>) => {
+      if (!event.lengthComputable || event.total <= 0) {
+        emitVideoProgress(onProgress, {
+          stage: 'uploading',
+          progress: 10,
+          message: 'Uploading video...',
+        });
+        return;
+      }
+
+      const uploadPercent = Math.max(0, Math.min(100, (event.loaded / event.total) * 100));
+      const mappedProgress = Math.max(1, Math.min(65, Math.round(uploadPercent * 0.65)));
+      emitVideoProgress(onProgress, {
+        stage: 'uploading',
+        progress: mappedProgress,
+        loadedBytes: event.loaded,
+        totalBytes: event.total,
+        message: `Uploading video... ${Math.round(uploadPercent)}% (${toMb(event.loaded)} / ${toMb(event.total)} MB)`,
+      });
+    });
+
+    xhr.upload.addEventListener('load', () => {
+      emitVideoProgress(onProgress, {
+        stage: 'processing',
+        progress: 72,
+        message: 'Upload complete. Processing video...',
+      });
+    });
+
+    xhr.addEventListener('load', () => {
+      let payload: Partial<UploadResponse> & { detail?: string } = {};
+      try {
+        payload = JSON.parse(xhr.responseText || '{}') as Partial<UploadResponse> & { detail?: string };
+      } catch {
+        payload = {};
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300 && typeof payload.url === 'string' && payload.url) {
+        emitVideoProgress(onProgress, {
+          stage: 'complete',
+          progress: 100,
+          message: 'Video ready!',
+        });
+        resolve(payload.url);
+        return;
+      }
+
+      const message = payload.detail || `Upload failed: ${xhr.status}`;
+      emitVideoProgress(onProgress, {
+        stage: 'error',
+        progress: 100,
+        message,
+      });
+      reject(new Error(message));
+    });
+
+    xhr.addEventListener('error', () => {
+      const message = 'Upload failed: network error';
+      emitVideoProgress(onProgress, {
+        stage: 'error',
+        progress: 100,
+        message,
+      });
+      reject(new Error(message));
+    });
+
+    xhr.addEventListener('abort', () => {
+      const message = 'Upload canceled';
+      emitVideoProgress(onProgress, {
+        stage: 'error',
+        progress: 100,
+        message,
+      });
+      reject(new Error(message));
+    });
+
+    xhr.open('POST', '/api/process-content-video');
+    xhr.send(formData);
+  });
+}
+
 // ========== BLOCK UPLOAD HANDLERS ==========
 
 /**
  * Handle image upload for a specific block index
  */
-export async function handleImageUploadForBlock(file: File, blockIndex: number): Promise<void> {
+export async function handleImageUploadForBlock(
+  file: File,
+  blockIndex: number,
+  rowSide?: RowColumnSide
+): Promise<void> {
   showNotification('Processing image...', 'info');
 
   try {
@@ -655,8 +853,13 @@ export async function handleImageUploadForBlock(file: File, blockIndex: number):
     // Upload to server
     const url = await uploadFile(processedBlob, 'image');
 
+    const location = resolveBlockLocation(blockIndex, rowSide);
+    if (!location) {
+      throw new Error('Target block not found');
+    }
+
     // Update block with new image
-    callbacks?.updateBlock(blockIndex, {
+    updateBlockAtLocation(location, {
       src: url,
       alt: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
     });
@@ -671,15 +874,23 @@ export async function handleImageUploadForBlock(file: File, blockIndex: number):
 /**
  * Handle video upload for a specific block index
  */
-export async function handleVideoUploadForBlock(file: File, blockIndex: number): Promise<void> {
+export async function handleVideoUploadForBlock(
+  file: File,
+  blockIndex: number,
+  options: VideoUploadOptions = {}
+): Promise<void> {
   showNotification('Processing video...', 'info');
 
   try {
-    // Server compresses and uploads the video
-    const url = await uploadFile(file, 'video');
+    const url = await uploadFile(file, 'video', options.onProgress);
+
+    const location = resolveBlockLocation(blockIndex, options.rowSide);
+    if (!location) {
+      throw new Error('Target block not found');
+    }
 
     // Update block with new video
-    callbacks?.updateBlock(blockIndex, {
+    updateBlockAtLocation(location, {
       src: url,
     });
 
@@ -710,11 +921,15 @@ export async function handleImageUpload(file: File, afterBlockId: string | null 
 /**
  * Handle video upload and insert as new block
  */
-export async function handleVideoUpload(file: File, afterBlockId: string | null = null): Promise<void> {
+export async function handleVideoUpload(
+  file: File,
+  afterBlockId: string | null = null,
+  options: VideoUploadOptions = {}
+): Promise<void> {
   showNotification('Processing video...', 'info');
 
   try {
-    const url = await uploadFile(file, 'video');
+    const url = await uploadFile(file, 'video', options.onProgress);
     insertVideoBlock(url, afterBlockId);
     showNotification('Video processed!', 'success');
   } catch (error) {

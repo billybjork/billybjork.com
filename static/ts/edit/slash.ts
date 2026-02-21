@@ -36,14 +36,25 @@ const CONFIG = {
   MENU_WIDTH: 240
 };
 
+// SVG icons for slash commands (consistent with codebase icon style)
+const ICONS = {
+  text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>',
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+  html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="12" y1="2" x2="12" y2="22" opacity="0.5"/></svg>',
+  callout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  divider: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><circle cx="8" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="16" cy="12" r="1" fill="currentColor"/></svg>',
+};
+
 const COMMANDS: SlashCommand[] = [
-  { id: 'text', label: 'Text', icon: 'T', description: 'Plain text paragraph' },
-  { id: 'image', label: 'Image', icon: '\uD83D\uDDBC', description: 'Upload or select an image' },
-  { id: 'video', label: 'Video', icon: '\uD83C\uDFAC', description: 'Upload a video file' },
-  { id: 'code', label: 'Code', icon: '\uD83D\uDCBB', description: 'Code block with syntax highlighting' },
-  { id: 'html', label: 'HTML', icon: '<>', description: 'Raw HTML (scripts, embeds, custom)' },
-  { id: 'callout', label: 'Callout', icon: '\uD83D\uDCCC', description: 'Highlighted message box' },
-  { id: 'divider', label: 'Divider', icon: '\u2042', description: 'Section break' }
+  { id: 'text', label: 'Text', icon: ICONS.text, description: 'Plain text paragraph' },
+  { id: 'image', label: 'Image', icon: ICONS.image, description: 'Upload or select an image' },
+  { id: 'video', label: 'Video', icon: ICONS.video, description: 'Upload a video file' },
+  { id: 'code', label: 'Code', icon: ICONS.code, description: 'Code block with syntax highlighting' },
+  { id: 'html', label: 'HTML', icon: ICONS.html, description: 'Raw HTML (scripts, embeds, custom)' },
+  { id: 'callout', label: 'Callout', icon: ICONS.callout, description: 'Highlighted message box' },
+  { id: 'divider', label: 'Divider', icon: ICONS.divider, description: 'Section break' }
 ];
 
 // ========== STATE ==========
@@ -466,13 +477,6 @@ export function isActive(): boolean {
 }
 
 /**
- * Check if menu is visible (alias for isActive)
- */
-export function isVisible(): boolean {
-  return isActiveState;
-}
-
-/**
  * Get the active textarea index
  */
 export function getActiveIndex(): number | null {
@@ -496,7 +500,6 @@ const EditSlash = {
 
   // State accessors
   isActive,
-  isVisible,
   getActiveIndex,
 
   // Config
