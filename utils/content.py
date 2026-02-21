@@ -14,6 +14,7 @@ from typing import Optional
 
 import markdown
 import yaml
+from bs4 import BeautifulSoup
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 
@@ -112,6 +113,36 @@ def split_blocks(md_content: str) -> list[str]:
     return [part for part in parts if part.strip()]
 
 
+def parse_row_block(md_block: str) -> Optional[tuple[str, str]]:
+    """
+    Parse a row block:
+      <!-- row -->
+      left...
+      <!-- col -->
+      right...
+      <!-- /row -->
+    Returns (left_markdown, right_markdown) when valid.
+    """
+    stripped = md_block.strip()
+    if not stripped:
+        return None
+
+    if not re.match(r'^\s*<!--\s*row\s*-->\s*', stripped):
+        return None
+    if not re.search(r'<!--\s*/row\s*-->\s*$', stripped):
+        return None
+
+    inner = re.sub(r'^\s*<!--\s*row\s*-->\s*', '', stripped, count=1)
+    inner = re.sub(r'\s*<!--\s*/row\s*-->\s*$', '', inner, count=1)
+    columns = re.split(r'\n*\s*<!--\s*col\s*-->\s*\n*', inner, maxsplit=1)
+    if len(columns) != 2:
+        return None
+
+    left_md = (columns[0] or '').strip()
+    right_md = (columns[1] or '').strip()
+    return left_md, right_md
+
+
 def _convert_markdown(md_content: str) -> str:
     """Convert markdown string to HTML with project-standard extensions."""
     md = markdown.Markdown(extensions=[
@@ -125,6 +156,15 @@ def _convert_markdown(md_content: str) -> str:
     return md.convert(md_content)
 
 
+def render_markdown_block(md_content: str) -> str:
+    """Render a markdown block using the project markdown pipeline."""
+    md = process_html_blocks(md_content)
+    md = strip_layout_markers(md)
+    html = _convert_markdown(md)
+    html = convert_alignment_comments(html).strip()
+    return optimize_media_loading(html).strip()
+
+
 def convert_alignment_comments(html_content: str) -> str:
     """Convert editor alignment comment markers to HTML wrappers."""
     html_content = re.sub(
@@ -133,6 +173,39 @@ def convert_alignment_comments(html_content: str) -> str:
         html_content,
     )
     return re.sub(r'<!-- /align -->', '</div>', html_content)
+
+
+def optimize_media_loading(html_content: str) -> str:
+    """Apply lazy-loading defaults to project-body media markup."""
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    for image in soup.find_all("img"):
+        image.attrs.setdefault("loading", "lazy")
+        image.attrs.setdefault("decoding", "async")
+
+    for iframe in soup.find_all("iframe"):
+        iframe.attrs.setdefault("loading", "lazy")
+
+    # Defer inline project-content videos until they approach viewport.
+    for video in soup.find_all("video"):
+        classes = list(video.get("class", []))
+        if "lazy-video" not in classes:
+            classes.append("lazy-inline-video")
+        video["class"] = classes
+        video["preload"] = "none"
+
+        src = video.get("src")
+        if src:
+            video["data-src"] = src
+            del video["src"]
+
+        for source in video.find_all("source"):
+            source_src = source.get("src")
+            if source_src:
+                source["data-src"] = source_src
+                del source["src"]
+
+    return str(soup)
 
 
 def markdown_to_html(md_content: str) -> str:
@@ -146,10 +219,22 @@ def markdown_to_html(md_content: str) -> str:
 
     rendered_blocks: list[str] = []
     for block in blocks:
-        md = process_html_blocks(block)
-        md = strip_layout_markers(md)
-        html = _convert_markdown(md)
-        html = convert_alignment_comments(html).strip()
+        row_columns = parse_row_block(block)
+        if row_columns:
+            left_md, right_md = row_columns
+            left_html = render_markdown_block(left_md)
+            right_html = render_markdown_block(right_md)
+            rendered_blocks.append(
+                '<div class="content-block content-block-row">'
+                '<div class="content-row">'
+                f'<div class="content-col content-col-left">{left_html}</div>'
+                f'<div class="content-col content-col-right">{right_html}</div>'
+                '</div>'
+                '</div>'
+            )
+            continue
+
+        html = render_markdown_block(block)
         if html:
             rendered_blocks.append(f'<div class="content-block">{html}</div>')
 
@@ -174,7 +259,7 @@ def content_revision(filepath: Path) -> Optional[str]:
     return "sha256:" + hashlib.sha256(data).hexdigest()[:16]
 
 
-def load_project(slug: str) -> Optional[dict]:
+def load_project(slug: str, include_html: bool = True) -> Optional[dict]:
     """
     Load a project by slug.
     Returns dict with frontmatter fields and 'html_content'.
@@ -198,7 +283,7 @@ def load_project(slug: str) -> Optional[dict]:
         'is_draft': frontmatter.get('draft', False),
         'pinned': frontmatter.get('pinned', False),
         'youtube_link': frontmatter.get('youtube'),
-        'html_content': markdown_to_html(markdown_content),
+        'html_content': markdown_to_html(markdown_content) if include_html else "",
         'markdown_content': markdown_content,
         'revision': content_revision(filepath),
     }
@@ -217,7 +302,7 @@ def load_project(slug: str) -> Optional[dict]:
     return project
 
 
-def load_all_projects(include_drafts: bool = False) -> list[dict]:
+def load_all_projects(include_drafts: bool = False, include_html: bool = True) -> list[dict]:
     """
     Load all projects from the content directory.
     Returns list of project dicts sorted by date (newest first), with pinned at top.
@@ -229,7 +314,7 @@ def load_all_projects(include_drafts: bool = False) -> list[dict]:
 
     for filepath in PROJECTS_DIR.glob("*.md"):
         slug = filepath.stem
-        project = load_project(slug)
+        project = load_project(slug, include_html=include_html)
         if project:
             if include_drafts or not project.get('is_draft', False):
                 projects.append(project)

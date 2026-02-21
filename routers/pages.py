@@ -70,11 +70,11 @@ async def read_root(
         if show_drafts_only:
             all_projects = [
                 project
-                for project in load_all_projects(include_drafts=True)
+                for project in load_all_projects(include_drafts=True, include_html=False)
                 if project.get("is_draft", False)
             ]
         else:
-            all_projects = load_all_projects(include_drafts=False)
+            all_projects = load_all_projects(include_drafts=False, include_html=False)
 
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
