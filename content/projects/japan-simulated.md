@@ -10,11 +10,11 @@ video:
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/japan-simulated_1771554215_sprite_sheet.jpg
 ---
 
-Test block
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_160227_005472.mp4" autoplay loop muted playsinline style="display: block; width: 586px"></video>
 
 <!-- block -->
 
-<!-- html -->
+<!-- html style="width: 631px; height: 629px" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
