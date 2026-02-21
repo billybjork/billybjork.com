@@ -3,7 +3,7 @@
  * Handles project item interactions, HLS video, thumbnails, and animations
  */
 
-import type { ProjectEventDetail, ProjectsLoadedEventDetail } from '../types/events';
+import type { ProjectEventDetail } from '../types/events';
 import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
 
 // ========== UTILITY FUNCTIONS ==========
@@ -51,6 +51,12 @@ function showNotification(message: string, isError: boolean = false): void {
 function closeLightboxOverlay(overlay: HTMLElement): void {
   if (overlay.dataset.closing === 'true') return;
   overlay.dataset.closing = 'true';
+
+  const lightboxVideo = overlay.querySelector<HTMLVideoElement>('video');
+  if (lightboxVideo) {
+    lightboxVideo.pause();
+  }
+
   unlockBodyScroll();
   overlay.classList.remove('visible');
   overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
@@ -61,6 +67,126 @@ function closeActiveLightbox(): boolean {
   if (!lightbox) return false;
   closeLightboxOverlay(lightbox);
   return true;
+}
+
+const LIGHTBOX_VIDEO_TRIGGER_CLASS = 'lightbox-trigger-video';
+
+function videoHasNativeFullscreenControls(videoElement: HTMLVideoElement): boolean {
+  return videoElement.controls || videoElement.hasAttribute('controls');
+}
+
+function isEligibleLightboxVideo(videoElement: HTMLVideoElement): boolean {
+  if (!videoElement.closest('.project-content')) return false;
+  if (videoElement.closest('.video-container')) return false;
+  if (videoElement.dataset.lightbox === 'off') return false;
+  if (videoHasNativeFullscreenControls(videoElement)) return false;
+  return (
+    videoElement.loop ||
+    videoElement.autoplay ||
+    videoElement.hasAttribute('loop') ||
+    videoElement.hasAttribute('autoplay')
+  );
+}
+
+function initializeLightboxMedia(root: ParentNode = document): void {
+  const videos = root.querySelectorAll<HTMLVideoElement>('.project-content video');
+  videos.forEach(video => {
+    video.classList.toggle(LIGHTBOX_VIDEO_TRIGGER_CLASS, isEligibleLightboxVideo(video));
+  });
+}
+
+function createLightboxOverlay(): { overlay: HTMLElement; closeButton: HTMLButtonElement } {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-lightbox';
+
+  const closeButton = document.createElement('button');
+  closeButton.className = 'image-lightbox-close';
+  closeButton.setAttribute('type', 'button');
+  closeButton.setAttribute('aria-label', 'Close media');
+  closeButton.innerHTML = '&times;';
+
+  overlay.appendChild(closeButton);
+  return { overlay, closeButton };
+}
+
+function attachLightboxCloseHandlers(overlay: HTMLElement, closeButton: HTMLButtonElement): void {
+  const closeLightbox = () => closeLightboxOverlay(overlay);
+  closeButton.addEventListener('click', closeLightbox);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeLightbox();
+    }
+  });
+}
+
+function openImageLightbox(image: HTMLImageElement): void {
+  closeActiveLightbox();
+
+  const { overlay, closeButton } = createLightboxOverlay();
+  const enlargedImage = document.createElement('img');
+  enlargedImage.src = image.currentSrc || image.src;
+  enlargedImage.alt = image.alt || '';
+
+  overlay.appendChild(enlargedImage);
+  document.body.appendChild(overlay);
+  lockBodyScroll();
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+  attachLightboxCloseHandlers(overlay, closeButton);
+}
+
+function openVideoLightbox(video: HTMLVideoElement): void {
+  closeActiveLightbox();
+
+  const { overlay, closeButton } = createLightboxOverlay();
+  const enlargedVideo = video.cloneNode(true) as HTMLVideoElement;
+
+  enlargedVideo.removeAttribute('id');
+  enlargedVideo.classList.remove('lazy-video', 'lazy-inline-video', 'hls-video', LIGHTBOX_VIDEO_TRIGGER_CLASS);
+
+  const shouldAutoplay = video.autoplay || video.hasAttribute('autoplay') || video.loop || video.hasAttribute('loop');
+  const shouldLoop = video.loop || video.hasAttribute('loop');
+
+  enlargedVideo.controls = false;
+  enlargedVideo.removeAttribute('controls');
+  enlargedVideo.autoplay = shouldAutoplay;
+  enlargedVideo.loop = shouldLoop;
+  enlargedVideo.muted = true;
+  enlargedVideo.defaultMuted = true;
+  enlargedVideo.playsInline = true;
+  enlargedVideo.preload = 'auto';
+
+  if (shouldAutoplay) {
+    enlargedVideo.setAttribute('autoplay', '');
+  } else {
+    enlargedVideo.removeAttribute('autoplay');
+  }
+
+  if (shouldLoop) {
+    enlargedVideo.setAttribute('loop', '');
+  } else {
+    enlargedVideo.removeAttribute('loop');
+  }
+
+  enlargedVideo.setAttribute('muted', '');
+  enlargedVideo.setAttribute('playsinline', '');
+
+  if (video.currentSrc) {
+    enlargedVideo.src = video.currentSrc;
+  }
+
+  overlay.appendChild(enlargedVideo);
+  document.body.appendChild(overlay);
+  lockBodyScroll();
+  requestAnimationFrame(() => {
+    overlay.classList.add('visible');
+    if (shouldAutoplay) {
+      enlargedVideo.play().catch(() => {
+        // Ignore autoplay errors; user can still close the modal.
+      });
+    }
+  });
+
+  attachLightboxCloseHandlers(overlay, closeButton);
 }
 
 /**
@@ -376,14 +502,14 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
           initializeVideo();
         });
       });
-      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
         const levelData = data as { level: number };
         const level = hls.levels[levelData.level];
         if (level) {
           console.log(`[HLS] Switched to level ${levelData.level}: ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
         }
       });
-      hls.on(Hls.Events.ERROR, (event, data) => {
+      hls.on(Hls.Events.ERROR, (_event, data) => {
         const errorData = data as { fatal?: boolean; type?: string; details?: string };
         if (errorData.fatal) {
           switch (errorData.type) {
@@ -699,9 +825,88 @@ function initializeLazyVideos(root: ParentNode = document): void {
   }
 }
 
+let inlineVideoObserver: IntersectionObserver | null = null;
+
+function hydrateInlineVideo(video: HTMLVideoElement): void {
+  if (video.dataset.loaded === 'true') {
+    return;
+  }
+
+  let hasMediaSource = false;
+
+  const videoSrc = video.dataset.src;
+  if (videoSrc) {
+    video.src = videoSrc;
+    video.removeAttribute('data-src');
+    hasMediaSource = true;
+  }
+
+  const sourceElements = video.querySelectorAll<HTMLSourceElement>('source[data-src]');
+  sourceElements.forEach(source => {
+    const sourceSrc = source.dataset.src;
+    if (!sourceSrc) return;
+    source.src = sourceSrc;
+    source.removeAttribute('data-src');
+    hasMediaSource = true;
+  });
+
+  if (!hasMediaSource) {
+    video.dataset.loaded = 'true';
+    return;
+  }
+
+  video.dataset.loaded = 'true';
+  video.load();
+
+  if (video.autoplay || video.hasAttribute('autoplay')) {
+    video.play().catch(() => {
+      // Ignore autoplay errors; user interaction can still start playback.
+    });
+  }
+}
+
+function getInlineVideoObserver(): IntersectionObserver | null {
+  if (!('IntersectionObserver' in window)) {
+    return null;
+  }
+  if (inlineVideoObserver) {
+    return inlineVideoObserver;
+  }
+
+  inlineVideoObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const video = entry.target as HTMLVideoElement;
+      observer.unobserve(video);
+      hydrateInlineVideo(video);
+    });
+  }, {
+    rootMargin: '0px 0px 250px 0px',
+    threshold: 0.01
+  });
+
+  return inlineVideoObserver;
+}
+
+function initializeLazyInlineVideos(root: ParentNode = document): void {
+  const inlineVideos = root.querySelectorAll<HTMLVideoElement>('video.lazy-inline-video');
+  const observer = getInlineVideoObserver();
+
+  inlineVideos.forEach(video => {
+    if (video.dataset.loaded === 'true') return;
+    if (observer) {
+      observer.observe(video);
+    } else {
+      hydrateInlineVideo(video);
+    }
+  });
+}
+
 function initializeProjects(): void {
   initializeLazyVideos();
+  initializeLazyInlineVideos();
   initializeLazyThumbnails();
+  initializeLightboxMedia();
   handleInitialLoad();
 }
 
@@ -774,6 +979,8 @@ function handleProjectAfterSwap(event: CustomEvent<ProjectEventDetail>): void {
 
   initializeLazyThumbnails(element);
   initializeLazyVideos(element);
+  initializeLazyInlineVideos(element);
+  initializeLightboxMedia(element);
   updateThumbnails();
   openExternalLinksInNewTab(element);
 }
@@ -878,35 +1085,23 @@ function initializeEventListeners(): void {
     }
   });
 
-  // Image lightbox
+  // Media lightbox (images and eligible content videos)
   document.body.addEventListener('click', function(event) {
-    const img = (event.target as HTMLElement).closest<HTMLImageElement>('.project-content img');
-    if (!img) return;
+    const target = event.target as HTMLElement;
+    const image = target.closest<HTMLImageElement>('.project-content img');
+    if (image) {
+      event.preventDefault();
+      openImageLightbox(image);
+      return;
+    }
 
-    const overlay = document.createElement('div');
-    overlay.className = 'image-lightbox';
+    const video = target.closest<HTMLVideoElement>('.project-content video');
+    if (!video || !isEligibleLightboxVideo(video)) {
+      return;
+    }
 
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'image-lightbox-close';
-    closeBtn.innerHTML = '&times;';
-
-    const enlargedImg = document.createElement('img');
-    enlargedImg.src = img.src;
-    enlargedImg.alt = img.alt || '';
-
-    overlay.appendChild(closeBtn);
-    overlay.appendChild(enlargedImg);
-    document.body.appendChild(overlay);
-    lockBodyScroll();
-
-    requestAnimationFrame(() => overlay.classList.add('visible'));
-
-    const closeLightbox = () => closeLightboxOverlay(overlay);
-
-    closeBtn.addEventListener('click', closeLightbox);
-    overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) closeLightbox();
-    });
+    event.preventDefault();
+    openVideoLightbox(video);
   });
 
   // Escape key handler

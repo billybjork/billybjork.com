@@ -551,9 +551,26 @@ footer {
     margin: 0;
 }
 
+.project-content .content-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(0.75rem, 2vw, 1.25rem);
+    align-items: start;
+}
+
+.project-content .content-col {
+    min-width: 0;
+}
+
 /* Hero video should participate in the same vertical rhythm as content blocks */
 .video-container + .project-content {
     margin-top: var(--content-block-space);
+}
+
+@media (max-width: 860px) {
+    .project-content .content-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* =========================
@@ -733,6 +750,18 @@ footer {
     cursor: pointer;
 }
 
+.project-content video.lightbox-trigger-video {
+    cursor: zoom-in;
+}
+
+.project-content .media-caption {
+    margin: 0.45rem auto 0;
+    text-align: center;
+    font-size: 0.82em;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.62);
+}
+
 /* Image lightbox */
 .image-lightbox {
     position: fixed;
@@ -750,10 +779,12 @@ footer {
     opacity: 1;
 }
 
-.image-lightbox img {
-    max-height: 75vh;
-    max-width: 90vw;
+.image-lightbox img,
+.image-lightbox video {
+    max-height: 85vh;
+    max-width: 92vw;
     object-fit: contain;
+    display: block;
 }
 
 .image-lightbox-close {

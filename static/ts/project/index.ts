@@ -8,28 +8,63 @@ import ProjectInteractions from './interactions';
 import { createSandboxedIframe, cleanupIframe } from '../utils/html-sandbox';
 
 // ========== HTML SANDBOX HYDRATION ==========
+let sandboxPlaceholderObserver: IntersectionObserver | null = null;
+
+function hydrateSandboxPlaceholder(placeholder: Element): void {
+  const encoded = placeholder.getAttribute('data-html-b64');
+  if (!encoded) return;
+
+  try {
+    const html = atob(encoded);
+    const iframe = createSandboxedIframe(html, { allowFullscreen: true });
+    const inlineStyle = placeholder.getAttribute('style');
+    const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
+    iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
+    if (inlineStyle) {
+      iframe.style.cssText += `; ${inlineStyle}`;
+    }
+    placeholder.replaceWith(iframe);
+  } catch (e) {
+    console.error('Failed to decode HTML block:', e);
+  }
+}
+
+function getSandboxPlaceholderObserver(): IntersectionObserver | null {
+  if (!('IntersectionObserver' in window)) {
+    return null;
+  }
+  if (sandboxPlaceholderObserver) {
+    return sandboxPlaceholderObserver;
+  }
+
+  sandboxPlaceholderObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      observer.unobserve(entry.target);
+      hydrateSandboxPlaceholder(entry.target);
+    });
+  }, {
+    rootMargin: '0px 0px 250px 0px',
+    threshold: 0.01
+  });
+
+  return sandboxPlaceholderObserver;
+}
 
 /**
- * Hydrate HTML sandbox placeholders by converting them to isolated iframes
+ * Hydrate HTML sandbox placeholders by converting them to isolated iframes.
+ * Placeholders are observed and only hydrated when near viewport.
  */
 function hydrateSandboxes(container: HTMLElement | Document = document): void {
-  container.querySelectorAll('.html-block-sandbox[data-html-b64]').forEach(el => {
-    const encoded = el.getAttribute('data-html-b64');
-    if (!encoded) return;
+  const placeholders = container.querySelectorAll('.html-block-sandbox[data-html-b64]');
+  const observer = getSandboxPlaceholderObserver();
 
-    try {
-      const html = atob(encoded);
-      const iframe = createSandboxedIframe(html, { allowFullscreen: true });
-      const inlineStyle = el.getAttribute('style');
-      const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
-      iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
-      if (inlineStyle) {
-        iframe.style.cssText += `; ${inlineStyle}`;
-      }
-      el.replaceWith(iframe);
-    } catch (e) {
-      console.error('Failed to decode HTML block:', e);
+  placeholders.forEach(placeholder => {
+    if (observer) {
+      observer.observe(placeholder);
+      return;
     }
+    hydrateSandboxPlaceholder(placeholder);
   });
 }
 
@@ -37,6 +72,12 @@ function hydrateSandboxes(container: HTMLElement | Document = document): void {
  * Cleanup iframes before project swap
  */
 function cleanupSandboxes(container: HTMLElement | Document = document): void {
+  if (sandboxPlaceholderObserver) {
+    container.querySelectorAll('.html-block-sandbox[data-html-b64]').forEach(placeholder => {
+      sandboxPlaceholderObserver?.unobserve(placeholder);
+    });
+  }
+
   container.querySelectorAll('iframe.html-block-sandbox').forEach(iframe => {
     if (iframe instanceof HTMLIFrameElement) {
       cleanupIframe(iframe);
