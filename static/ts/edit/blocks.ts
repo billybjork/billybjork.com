@@ -31,6 +31,7 @@ export const ROW_END = '<!-- /row -->';
 export const COL_SEPARATOR = '<!-- col -->';
 export const HTML_START = '<!-- html -->';
 export const HTML_END = '<!-- /html -->';
+const HTML_BLOCK_PATTERN = /^<!--\s*html(?:\s+style="([^"]*)")?\s*-->\s*([\s\S]*?)\s*<!--\s*\/html\s*-->$/;
 
 // ========== BLOCK ID GENERATION ==========
 
@@ -51,6 +52,7 @@ interface PartialBlock {
   alt?: string;
   style?: string | null;
   align?: Alignment;
+  autoplay?: boolean;
   language?: string;
   code?: string;
   html?: string;
@@ -58,14 +60,32 @@ interface PartialBlock {
   right?: Block;
 }
 
+function decodeHtmlCommentStyle(style: string | undefined): string | null {
+  if (!style) return null;
+  const decoded = style.replace(/&quot;/g, '"').trim();
+  return decoded || null;
+}
+
+function encodeHtmlCommentStyle(style: string): string {
+  return style.replace(/"/g, '&quot;');
+}
+
+function buildHtmlStartMarker(style: string | null | undefined): string {
+  const cleanStyle = (style ?? '').trim();
+  if (!cleanStyle) return HTML_START;
+  return `<!-- html style="${encodeHtmlCommentStyle(cleanStyle)}" -->`;
+}
+
 /**
  * Detect and set block type based on content
  */
 function detectBlockType(block: PartialBlock, trimmed: string): void {
   // Check for HTML block first (<!-- html --> ... <!-- /html -->)
-  if (trimmed.startsWith(HTML_START) && trimmed.endsWith(HTML_END)) {
+  const htmlMatch = trimmed.match(HTML_BLOCK_PATTERN);
+  if (htmlMatch) {
     block.type = 'html';
-    block.html = trimmed.slice(HTML_START.length, -HTML_END.length).trim();
+    block.style = decodeHtmlCommentStyle(htmlMatch[1]);
+    block.html = (htmlMatch[2] ?? '').trim();
     return;
   }
 
@@ -109,9 +129,11 @@ function detectBlockType(block: PartialBlock, trimmed: string): void {
     block.type = 'video';
     const srcMatch = trimmed.match(/src="([^"]*)"/);
     const styleMatch = trimmed.match(/style="([^"]*)"/);
+    const hasAutoplay = /<video\b[^>]*\sautoplay(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/i.test(trimmed);
     block.src = srcMatch?.[1] ?? '';
     block.style = styleMatch?.[1] ?? null;
     block.align = parseAlignmentFromStyle(block.style);
+    block.autoplay = hasAutoplay;
     return;
   }
 
@@ -203,6 +225,7 @@ export function parseSingleBlock(content: string, index: number): Block {
         src: block.src ?? '',
         style: block.style ?? null,
         align: block.align ?? 'left',
+        autoplay: block.autoplay ?? false,
       } as VideoBlock;
     case 'code':
       return {
@@ -216,6 +239,7 @@ export function parseSingleBlock(content: string, index: number): Block {
         id: block.id,
         type: 'html',
         html: block.html ?? '',
+        style: block.style ?? null,
         align: block.align ?? 'left',
       } as HtmlBlock;
     case 'callout':
@@ -311,14 +335,15 @@ export function formatImageMarkdown(block: ImageBlock): string {
  * Format video block as HTML
  */
 export function formatVideoMarkdown(block: VideoBlock): string {
+  const playbackAttrs = block.autoplay ? 'autoplay loop muted playsinline' : 'controls';
   const hasSize = block.style && (block.style.includes('width') || block.style.includes('max-width'));
   const hasAlignment = block.align && block.align !== 'left';
 
   if (hasSize || hasAlignment) {
     const finalStyle = buildMediaStyleString(block);
-    return `<video src="${block.src}" controls style="${finalStyle}"></video>`;
+    return `<video src="${block.src}" ${playbackAttrs} style="${finalStyle}"></video>`;
   }
-  return `<video src="${block.src}" controls></video>`;
+  return `<video src="${block.src}" ${playbackAttrs}></video>`;
 }
 
 /**
@@ -345,12 +370,13 @@ export function formatCalloutHtml(block: CalloutBlock): string {
  */
 export function formatHtmlBlock(block: HtmlBlock): string {
   const htmlContent = block.html || '';
+  const startMarker = buildHtmlStartMarker(block.style);
   // Wrap in alignment div if not left-aligned
   if (block.align && block.align !== 'left') {
     const alignStyle = getTextAlignmentStyle(block.align);
-    return `${HTML_START}\n<div style="${alignStyle}">\n${htmlContent}\n</div>\n${HTML_END}`;
+    return `${startMarker}\n<div style="${alignStyle}">\n${htmlContent}\n</div>\n${HTML_END}`;
   }
-  return `${HTML_START}\n${htmlContent}\n${HTML_END}`;
+  return `${startMarker}\n${htmlContent}\n${HTML_END}`;
 }
 
 /**
@@ -414,11 +440,11 @@ export function createBlock<T extends BlockType>(
     case 'image':
       return { ...base, src: '', alt: '', style: null, align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'video':
-      return { ...base, src: '', style: null, align: 'left', ...props } as Extract<Block, { type: T }>;
+      return { ...base, src: '', style: null, align: 'left', autoplay: false, ...props } as Extract<Block, { type: T }>;
     case 'code':
       return { ...base, language: 'javascript', code: '', ...props } as Extract<Block, { type: T }>;
     case 'html':
-      return { ...base, html: '', align: 'left', ...props } as Extract<Block, { type: T }>;
+      return { ...base, html: '', style: null, align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'callout':
       return { ...base, content: '', align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'row':

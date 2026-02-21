@@ -12,6 +12,7 @@ import {
   setupAutoResizeTextarea,
   createImageElement,
   createVideoElement,
+  applyVideoPlaybackSettings,
   applyAlignment,
   insertTextWithUndo,
   handleFormattingShortcuts,
@@ -250,11 +251,11 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Add keyboard listener
   document.addEventListener('keydown', handleGlobalKeydown);
 
+  // Mark edit state before block rendering so video elements never autoplay in the editor.
+  document.body.classList.add('editing');
+
   // Render blocks
   renderBlocks();
-
-  // Add editing class to body
-  document.body.classList.add('editing');
 
   // Warn before leaving with unsaved changes
   window.addEventListener('beforeunload', handleBeforeUnload);
@@ -671,6 +672,9 @@ export function renderBlocks(): void {
   const cont = container; // Local reference for closure
   cont.innerHTML = '';
 
+  // Keep an insertion affordance at the top of content (right below hero video on project pages).
+  cont.appendChild(createAddBlockButton(0, 'top'));
+
   blocks.forEach((block, index) => {
     if (index > 0) {
       cont.appendChild(createMergeDivider(index));
@@ -678,7 +682,9 @@ export function renderBlocks(): void {
     cont.appendChild(createBlockWrapper(block, index));
   });
 
-  cont.appendChild(createAddBlockButton(blocks.length));
+  if (blocks.length > 0) {
+    cont.appendChild(createAddBlockButton(blocks.length, 'bottom'));
+  }
 }
 
 /**
@@ -804,6 +810,24 @@ function renderTextBlock(block: TextBlock, index: number): HTMLElement {
   return wrapper;
 }
 
+type LinePreviewType =
+  | 'empty'
+  | 'divider'
+  | 'heading-1'
+  | 'heading-2'
+  | 'heading-3'
+  | 'heading-4'
+  | 'heading-5'
+  | 'heading-6'
+  | 'quote'
+  | 'list'
+  | 'paragraph';
+
+interface LinePreviewResult {
+  node: Node;
+  type: LinePreviewType;
+}
+
 /**
  * Create a line-based editor for a text block
  */
@@ -868,10 +892,13 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
 
     const isSingleEmptyLine = lines.length === 1 && !lines[0]?.trim();
     if (isSingleEmptyLine) {
+      row.dataset.lineType = 'empty';
       preview.classList.add('text-block-line-placeholder');
       preview.textContent = 'Type something... (type / for commands)';
     } else {
-      preview.appendChild(renderLinePreview(lineText));
+      const rendered = renderLinePreview(lineText);
+      row.dataset.lineType = rendered.type;
+      preview.appendChild(rendered.node);
     }
 
     const textarea = document.createElement('textarea');
@@ -1014,10 +1041,13 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
 
     const isSingleEmptyLine = lines.length === 1 && !lines[0]?.trim();
     if (isSingleEmptyLine && !currentText.trim()) {
+      row.dataset.lineType = 'empty';
       preview?.classList.add('text-block-line-placeholder');
       if (preview) preview.textContent = 'Type something... (type / for commands)';
     } else if (preview) {
-      preview.appendChild(renderLinePreview(currentText));
+      const rendered = renderLinePreview(currentText);
+      row.dataset.lineType = rendered.type;
+      preview.appendChild(rendered.node);
     }
 
     activeLineIndex = null;
@@ -1098,19 +1128,19 @@ function createLineEditor(block: TextBlock, index: number): HTMLElement {
 /**
  * Render a single line of markdown into preview HTML
  */
-function renderLinePreview(lineText: string): HTMLElement | DocumentFragment {
+function renderLinePreview(lineText: string): LinePreviewResult {
   const trimmed = lineText.trim();
 
   if (!trimmed) {
     const empty = document.createElement('span');
     empty.innerHTML = '&nbsp;';
-    return empty;
+    return { node: empty, type: 'empty' };
   }
 
   if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) {
     const hr = document.createElement('hr');
     hr.className = 'text-line-divider';
-    return hr;
+    return { node: hr, type: 'divider' };
   }
 
   const headingMatch = lineText.match(/^(\s*)(#{1,6})\s+(.*)$/);
@@ -1118,19 +1148,25 @@ function renderLinePreview(lineText: string): HTMLElement | DocumentFragment {
     const level = headingMatch[2]?.length ?? 1;
     const heading = document.createElement(`h${level}`) as HTMLHeadingElement;
     heading.appendChild(renderInlineMarkdown(headingMatch[3] ?? ''));
-    return heading;
+    return { node: heading, type: `heading-${level}` as LinePreviewType };
   }
 
   const quoteMatch = lineText.match(/^(\s*)>\s+(.*)$/);
   if (quoteMatch) {
     const quote = document.createElement('blockquote');
     quote.appendChild(renderInlineMarkdown(quoteMatch[2] ?? ''));
-    return quote;
+    return { node: quote, type: 'quote' };
+  }
+
+  if (/^(\s*)([-*+]|\d+\.)\s+/.test(lineText)) {
+    const span = document.createElement('span');
+    span.appendChild(renderInlineMarkdown(lineText));
+    return { node: span, type: 'list' };
   }
 
   const span = document.createElement('span');
   span.appendChild(renderInlineMarkdown(lineText));
-  return span;
+  return { node: span, type: 'paragraph' };
 }
 
 /**
@@ -1248,9 +1284,32 @@ function renderVideoBlock(block: VideoBlock, index: number): HTMLElement {
   wrapper.className = 'video-block-wrapper';
 
   if (block.src) {
-    const video = createVideoElement(block);
+    const video = createVideoElement(block, (element) => {
+      EditMedia.select(element, block);
+    });
     video.className = 'block-video';
     wrapper.appendChild(video);
+
+    const optionsRow = document.createElement('label');
+    optionsRow.className = 'video-option-row';
+
+    const autoplayToggle = document.createElement('input');
+    autoplayToggle.type = 'checkbox';
+    autoplayToggle.className = 'video-option-checkbox';
+    autoplayToggle.checked = !!block.autoplay;
+    autoplayToggle.addEventListener('change', () => {
+      const autoplay = autoplayToggle.checked;
+      applyVideoPlaybackSettings(video, autoplay);
+      updateBlock(index, { autoplay }, { render: false });
+    });
+    optionsRow.appendChild(autoplayToggle);
+
+    const autoplayLabel = document.createElement('span');
+    autoplayLabel.className = 'video-option-label';
+    autoplayLabel.textContent = 'Autoplay (muted loop)';
+    optionsRow.appendChild(autoplayLabel);
+
+    wrapper.appendChild(optionsRow);
   } else {
     wrapper.appendChild(createUploadZone(index, 'video'));
   }
@@ -1373,6 +1432,34 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
   wrapper.appendChild(previewContainer);
 
   let iframe: HTMLIFrameElement | null = null;
+  let selectOverlay: HTMLButtonElement | null = null;
+  let isEditing = false;
+  let isInteractive = false;
+
+  const controls = document.createElement('div');
+  controls.className = 'html-block-controls';
+
+  const toggleBtn = document.createElement('button');
+  toggleBtn.className = 'html-toggle-btn';
+  toggleBtn.textContent = 'Edit HTML';
+  toggleBtn.type = 'button';
+  controls.appendChild(toggleBtn);
+
+  const interactBtn = document.createElement('button');
+  interactBtn.className = 'html-toggle-btn';
+  interactBtn.textContent = 'Interact';
+  interactBtn.type = 'button';
+  controls.appendChild(interactBtn);
+
+  function syncInteractionUi(): void {
+    if (selectOverlay) {
+      selectOverlay.style.display = isInteractive ? 'none' : 'block';
+    }
+    interactBtn.classList.toggle('is-active', isInteractive);
+    interactBtn.textContent = isInteractive ? 'Resize' : 'Interact';
+    interactBtn.disabled = isEditing || !iframe;
+    interactBtn.style.display = isEditing ? 'none' : '';
+  }
 
   function renderPreview(html: string): void {
     // Clean up existing iframe
@@ -1384,24 +1471,38 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
 
     // Empty block: show placeholder, not iframe
     if (!html.trim()) {
+      iframe = null;
+      selectOverlay = null;
       previewContainer.innerHTML = '<p class="html-block-empty">Empty HTML block</p>';
+      syncInteractionUi();
       return;
     }
 
     previewContainer.innerHTML = '';
     iframe = createSandboxedIframe(html, { allowFullscreen: true });
-    previewContainer.appendChild(iframe);
+    const previewIframe = iframe;
+    const hasManualHeight = !!block.style && /(^|;)\s*height\s*:/.test(block.style);
+    previewIframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
+    if (block.style) {
+      previewIframe.style.cssText += `; ${block.style}`;
+    }
+    previewContainer.appendChild(previewIframe);
+
+    selectOverlay = document.createElement('button');
+    selectOverlay.type = 'button';
+    selectOverlay.className = 'html-block-select-overlay';
+    selectOverlay.setAttribute('aria-label', 'Select HTML block for resize');
+    selectOverlay.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      EditMedia.select(previewIframe, block);
+    });
+    previewContainer.appendChild(selectOverlay);
+    syncInteractionUi();
   }
 
   // Initial preview
   renderPreview(block.html || '');
-
-  // Toggle button
-  const toggleBtn = document.createElement('button');
-  toggleBtn.className = 'html-toggle-btn';
-  toggleBtn.textContent = 'Edit HTML';
-  toggleBtn.type = 'button';
-  wrapper.appendChild(toggleBtn);
 
   // Textarea
   const textarea = document.createElement('textarea');
@@ -1410,8 +1511,8 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
   textarea.placeholder = 'Enter raw HTML...';
   textarea.style.display = 'none';
   wrapper.appendChild(textarea);
+  wrapper.appendChild(controls);
 
-  let isEditing = false;
   toggleBtn.addEventListener('click', () => {
     isEditing = !isEditing;
     if (isEditing) {
@@ -1419,6 +1520,9 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
       previewContainer.style.display = 'none';
       textarea.style.display = 'block';
       toggleBtn.textContent = 'Preview';
+      isInteractive = false;
+      EditMedia.deselect();
+      syncInteractionUi();
       textarea.focus();
     } else {
       // Switch to preview mode - update iframe now
@@ -1429,10 +1533,23 @@ function renderHtmlBlock(block: HtmlBlock, index: number): HTMLElement {
     }
   });
 
+  interactBtn.addEventListener('click', () => {
+    if (!iframe || isEditing) return;
+    isInteractive = !isInteractive;
+    if (isInteractive) {
+      EditMedia.deselect();
+    } else {
+      EditMedia.select(iframe, block);
+    }
+    syncInteractionUi();
+  });
+
   // Update block data on textarea changes (no iframe update - wait for preview toggle)
   setupAutoResizeTextarea(textarea, (value) => {
     updateBlock(index, { html: value }, { render: false });
   });
+
+  syncInteractionUi();
 
   return wrapper;
 }
@@ -1463,9 +1580,9 @@ function createMergeDivider(afterIndex: number): HTMLElement {
 /**
  * Create final "+" button to add a block at the end
  */
-function createAddBlockButton(insertIndex: number): HTMLElement {
+function createAddBlockButton(insertIndex: number, position: 'top' | 'bottom' = 'bottom'): HTMLElement {
   const wrapper = document.createElement('div');
-  wrapper.className = 'add-block-wrapper';
+  wrapper.className = `add-block-wrapper add-block-wrapper-${position}`;
 
   const btn = document.createElement('button');
   btn.className = 'merge-add-btn';

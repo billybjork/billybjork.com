@@ -3,32 +3,40 @@
  * Handles image and video uploads, processing, and S3 integration
  */
 
-import type { Block, ImageBlock, VideoBlock, BlockType } from '../types/blocks';
+import type { Block, ImageBlock, VideoBlock, HtmlBlock, BlockType } from '../types/blocks';
 import { showNotification } from '../core/utils';
 
 // ========== TYPES ==========
 
-type HandlePosition = 'nw' | 'ne' | 'sw' | 'se';
+type HandlePosition = 'n' | 'e' | 's' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
 interface ResizeConfig {
   MIN_WIDTH_PERCENT: number;
   MAX_WIDTH_PERCENT: number;
-  HANDLE_POSITIONS: HandlePosition[];
+  MIN_HEIGHT_PX: number;
+  CORNER_HANDLE_POSITIONS: HandlePosition[];
+  IFRAME_HANDLE_POSITIONS: HandlePosition[];
   FULL_WIDTH_THRESHOLD: number;
 }
 
 interface SelectedMedia {
   element: HTMLElement;
-  block: ImageBlock | VideoBlock;
+  block: ImageBlock | VideoBlock | HtmlBlock;
 }
 
 interface ResizeState {
   position: HandlePosition;
   startX: number;
+  startY: number;
   startWidth: number;
+  startHeight: number;
   minWidth: number;
   maxWidth: number;
+  minHeight: number;
+  maxHeight: number;
   lastWidth: number;
+  lastHeight: number;
+  aspectRatio: number;
 }
 
 interface StyleMap {
@@ -62,7 +70,9 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const RESIZE_CONFIG: ResizeConfig = {
   MIN_WIDTH_PERCENT: 20,
   MAX_WIDTH_PERCENT: 100,
-  HANDLE_POSITIONS: ['nw', 'ne', 'sw', 'se'],
+  MIN_HEIGHT_PX: 60,
+  CORNER_HANDLE_POSITIONS: ['nw', 'ne', 'sw', 'se'],
+  IFRAME_HANDLE_POSITIONS: ['nw', 'ne', 'sw', 'se', 'n', 'e', 's', 'w'],
   FULL_WIDTH_THRESHOLD: 2
 };
 
@@ -128,9 +138,9 @@ function setupResizeHandlers(): void {
     if (isResizing) return;
 
     const target = e.target as HTMLElement;
-    const inImageBlock = target.closest('.image-block-wrapper');
+    const inMediaBlock = target.closest('.image-block-wrapper, .video-block-wrapper, .html-block-wrapper');
     const onHandle = target.closest('.resize-handle');
-    if (inImageBlock || onHandle) return;
+    if (inMediaBlock || onHandle) return;
 
     deselect();
   };
@@ -147,7 +157,7 @@ function setupResizeHandlers(): void {
 /**
  * Select a media element for resize
  */
-export function select(element: HTMLElement, block: ImageBlock | VideoBlock): void {
+export function select(element: HTMLElement, block: ImageBlock | VideoBlock | HtmlBlock): void {
   if (!element || !block) return;
   if (!resizeListenersBound) setupResizeHandlers();
 
@@ -185,8 +195,9 @@ export function deselect(): void {
 function createResizeHandles(element: HTMLElement): void {
   removeResizeHandles();
   const rect = element.getBoundingClientRect();
+  const handles = getHandlePositionsForSelection();
 
-  RESIZE_CONFIG.HANDLE_POSITIONS.forEach((position) => {
+  handles.forEach((position) => {
     const handle = document.createElement('div');
     handle.className = `resize-handle ${position}`;
     handle.dataset.position = position;
@@ -197,11 +208,20 @@ function createResizeHandles(element: HTMLElement): void {
   });
 }
 
+function getHandlePositionsForSelection(): HandlePosition[] {
+  if (selectedMedia?.block.type === 'html') {
+    return RESIZE_CONFIG.IFRAME_HANDLE_POSITIONS;
+  }
+  return RESIZE_CONFIG.CORNER_HANDLE_POSITIONS;
+}
+
 /**
  * Position a single resize handle
  */
 function positionHandle(handle: HTMLElement, position: HandlePosition, rect: DOMRect): void {
   const offset = 6;
+  const midX = rect.left + (rect.width / 2);
+  const midY = rect.top + (rect.height / 2);
   handle.style.position = 'fixed';
   switch (position) {
     case 'nw':
@@ -219,6 +239,22 @@ function positionHandle(handle: HTMLElement, position: HandlePosition, rect: DOM
     case 'se':
       handle.style.top = `${rect.bottom - offset}px`;
       handle.style.left = `${rect.right - offset}px`;
+      break;
+    case 'n':
+      handle.style.top = `${rect.top - offset}px`;
+      handle.style.left = `${midX - offset}px`;
+      break;
+    case 'e':
+      handle.style.top = `${midY - offset}px`;
+      handle.style.left = `${rect.right - offset}px`;
+      break;
+    case 's':
+      handle.style.top = `${rect.bottom - offset}px`;
+      handle.style.left = `${midX - offset}px`;
+      break;
+    case 'w':
+      handle.style.top = `${midY - offset}px`;
+      handle.style.left = `${rect.left - offset}px`;
       break;
   }
 }
@@ -261,21 +297,31 @@ function startResize(e: MouseEvent, position: HandlePosition): void {
   const container = element.closest('.row-column')
     || element.closest('.block-content')
     || element.closest('.image-block-wrapper')
+    || element.closest('.video-block-wrapper')
+    || element.closest('.html-block-preview-container')
     || element.parentElement;
   const containerRect = container ? container.getBoundingClientRect() : rect;
 
   const minWidth = Math.max(80, (containerRect.width * RESIZE_CONFIG.MIN_WIDTH_PERCENT) / 100);
   const maxWidth = (containerRect.width * RESIZE_CONFIG.MAX_WIDTH_PERCENT) / 100;
+  const minHeight = RESIZE_CONFIG.MIN_HEIGHT_PX;
+  const maxHeight = Math.max(minHeight, rect.height * 3, window.innerHeight * 0.9);
 
   isResizing = true;
   element.classList.add('media-resizing');
   resizeState = {
     position,
     startX: e.clientX,
+    startY: e.clientY,
     startWidth: rect.width,
+    startHeight: rect.height,
     minWidth,
     maxWidth,
-    lastWidth: rect.width
+    minHeight,
+    maxHeight,
+    lastWidth: rect.width,
+    lastHeight: rect.height,
+    aspectRatio: rect.width > 0 && rect.height > 0 ? rect.width / rect.height : 16 / 9,
   };
 
   if (boundHandleResize && boundStopResize) {
@@ -291,23 +337,77 @@ function startResize(e: MouseEvent, position: HandlePosition): void {
 function handleResize(e: MouseEvent): void {
   if (!isResizing || !selectedMedia || !resizeState) return;
 
-  const { position, startX, startWidth, minWidth, maxWidth } = resizeState;
-  let deltaX = e.clientX - startX;
-  if (position === 'nw' || position === 'sw') {
-    deltaX = -deltaX;
-  }
-
-  let newWidth = startWidth + deltaX;
-  newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-  resizeState.lastWidth = newWidth;
+  const {
+    position,
+    startX,
+    startY,
+    startWidth,
+    startHeight,
+    minWidth,
+    maxWidth,
+    minHeight,
+    maxHeight,
+    aspectRatio,
+  } = resizeState;
 
   const element = selectedMedia.element;
   const block = selectedMedia.block;
+  const isIframe = element instanceof HTMLIFrameElement;
+  const isCorner = position === 'nw' || position === 'ne' || position === 'sw' || position === 'se';
+
+  let newWidth = startWidth;
+  let newHeight = startHeight;
+
+  if (!isIframe) {
+    let deltaX = e.clientX - startX;
+    if (position === 'nw' || position === 'sw') {
+      deltaX = -deltaX;
+    }
+    newWidth = clamp(startWidth + deltaX, minWidth, maxWidth);
+    newHeight = startHeight;
+  } else if (isCorner) {
+    let deltaX = e.clientX - startX;
+    if (position === 'nw' || position === 'sw') {
+      deltaX = -deltaX;
+    }
+    newWidth = clamp(startWidth + deltaX, minWidth, maxWidth);
+    newHeight = newWidth / aspectRatio;
+    if (newHeight < minHeight || newHeight > maxHeight) {
+      newHeight = clamp(newHeight, minHeight, maxHeight);
+      newWidth = clamp(newHeight * aspectRatio, minWidth, maxWidth);
+      newHeight = newWidth / aspectRatio;
+    }
+  } else if (position === 'e' || position === 'w') {
+    let deltaX = e.clientX - startX;
+    if (position === 'w') {
+      deltaX = -deltaX;
+    }
+    newWidth = clamp(startWidth + deltaX, minWidth, maxWidth);
+    newHeight = startHeight;
+  } else {
+    let deltaY = e.clientY - startY;
+    if (position === 'n') {
+      deltaY = -deltaY;
+    }
+    newHeight = clamp(startHeight + deltaY, minHeight, maxHeight);
+    newWidth = startWidth;
+  }
+
+  resizeState.lastWidth = newWidth;
+  resizeState.lastHeight = newHeight;
 
   element.style.width = `${Math.round(newWidth)}px`;
-  element.style.height = 'auto';
+  if (!isIframe) {
+    element.style.height = 'auto';
+  } else {
+    element.style.height = `${Math.round(newHeight)}px`;
+    element.dataset.autoHeight = 'false';
+  }
 
-  const style = getResizedStyle(block.style, newWidth, maxWidth);
+  const style = getResizedStyle(block.style, newWidth, maxWidth, {
+    height: isIframe ? newHeight : undefined,
+    keepHeight: isIframe,
+  });
   const blockIndex = callbacks?.getBlocks().findIndex((item) => item.id === block.id) ?? -1;
   if (blockIndex >= 0) {
     callbacks?.updateBlock(blockIndex, { style }, { render: false, markDirty: false });
@@ -328,16 +428,28 @@ function stopResize(): void {
     selectedMedia.element.classList.remove('media-resizing');
 
     const lastWidth = resizeState?.lastWidth;
+    const lastHeight = resizeState?.lastHeight;
     const maxWidth = resizeState?.maxWidth;
     if (lastWidth && maxWidth) {
-      const style = getResizedStyle(selectedMedia.block.style, lastWidth, maxWidth);
+      const isIframe = selectedMedia.element instanceof HTMLIFrameElement;
+      const style = getResizedStyle(selectedMedia.block.style, lastWidth, maxWidth, {
+        height: isIframe ? lastHeight : undefined,
+        keepHeight: isIframe,
+      });
       const blockIndex = callbacks?.getBlocks().findIndex((item) => item.id === selectedMedia?.block.id) ?? -1;
       if (blockIndex >= 0) {
         callbacks?.updateBlock(blockIndex, { style }, { render: false, markDirty: false });
       }
-      if (!styleHasWidth(style)) {
+      if (!styleHasWidth(style) && !styleHasHeight(style)) {
         selectedMedia.element.style.width = '';
         selectedMedia.element.style.height = '';
+      } else if (!styleHasWidth(style)) {
+        selectedMedia.element.style.width = '';
+      } else if (!styleHasHeight(style)) {
+        selectedMedia.element.style.height = '';
+      }
+      if (isIframe) {
+        selectedMedia.element.dataset.autoHeight = styleHasHeight(style) ? 'false' : 'true';
       }
       callbacks?.markDirty();
     }
@@ -386,18 +498,28 @@ function serializeStyle(styles: StyleMap): string {
 function getResizedStyle(
   style: string | null | undefined,
   width: number,
-  maxWidth: number
+  maxWidth: number,
+  options: { height?: number; keepHeight?: boolean } = {}
 ): string | null {
+  const { height, keepHeight = false } = options;
   const styles = parseStyle(style);
 
   delete styles['margin-left'];
   delete styles['margin-right'];
   delete styles['display'];
-  delete styles['height'];
-  delete styles['max-height'];
   delete styles['max-width'];
   delete styles['min-width'];
-  delete styles['min-height'];
+  if (!keepHeight) {
+    delete styles['height'];
+    delete styles['max-height'];
+    delete styles['min-height'];
+  } else {
+    delete styles['max-height'];
+    delete styles['min-height'];
+    if (typeof height === 'number' && Number.isFinite(height)) {
+      styles['height'] = `${Math.round(height)}px`;
+    }
+  }
 
   if (Math.abs(width - maxWidth) <= RESIZE_CONFIG.FULL_WIDTH_THRESHOLD) {
     delete styles['width'];
@@ -415,6 +537,15 @@ function getResizedStyle(
 function styleHasWidth(style: string | null | undefined): boolean {
   if (!style) return false;
   return /(^|;)\s*width\s*:/.test(style);
+}
+
+function styleHasHeight(style: string | null | undefined): boolean {
+  if (!style) return false;
+  return /(^|;)\s*height\s*:/.test(style);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 // ========== IMAGE PROCESSING ==========
