@@ -55,6 +55,13 @@
         cursor: pointer;
     }
 
+    .pc-project-main {
+        position: relative;
+        z-index: 30;
+        margin-top: 0.9rem;
+        transform: translateY(0);
+    }
+
     .pc-header-main {
         min-width: 0;
     }
@@ -84,12 +91,7 @@
         pointer-events: none;
     }
 
-    .pc-project .pc-project-details {
-        position: relative;
-        z-index: 30;
-    }
-
-    .pc-project .pc-close-project {
+    .pc-project-main .pc-close-project {
         z-index: 35;
     }
 
@@ -157,7 +159,7 @@
         width: 100%;
         max-width: 640px;
         aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
-        margin-top: 0.75rem;
+        margin-top: 0;
     }
 
     .pc-project.pc-hero-expanded .pc-stage {
@@ -213,8 +215,7 @@
     .pc-project-details {
         display: none;
         opacity: 0;
-        transform: translateY(16px);
-        transition: opacity 0.35s ease, transform 0.35s ease;
+        transition: opacity 0.28s ease;
         margin-top: 1rem;
     }
 
@@ -224,12 +225,10 @@
 
     .pc-project.pc-content-visible .pc-project-details {
         opacity: 1;
-        transform: translateY(0);
     }
 
     .pc-project.pc-closing .pc-project-details {
         opacity: 0;
-        transform: translateY(16px);
         transition: none;
     }
 
@@ -377,14 +376,6 @@
             {% if project.video_link %}
             data-hls-url="{{ project.video_link }}"
             {% endif %}>
-            <header class="pc-project-header">
-                <div class="pc-header-main">
-                    <h2 class="pc-project-title">{{ project.name }}</h2>
-                    <div class="pc-project-meta">{{ project.formatted_date }}</div>
-                </div>
-                <button class="pc-close-project" aria-label="Close project">&times;</button>
-            </header>
-
             <div class="pc-stage">
                 <div
                     class="pc-thumbnail-container"
@@ -405,7 +396,17 @@
                     style="--fallback-poster: url('{{ project.thumbnail_link }}');"
                     {% endif %}></section>
             </div>
-            <section id="details-{{ project.slug }}" class="pc-project-details" hidden></section>
+
+            <div class="pc-project-main">
+                <header class="pc-project-header">
+                    <div class="pc-header-main">
+                        <h2 class="pc-project-title">{{ project.name }}</h2>
+                        <div class="pc-project-meta">{{ project.formatted_date }}</div>
+                    </div>
+                    <button class="pc-close-project" aria-label="Close project">&times;</button>
+                </header>
+                <section id="details-{{ project.slug }}" class="pc-project-details" hidden></section>
+            </div>
         </article>
         {% endfor %}
     {% else %}
@@ -1612,6 +1613,7 @@
         constructor() {
             this.contextBySlug = new Map();
             this.promotedStates = new Map();
+            this.mainFlowCleanupBySlug = new Map();
             this.currentOpenSlug = null;
             this.transitionToken = 0;
             this.transitionInFlight = false;
@@ -1650,6 +1652,8 @@
             this.detailsHtmlCache.clear();
             this.manifestWarmupByUrl.clear();
             this.preconnectedOrigins.clear();
+            this.mainFlowCleanupBySlug.forEach((cleanup) => cleanup());
+            this.mainFlowCleanupBySlug.clear();
             this.promotedStates.forEach((_state, slug) => {
                 const context = this.contextBySlug.get(slug);
                 if (context) {
@@ -1706,6 +1710,7 @@
         }
 
         resetProjectVisualState(ctx) {
+            this.stopMainFlowShift(ctx);
             ctx.item.classList.remove('pc-has-hero-video');
             ctx.item.classList.remove('pc-hero-expanded');
             ctx.item.classList.remove('pc-closing');
@@ -1771,8 +1776,8 @@
                 this.syncStageAspectRatioFromHero(ctx);
             }
 
-            const headerY = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
-            window.scrollTo({ top: headerY, behavior: prefersInstant ? 'auto' : 'smooth' });
+            const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+            window.scrollTo({ top: projectTop, behavior: prefersInstant ? 'auto' : 'smooth' });
 
             if (!hasHeroVideo) {
                 await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 320, token, { easing: 'inOut' });
@@ -1824,14 +1829,16 @@
                 ? this.prepareHeroVideoReady(heroVideo, ctx, token)
                 : Promise.resolve(false);
 
+            const morphDuration = 640;
             const startRect = ctx.container.getBoundingClientRect();
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, startRect);
-            ctx.item.classList.add('pc-hero-expanded');
+            this.animateMainFlowShift(ctx, morphDuration, token, () => {
+                ctx.item.classList.add('pc-hero-expanded');
+            });
 
             const targetRect = ctx.heroSlot.getBoundingClientRect();
             const hasTarget = targetRect.width > 0 && targetRect.height > 0;
-            const morphDuration = 640;
             const flattenPromise = this.animateCoherence(ctx.thumbnail, 1, morphDuration, token, { easing: 'inOut' });
             const rectPromise = hasTarget
                 ? this.animateRect(ctx.container, startRect, targetRect, morphDuration, token, {
@@ -1849,7 +1856,9 @@
                 ctx.thumbnail.setRenderSuppressed(true);
             } else {
                 this.setHeroSlotVisibility(ctx, false);
-                ctx.item.classList.remove('pc-hero-expanded');
+                this.animateMainFlowShift(ctx, 280, token, () => {
+                    ctx.item.classList.remove('pc-hero-expanded');
+                });
                 this.restoreContainer(ctx, false);
                 ctx.thumbnail.setRenderSuppressed(false);
             }
@@ -1877,6 +1886,8 @@
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
+            const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+            window.scrollTo({ top: projectTop, behavior: prefersInstant ? 'auto' : 'smooth' });
 
             if (prefersInstant) {
                 this.restoreContainer(ctx, false);
@@ -1912,7 +1923,10 @@
             this.setHeroSlotVisibility(ctx, false);
 
             // Collapse stage sizing before measuring target so close animates to the true thumbnail footprint.
-            ctx.item.classList.remove('pc-hero-expanded');
+            const closeDuration = 420;
+            this.animateMainFlowShift(ctx, closeDuration, token, () => {
+                ctx.item.classList.remove('pc-hero-expanded');
+            });
             const targetRect = this.measureContainerOriginRect(ctx);
 
             this.promoteContainer(ctx);
@@ -1921,7 +1935,7 @@
             ctx.container.style.opacity = '1';
 
             ctx.item.classList.remove('pc-content-visible');
-            await this.animateRect(ctx.container, heroRect, targetRect, 420, token);
+            await this.animateRect(ctx.container, heroRect, targetRect, closeDuration, token);
             if (!this.isTokenActive(token)) {
                 ctx.item.classList.remove('pc-closing');
                 ctx.closeButton.disabled = false;
@@ -2270,10 +2284,97 @@
             bumpTransitionRectRefresh(260);
         }
 
+        stopMainFlowShift(ctx) {
+            if (!ctx || !ctx.slug) return;
+            const cleanup = this.mainFlowCleanupBySlug.get(ctx.slug);
+            if (cleanup) {
+                cleanup();
+                return;
+            }
+
+            const main = ctx.item?.querySelector('.pc-project-main');
+            if (!main) return;
+            main.style.transition = '';
+            main.style.transform = '';
+            main.style.willChange = '';
+        }
+
+        animateMainFlowShift(ctx, durationMs, token, mutateLayout) {
+            if (typeof mutateLayout !== 'function') return;
+            const main = ctx.item.querySelector('.pc-project-main');
+            if (!main) {
+                mutateLayout();
+                return;
+            }
+
+            this.stopMainFlowShift(ctx);
+
+            if (durationMs <= 0 || prefersReducedMotion) {
+                mutateLayout();
+                return;
+            }
+
+            const beforeRect = main.getBoundingClientRect();
+            mutateLayout();
+            const afterRect = main.getBoundingClientRect();
+            const deltaY = beforeRect.top - afterRect.top;
+
+            if (Math.abs(deltaY) < 0.5) {
+                return;
+            }
+
+            main.style.transition = 'none';
+            main.style.transform = `translateY(${deltaY}px)`;
+            main.style.willChange = 'transform';
+            main.getBoundingClientRect();
+
+            if (!this.isTokenActive(token)) {
+                main.style.transition = '';
+                main.style.transform = '';
+                main.style.willChange = '';
+                return;
+            }
+
+            let timeoutId = null;
+            let cleaned = false;
+            const onTransitionEnd = (event) => {
+                if (event.target !== main || event.propertyName !== 'transform') return;
+                cleanup();
+            };
+            const cleanup = () => {
+                if (cleaned) return;
+                cleaned = true;
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                main.removeEventListener('transitionend', onTransitionEnd);
+                main.style.transition = '';
+                main.style.transform = '';
+                main.style.willChange = '';
+                this.mainFlowCleanupBySlug.delete(ctx.slug);
+            };
+
+            this.mainFlowCleanupBySlug.set(ctx.slug, cleanup);
+            main.addEventListener('transitionend', onTransitionEnd);
+            timeoutId = window.setTimeout(cleanup, durationMs + 120);
+
+            main.style.transition = `transform ${durationMs}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+            main.style.transform = 'translateY(0)';
+        }
+
         measureContainerOriginRect(ctx) {
             const rect = ctx.container.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) {
                 return rect;
+            }
+
+            const stage = ctx.item.querySelector('.pc-stage');
+            if (stage) {
+                const stageRect = stage.getBoundingClientRect();
+                if (stageRect.width > 0 && stageRect.height > 0) {
+                    return new DOMRect(stageRect.left, stageRect.top, stageRect.width, stageRect.height);
+                }
             }
 
             const header = ctx.item.querySelector('.pc-project-header');
