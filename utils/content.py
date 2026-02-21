@@ -8,6 +8,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from html import escape
 from pathlib import Path
 from typing import Optional
 
@@ -85,26 +86,30 @@ def process_html_blocks(content: str) -> str:
     Replace <!-- html -->...<!-- /html --> with base64-encoded placeholders.
     Uses line-anchored markers with non-greedy capture.
     """
-    # Pattern: markers can have flexible whitespace, capture content between them
-    pattern = r'<!--\s*html\s*-->\s*\n?(.*?)\n?\s*<!--\s*/html\s*-->'
+    # Pattern: markers can have flexible whitespace and optional style attribute.
+    pattern = r'<!--\s*html(?:\s+style="([^"]*)")?\s*-->\s*\n?(.*?)\n?\s*<!--\s*/html\s*-->'
 
     def replace(m):
-        html = m.group(1)
+        style = (m.group(1) or '').replace('&quot;', '"').strip()
+        html = m.group(2)
         # Base64 encode to avoid attribute escaping issues
         encoded = base64.b64encode(html.encode('utf-8')).decode('ascii')
-        return f'<div class="html-block-sandbox" data-html-b64="{encoded}"></div>'
+        style_attr = f' style="{escape(style, quote=True)}"' if style else ''
+        return f'<div class="html-block-sandbox" data-html-b64="{encoded}"{style_attr}></div>'
 
     return re.sub(pattern, replace, content, flags=re.DOTALL)
-
-
-def strip_block_markers(md_content: str) -> str:
-    """Remove block separator comments from markdown prior to rendering."""
-    return re.sub(r'<!--\s*block\s*-->', '', md_content)
 
 
 def strip_layout_markers(md_content: str) -> str:
     """Remove row/column layout comments from markdown prior to rendering."""
     return re.sub(r'<!--\s*/?(row|col)\s*-->', '', md_content)
+
+
+def split_blocks(md_content: str) -> list[str]:
+    """Split markdown into top-level blocks using editor block separators."""
+    pattern = re.compile(r'\n+\s*<!--\s*block\s*-->\s*\n+')
+    parts = pattern.split(md_content)
+    return [part for part in parts if part.strip()]
 
 
 def _convert_markdown(md_content: str) -> str:
@@ -135,12 +140,20 @@ def markdown_to_html(md_content: str) -> str:
     Convert markdown content to HTML.
     Handles block separators and preserves HTML tags.
     """
-    md = process_html_blocks(md_content)
-    md = strip_block_markers(md)
-    md = strip_layout_markers(md)
-    html = _convert_markdown(md)
-    html = convert_alignment_comments(html)
-    return html
+    blocks = split_blocks(md_content)
+    if not blocks:
+        blocks = [md_content]
+
+    rendered_blocks: list[str] = []
+    for block in blocks:
+        md = process_html_blocks(block)
+        md = strip_layout_markers(md)
+        html = _convert_markdown(md)
+        html = convert_alignment_comments(html).strip()
+        if html:
+            rendered_blocks.append(f'<div class="content-block">{html}</div>')
+
+    return '\n'.join(rendered_blocks)
 
 
 def validate_slug(slug: str) -> bool:
