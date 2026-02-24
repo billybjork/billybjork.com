@@ -32,6 +32,7 @@ const ICONS = {
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>',
   columns: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg>',
+  split: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/></svg>',
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 8 16 13"/><line x1="21" y1="8" x2="3" y2="8"/><polyline points="8 21 3 16 8 11"/><line x1="3" y1="16" x2="21" y2="16"/></svg>',
   divider: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>',
 };
@@ -1476,6 +1477,18 @@ function renderRowBlock(block: RowBlock, index: number): HTMLElement {
   const toolbar = document.createElement('div');
   toolbar.className = 'row-toolbar';
 
+  const splitBtn = document.createElement('button');
+  splitBtn.className = 'row-action-btn row-action-btn-split';
+  splitBtn.type = 'button';
+  splitBtn.innerHTML = ICONS.split;
+  splitBtn.title = 'Split columns into blocks';
+  splitBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    splitRowIntoBlocks(index);
+  });
+  toolbar.appendChild(splitBtn);
+
   const swapBtn = document.createElement('button');
   swapBtn.className = 'row-action-btn';
   swapBtn.type = 'button';
@@ -1685,6 +1698,15 @@ function swapRowColumns(index: number): void {
     if (block.type !== 'row') return block;
     return { ...block, left: block.right, right: block.left };
   });
+}
+
+function splitRowIntoBlocks(index: number): void {
+  const rowBlock = blocks[index];
+  if (!rowBlock || rowBlock.type !== 'row') return;
+
+  const nextBlocks = blocks.slice();
+  nextBlocks.splice(index, 1, rowBlock.left, rowBlock.right);
+  applyBlocksUpdate(nextBlocks);
 }
 
 /**

@@ -598,6 +598,7 @@ body.modal-open {
 .row-toolbar {
     display: flex;
     justify-content: flex-end;
+    gap: 6px;
 }
 
 .row-action-btn {
@@ -624,6 +625,12 @@ body.modal-open {
     border-color: #3b82f6;
     color: #3b82f6;
     background: #1b1f2b;
+}
+
+.row-action-btn-split:hover {
+    border-color: #22c55e;
+    color: #22c55e;
+    background: #13251a;
 }
 
 .row-columns {
