@@ -304,6 +304,10 @@
     "images/project-content/20260220_170212_039761.webp": {
       "hash": "sha256:b21b787a93827ebef7e1129c90225ea4ccee2aae100527b8121b019b5887b044",
       "size": 343262
+    },
+    "images/project-content/20260224_143630_506231.webp": {
+      "hash": "sha256:22f99684e72db0f8b81b70c0c61bd395fcabae6f08f781be83fcda0cda113771",
+      "size": 80780
     }
   }
 }
