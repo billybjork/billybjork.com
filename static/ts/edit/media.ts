@@ -685,6 +685,12 @@ interface UploadResponse {
   url: string;
 }
 
+interface PosterExtractionResponse {
+  success: boolean;
+  url: string;
+  detail?: string;
+}
+
 type VideoUploadStage = 'uploading' | 'processing' | 'complete' | 'error';
 
 export interface VideoUploadProgressUpdate {
@@ -832,6 +838,134 @@ function uploadVideoWithProgress(
     xhr.open('POST', '/api/process-content-video');
     xhr.send(formData);
   });
+}
+
+function ensureVideoFrameReady(video: HTMLVideoElement): Promise<void> {
+  if (
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0
+  ) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Video frame is not ready. Try playing or scrubbing the video first.'));
+    }, 8000);
+
+    const handleReady = () => {
+      if (
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0
+      ) {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const handleError = () => {
+      cleanup();
+      reject(new Error('Unable to read the video frame.'));
+    };
+
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      video.removeEventListener('loadeddata', handleReady);
+      video.removeEventListener('canplay', handleReady);
+      video.removeEventListener('seeked', handleReady);
+      video.removeEventListener('error', handleError);
+    };
+
+    video.addEventListener('loadeddata', handleReady);
+    video.addEventListener('canplay', handleReady);
+    video.addEventListener('seeked', handleReady);
+    video.addEventListener('error', handleError);
+
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+      video.load();
+    }
+
+    handleReady();
+  });
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error('Failed to capture video frame.'));
+      }
+    }, type, quality);
+  });
+}
+
+export async function uploadPosterForVideo(file: File): Promise<string> {
+  const processed = await processImage(file);
+  return uploadFile(processed, 'image');
+}
+
+function getVideoSourceUrl(video: HTMLVideoElement): string {
+  const sourceElement = video.querySelector<HTMLSourceElement>('source[src]');
+  return (video.currentSrc || video.src || sourceElement?.src || '').trim();
+}
+
+async function capturePosterFromVideoServer(sourceUrl: string, frameTime: number): Promise<string> {
+  const response = await fetch('/api/content-video-poster', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source_url: sourceUrl,
+      frame_time: frameTime,
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({})) as Partial<PosterExtractionResponse>;
+  if (!response.ok || typeof payload.url !== 'string' || !payload.url) {
+    const message = payload.detail || `Poster extraction failed: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload.url;
+}
+
+export async function capturePosterFromVideo(video: HTMLVideoElement): Promise<string> {
+  const sourceUrl = getVideoSourceUrl(video);
+  const frameTime = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+
+  try {
+    await ensureVideoFrameReady(video);
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+      throw new Error('Video dimensions are unavailable.');
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not initialize frame capture.');
+    }
+
+    context.drawImage(video, 0, 0, width, height);
+    const blob = await canvasToBlob(canvas, 'image/webp', IMAGE_QUALITY);
+    return await uploadFile(blob, 'image');
+  } catch (error) {
+    if (sourceUrl) {
+      return capturePosterFromVideoServer(sourceUrl, frameTime);
+    }
+    throw error instanceof Error ? error : new Error('Failed to capture frame from video.');
+  }
 }
 
 // ========== BLOCK UPLOAD HANDLERS ==========
@@ -1040,6 +1174,10 @@ const EditMedia = {
   // Replace handlers
   replaceImageByIndex,
   replaceVideoByIndex,
+
+  // Poster helpers
+  uploadPosterForVideo,
+  capturePosterFromVideo,
 
   // Style utilities
   parseStyle,

@@ -211,6 +211,10 @@ export function createVideoElement(
 ): HTMLVideoElement {
   const video = document.createElement('video');
   video.src = block.src;
+  if (block.poster) {
+    video.poster = block.poster;
+    video.setAttribute('poster', block.poster);
+  }
   video.className = 'content-video';
   applyVideoPlaybackSettings(video, !!block.autoplay);
   if (block.style) video.setAttribute('style', block.style);

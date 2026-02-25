@@ -50,6 +50,7 @@ interface PartialBlock {
   type?: BlockType;
   content?: string;
   src?: string;
+  poster?: string;
   alt?: string;
   style?: string | null;
   caption?: string;
@@ -124,6 +125,19 @@ function formatCaptionParagraph(caption: string | null | undefined): string {
   return `\n<p class="media-caption">${escapeHtml(cleanCaption)}</p>`;
 }
 
+function extractAttributeValue(content: string, attribute: string): string | null {
+  const escapedAttribute = attribute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`\\b${escapedAttribute}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i');
+  const match = content.match(regex);
+  if (!match) return null;
+  return ((match[1] ?? match[2] ?? '') || '').trim();
+}
+
+function extractVideoSource(content: string): string {
+  const sourceMatch = content.match(/<source\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+  return ((sourceMatch?.[1] ?? sourceMatch?.[2] ?? '') || '').trim();
+}
+
 /**
  * Detect and set block type based on content
  */
@@ -175,11 +189,12 @@ function detectBlockType(block: PartialBlock, trimmed: string): void {
   // Check for video: <video> tag
   if (trimmed.startsWith('<video')) {
     block.type = 'video';
-    const srcMatch = trimmed.match(/src="([^"]*)"/);
-    const styleMatch = trimmed.match(/style="([^"]*)"/);
+    const openingTag = trimmed.match(/^<video\b[^>]*>/i)?.[0] ?? trimmed;
     const hasAutoplay = /<video\b[^>]*\sautoplay(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/i.test(trimmed);
-    block.src = srcMatch?.[1] ?? '';
-    block.style = styleMatch?.[1] ?? null;
+    const videoSrc = extractAttributeValue(openingTag, 'src');
+    block.src = videoSrc || extractVideoSource(trimmed);
+    block.poster = extractAttributeValue(openingTag, 'poster') ?? '';
+    block.style = extractAttributeValue(openingTag, 'style');
     block.align = parseAlignmentFromStyle(block.style);
     block.autoplay = hasAutoplay;
     return;
@@ -283,6 +298,7 @@ export function parseSingleBlock(content: string, index: number): Block {
         id: block.id,
         type: 'video',
         src: block.src ?? '',
+        poster: block.poster ?? '',
         style: block.style ?? null,
         caption: block.caption ?? '',
         align: block.align ?? 'left',
@@ -398,16 +414,23 @@ export function formatImageMarkdown(block: ImageBlock): string {
  * Format video block as HTML
  */
 export function formatVideoMarkdown(block: VideoBlock): string {
+  const attrs: string[] = [`src="${block.src}"`];
+  if (block.poster) {
+    attrs.push(`poster="${block.poster}"`);
+  }
+
   const playbackAttrs = block.autoplay ? 'autoplay loop muted playsinline' : 'controls';
+  attrs.push(playbackAttrs);
   const hasSize = block.style && (block.style.includes('width') || block.style.includes('max-width'));
   const hasAlignment = block.align && block.align !== 'left';
   const captionMarkup = formatCaptionParagraph(block.caption);
 
   if (hasSize || hasAlignment) {
     const finalStyle = buildMediaStyleString(block);
-    return `<video src="${block.src}" ${playbackAttrs} style="${finalStyle}"></video>${captionMarkup}`;
+    attrs.push(`style="${finalStyle}"`);
+    return `<video ${attrs.join(' ')}></video>${captionMarkup}`;
   }
-  return `<video src="${block.src}" ${playbackAttrs}></video>${captionMarkup}`;
+  return `<video ${attrs.join(' ')}></video>${captionMarkup}`;
 }
 
 /**
@@ -505,7 +528,16 @@ export function createBlock<T extends BlockType>(
     case 'image':
       return { ...base, src: '', alt: '', style: null, caption: '', align: 'left', ...props } as Extract<Block, { type: T }>;
     case 'video':
-      return { ...base, src: '', style: null, caption: '', align: 'left', autoplay: false, ...props } as Extract<Block, { type: T }>;
+      return {
+        ...base,
+        src: '',
+        poster: '',
+        style: null,
+        caption: '',
+        align: 'left',
+        autoplay: false,
+        ...props,
+      } as Extract<Block, { type: T }>;
     case 'code':
       return { ...base, language: 'javascript', code: '', ...props } as Extract<Block, { type: T }>;
     case 'html':

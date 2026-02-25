@@ -68,6 +68,16 @@ interface BlockContext {
   rowSide?: RowColumnSide;
 }
 
+interface RenderScrollAnchor {
+  blockId: string | null;
+  blockIndex: number;
+  blockTop: number;
+}
+
+interface ContainerScrollAnchor {
+  offsetWithinContainer: number;
+}
+
 type SaveAction =
   | { type: 'edit' }
   | { type: 'save_start' }
@@ -107,6 +117,100 @@ const dragState: DragState = {
   currentDropIndex: null,
   isDragging: false,
 };
+
+function withInstantScroll(action: () => void): void {
+  const html = document.documentElement;
+  const previousInlineScrollBehavior = html.style.scrollBehavior;
+  html.style.scrollBehavior = 'auto';
+
+  action();
+
+  requestAnimationFrame(() => {
+    if (previousInlineScrollBehavior) {
+      html.style.scrollBehavior = previousInlineScrollBehavior;
+    } else {
+      html.style.removeProperty('scroll-behavior');
+    }
+  });
+}
+
+function clampScrollTop(top: number): number {
+  const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  return Math.max(0, Math.min(top, maxScrollTop));
+}
+
+function captureRenderScrollAnchor(): RenderScrollAnchor | null {
+  if (!container) return null;
+
+  const wrappers = Array.from(container.querySelectorAll<HTMLElement>('.block-wrapper[data-block-id]'));
+  if (wrappers.length === 0) return null;
+
+  const anchor =
+    wrappers.find((wrapper) => wrapper.getBoundingClientRect().bottom >= 0) ??
+    wrappers[wrappers.length - 1] ??
+    null;
+  if (!anchor) return null;
+
+  const blockId = anchor.dataset.blockId ?? null;
+  const parsedIndex = Number.parseInt(anchor.dataset.blockIndex ?? '', 10);
+  const blockIndex = Number.isNaN(parsedIndex) ? 0 : parsedIndex;
+
+  return {
+    blockId,
+    blockIndex,
+    blockTop: anchor.getBoundingClientRect().top,
+  };
+}
+
+function restoreRenderScrollAnchor(anchor: RenderScrollAnchor | null): void {
+  if (!anchor || !container || blocks.length === 0) return;
+
+  requestAnimationFrame(() => {
+    if (!container) return;
+
+    let target: HTMLElement | null = null;
+    if (anchor.blockId) {
+      target = container.querySelector<HTMLElement>(`.block-wrapper[data-block-id="${anchor.blockId}"]`);
+    }
+    if (!target) {
+      const fallbackIndex = Math.max(0, Math.min(anchor.blockIndex, blocks.length - 1));
+      target = container.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${fallbackIndex}"]`);
+    }
+    if (!target) return;
+
+    const delta = target.getBoundingClientRect().top - anchor.blockTop;
+    if (Math.abs(delta) < 1) return;
+
+    withInstantScroll(() => {
+      window.scrollTo({
+        top: clampScrollTop(window.scrollY + delta),
+        left: 0,
+        behavior: 'auto',
+      });
+    });
+  });
+}
+
+function captureContainerScrollAnchor(contentContainer: HTMLElement): ContainerScrollAnchor {
+  const contentTop = window.scrollY + contentContainer.getBoundingClientRect().top;
+  return {
+    offsetWithinContainer: window.scrollY - contentTop,
+  };
+}
+
+function restoreContainerScrollAnchor(contentContainer: HTMLElement, anchor: ContainerScrollAnchor): void {
+  requestAnimationFrame(() => {
+    const contentTop = window.scrollY + contentContainer.getBoundingClientRect().top;
+    const nextScrollTop = contentTop + anchor.offsetWithinContainer;
+    withInstantScroll(() => {
+      window.scrollTo({
+        top: clampScrollTop(nextScrollTop),
+        left: 0,
+        behavior: 'auto',
+      });
+    });
+  });
+}
 
 // ========== INITIALIZATION ==========
 
@@ -206,6 +310,7 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Parse markdown into blocks
   const markdown = 'markdown' in data ? data.markdown : '';
   blocks = EditBlocks.parseIntoBlocks(markdown || '');
+  const initialScrollAnchor = captureContainerScrollAnchor(contentContainer);
 
   // Create editor wrapper
   const editorWrapper = document.createElement('div');
@@ -274,6 +379,7 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   // Render blocks
   renderBlocks();
+  restoreContainerScrollAnchor(contentContainer, initialScrollAnchor);
 
   // Warn before leaving with unsaved changes
   window.addEventListener('beforeunload', handleBeforeUnload);
@@ -552,12 +658,14 @@ function dispatchSaveAction(action: SaveAction): void {
 
 function applyBlocksUpdate(nextBlocks: Block[], options: UpdateBlockOptions = {}): void {
   const { render = true, markDirty: shouldMarkDirty = true } = options;
+  const renderScrollAnchor = render ? captureRenderScrollAnchor() : null;
   blocks = nextBlocks;
   if (shouldMarkDirty) {
     markDirty();
   }
   if (render) {
     renderBlocks();
+    restoreRenderScrollAnchor(renderScrollAnchor);
   }
 }
 
@@ -1083,7 +1191,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     const textarea = row.querySelector<HTMLTextAreaElement>('.text-line-input');
     if (!textarea) return;
 
-    textarea.focus();
+    textarea.focus({ preventScroll: true });
     if (selection && typeof selection === 'object') {
       textarea.selectionStart = selection.start;
       textarea.selectionEnd = selection.end ?? selection.start;
@@ -1326,6 +1434,18 @@ function createMediaCaptionInput(caption: string | undefined, context: BlockCont
   return input;
 }
 
+function applyVideoPoster(video: HTMLVideoElement, poster: string | null | undefined): void {
+  const cleanPoster = (poster ?? '').trim();
+  if (!cleanPoster) {
+    video.poster = '';
+    video.removeAttribute('poster');
+    return;
+  }
+
+  video.poster = cleanPoster;
+  video.setAttribute('poster', cleanPoster);
+}
+
 /**
  * Render image block
  */
@@ -1391,6 +1511,117 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
     optionsRow.appendChild(autoplayLabel);
 
     wrapper.appendChild(optionsRow);
+
+    const posterControls = document.createElement('div');
+    posterControls.className = 'video-poster-controls';
+
+    const posterInput = document.createElement('input');
+    posterInput.type = 'url';
+    posterInput.className = 'video-poster-input';
+    posterInput.placeholder = 'Poster image URL (optional)...';
+    posterInput.value = block.poster || '';
+    posterControls.appendChild(posterInput);
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'video-poster-actions';
+
+    const uploadPosterBtn = document.createElement('button');
+    uploadPosterBtn.type = 'button';
+    uploadPosterBtn.className = 'edit-btn-small video-poster-action';
+    uploadPosterBtn.textContent = 'Upload poster';
+    actionsRow.appendChild(uploadPosterBtn);
+
+    const captureFrameBtn = document.createElement('button');
+    captureFrameBtn.type = 'button';
+    captureFrameBtn.className = 'edit-btn-small video-poster-action';
+    captureFrameBtn.textContent = 'Use current frame';
+    actionsRow.appendChild(captureFrameBtn);
+
+    const clearPosterBtn = document.createElement('button');
+    clearPosterBtn.type = 'button';
+    clearPosterBtn.className = 'edit-btn-small video-poster-action';
+    clearPosterBtn.textContent = 'Clear';
+    actionsRow.appendChild(clearPosterBtn);
+
+    const posterUploadInput = document.createElement('input');
+    posterUploadInput.type = 'file';
+    posterUploadInput.accept = 'image/*';
+    posterUploadInput.className = 'video-poster-upload-input';
+    posterUploadInput.hidden = true;
+
+    const syncPosterToBlock = (poster: string): void => {
+      const cleanPoster = poster.trim();
+      applyVideoPoster(video, cleanPoster);
+      updateBlockFieldsInContext(context, { poster: cleanPoster }, { render: false });
+      clearPosterBtn.hidden = cleanPoster.length === 0;
+      if (posterInput.value !== cleanPoster) {
+        posterInput.value = cleanPoster;
+      }
+    };
+
+    let isPosterActionInFlight = false;
+    const setPosterActionState = (inFlight: boolean): void => {
+      isPosterActionInFlight = inFlight;
+      uploadPosterBtn.disabled = inFlight;
+      captureFrameBtn.disabled = inFlight;
+      clearPosterBtn.disabled = inFlight;
+    };
+
+    posterInput.addEventListener('input', () => {
+      syncPosterToBlock(posterInput.value);
+    });
+
+    uploadPosterBtn.addEventListener('click', () => {
+      if (isPosterActionInFlight) return;
+      posterUploadInput.click();
+    });
+
+    posterUploadInput.addEventListener('change', async () => {
+      const file = posterUploadInput.files?.[0];
+      posterUploadInput.value = '';
+      if (!file || isPosterActionInFlight) return;
+
+      setPosterActionState(true);
+      try {
+        const posterUrl = await EditMedia.uploadPosterForVideo(file);
+        syncPosterToBlock(posterUrl);
+        showNotification('Poster uploaded!', 'success');
+      } catch (error) {
+        showNotification(error instanceof Error ? error.message : 'Poster upload failed', 'error');
+      } finally {
+        setPosterActionState(false);
+      }
+    });
+
+    captureFrameBtn.addEventListener('click', async () => {
+      if (isPosterActionInFlight) return;
+
+      setPosterActionState(true);
+      try {
+        const posterUrl = await EditMedia.capturePosterFromVideo(video);
+        syncPosterToBlock(posterUrl);
+        showNotification('Poster captured from frame!', 'success');
+      } catch (error) {
+        showNotification(error instanceof Error ? error.message : 'Frame capture failed', 'error');
+      } finally {
+        setPosterActionState(false);
+      }
+    });
+
+    clearPosterBtn.addEventListener('click', () => {
+      if (isPosterActionInFlight) return;
+      syncPosterToBlock('');
+    });
+
+    const initialPoster = (block.poster || '').trim();
+    applyVideoPoster(video, initialPoster);
+    clearPosterBtn.hidden = initialPoster.length === 0;
+    if (posterInput.value !== initialPoster) {
+      posterInput.value = initialPoster;
+    }
+    posterControls.appendChild(actionsRow);
+    posterControls.appendChild(posterUploadInput);
+    wrapper.appendChild(posterControls);
     wrapper.appendChild(createMediaCaptionInput(block.caption, context));
   } else {
     wrapper.appendChild(createUploadZone(context, 'video'));
@@ -1640,7 +1871,7 @@ function renderHtmlBlock(block: HtmlBlock, context: BlockContext): HTMLElement {
       isInteractive = false;
       EditMedia.deselect();
       syncInteractionUi();
-      textarea.focus();
+      textarea.focus({ preventScroll: true });
     } else {
       // Switch to preview mode - update iframe now
       previewContainer.style.display = 'block';
@@ -1961,7 +2192,7 @@ export function insertBlock(index: number, type: BlockType, props: Partial<Block
         `[data-block-index="${insertIndex}"] .block-textarea, ` +
         `[data-block-index="${insertIndex}"] .callout-textarea`
       );
-      if (textarea) textarea.focus();
+      if (textarea) textarea.focus({ preventScroll: true });
     }, 50);
   }
 }
@@ -2021,7 +2252,7 @@ function handleSlashCommand(
             `[data-block-index="${focusIndex}"] .block-textarea, ` +
             `[data-block-index="${focusIndex}"] .callout-textarea`
           );
-          if (textarea) textarea.focus();
+          if (textarea) textarea.focus({ preventScroll: true });
         }, 50);
       }
     } else {

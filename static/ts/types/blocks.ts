@@ -28,6 +28,7 @@ export interface ImageBlock extends BaseBlock {
 export interface VideoBlock extends BaseBlock {
   type: 'video';
   src: string;
+  poster?: string;
   style: string | null;
   caption: string;
   align?: Alignment;

@@ -6,6 +6,7 @@ import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -915,6 +916,74 @@ async def process_content_video(request: Request):
     except Exception as e:
         logger.exception("Content video processing failed")
         raise HTTPException(status_code=500, detail="Video processing failed")
+
+
+@router.post("/content-video-poster")
+async def extract_content_video_poster(request: Request):
+    """Extract and upload a poster frame from an existing content video URL."""
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
+    source_url = data.get("source_url")
+    frame_time_raw = data.get("frame_time", 0)
+
+    if not isinstance(source_url, str) or not source_url.strip():
+        raise HTTPException(status_code=400, detail="source_url is required")
+
+    source_url = source_url.strip()
+    parsed = urlparse(source_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="source_url must be an absolute http(s) URL")
+    if parsed.netloc != CLOUDFRONT_DOMAIN:
+        raise HTTPException(status_code=400, detail="source_url must use configured CloudFront domain")
+
+    try:
+        frame_time = float(frame_time_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="frame_time must be a number")
+    if frame_time < 0:
+        frame_time = 0.0
+    if frame_time > 6 * 60 * 60:
+        raise HTTPException(status_code=400, detail="frame_time exceeds maximum allowed range")
+
+    try:
+        from utils.s3 import upload_file
+        from utils.video import generate_thumbnail
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            poster_path = os.path.join(temp_dir, "poster.webp")
+            generate_thumbnail(
+                source_url,
+                poster_path,
+                time=frame_time,
+                width=1600,
+                height=1600,
+            )
+
+            with open(poster_path, "rb") as poster_file:
+                poster_bytes = poster_file.read()
+
+        content_hash = compute_hash(poster_bytes)
+        existing_key = find_by_hash(content_hash)
+        if existing_key:
+            return {
+                "success": True,
+                "url": f"https://{CLOUDFRONT_DOMAIN}/{existing_key}",
+                "deduplicated": True,
+            }
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        key = content_image_key(f"{timestamp}.webp")
+        url = upload_file(io.BytesIO(poster_bytes), key, "image/webp")
+        register_asset(key, content_hash, len(poster_bytes))
+
+        return {"success": True, "url": url, "deduplicated": False}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Content video poster extraction failed")
+        raise HTTPException(status_code=500, detail="Poster extraction failed")
 
 
 def cleanup_old_temp_videos():
