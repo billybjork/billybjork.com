@@ -20,43 +20,40 @@ video:
 
 <!-- block -->
 
-Despite my background creating videos for a living, I've grown to dislike taking cameras with me on trips.
+Despite my background in making videos for a living, I've grown to hate bringing cameras on trips.
 
-Either I'm experiencing the trip through a viewfinder, letting the moments slip by, or I'm living in the moment, failing at my 'job' to document the trip. For the last few years I've opted towards the latter.
+It's a lose-lose situation. Either I'm experiencing the trip through a viewfinder, watching the moments slip by while I fiddle with exposure settings. Or I'm actually present, living in the moment, and failing at my "job" to document anything. These days I've given up on the job.
 
-So when I traveled to Japan this January, I did pack a couple cameras out of habit. But they remained neglected in my bag nearly the entire time. How could I worry about framing shots and adjusting exposure... when I was fully occupied finding the next konbini for the fifth snack of the day?
+So when I traveled to Japan this January, I did pack a couple cameras out of habit. They mostly stayed in my bag. Honestly, how could I worry about framing shots when I was fully occupied finding the next konbini snack?
 
-Inevitably, our group *did* end up with hundreds of photos and videos, captured on cell phones. So when it came time to make a video to relive the memories from the trip
-
-After returning to America, I was still keen on making a video to relive the memories of my first time in Japan. ***But what could I make with a bunch of phone pictures?* **💭
+We still ended up with hundreds of photos and videos, of course—just all shot on phones. After getting home, I found myself wanting to make *something* with them. A video to relive the trip. But what do you actually make with a pile of phone pictures?
 
 <!-- block -->
 
 <!-- row -->
+Then I remembered something. On the Tokyo subway, we'd been messing around with this iOS Photos feature that lets you tilt your phone to see your pictures in 3D, like a diorama.
+
+I got curious and looked into how it worked. Turns out it's based on something called [Gaussian splats](https://en.wikipedia.org/wiki/Gaussian_splatting), and Apple recently open-sourced the [model](https://github.com/apple/ml-sharp) that powers it.
+<!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260224_145107_455924.mp4" autoplay loop muted playsinline style="display: block; width: 157px"></video>
-<!-- col -->
-That's when I thought about one of our pastimes as we rode around the Tokyo subway: playing with this iOS Photos feature which lets you interact with your pictures in 3D.
-
-I learned that this iPhone feature is based on a technology called [Gaussian splats](https://en.wikipedia.org/wiki/Gaussian_splatting), and a machine learning [model](https://github.com/apple/ml-sharp) that Apple recently open-sourced.
 <!-- /row -->
 
 <!-- block -->
 
 <!-- row -->
-So I downloaded the model, set it up to run on my computer, and fed it a bunch of photos from my Japan photo album.
-
-Out came a bunch of .ply files representing estimated 3D structure of the scene in each photo.
-
-Each of these files contained over 1 million 'splats' (essentially points in X/Y/Z space with color and other properties).
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_160227_005472.mp4" autoplay loop muted playsinline style="display: block; width: 384px"></video>
+<p class="media-caption">New file format unlocked</p>
 <!-- col -->
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_160227_005472.mp4" autoplay loop muted playsinline style="display: block; width: 586px"></video>
+So I downloaded the model, got it running on my computer, and started feeding it photos from Japan.
+
+What came out were 3D files, each one a reconstruction of the scene, made up of over a million tiny "splats" (imagine colored points floating in 3D space that, when viewed together, recreate the image).
 <!-- /row -->
 
 <!-- block -->
 
-The next question became: *how do I actually use these files?*
+First problem: I couldn't actually *see* anything in these files, aside from a bunch of dots.
 
-With the help of Claude Code, I whipped up a basic 'splat viewers' I could use to navigate these 3D scenes in my browser. I've included a tiny version below which you can play with:
+With some help from Claude Code, I built a basic splat viewer to navigate the wobbly 3D scenes right in a webpage. Here's a little one you can play with:
 
 <!-- block -->
 
@@ -912,26 +909,20 @@ document.getElementById('info').textContent=String(err&&err.message?err.message:
 
 <!-- block -->
 
-After that dose of excitement, my mind shifted to the video.
-These 3D splats are cool and all, but how do I actually turn these into a video?
-Upon some further investigation, I learned that one approach was rendering pre-defined moves through the scene, like a virtual camera moving through the 3D space.
+Cool. So I've got these 3D scenes. I can play around with them in the browser. But how do I actually turn them into a *video*?
+
+The answer? Program a virtual camera to move through the 3D space, record what it sees, and you get video.
 
 <!-- block -->
 
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_164629_755465.mp4" autoplay loop muted playsinline></video>
-<p class="media-caption">Virtual camera moving through space, and it&#39;s &#39;depth map&#39; of the same scene (on the right)</p>
+<p class="media-caption">Virtual camera moving through the scene (left), with its depth visualization (right)</p>
 
 <!-- block -->
 
-As I tested this more, I learned the (obvious) takeaway that camera moves looked better with different scenes
+I quickly learned that different camera moves looked better with different scenes.
 
-<!-- block -->
-
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_164736_643819.mp4" autoplay loop muted playsinline style="display: block; width: 525px"></video>
-
-<!-- block -->
-
-So I rendered out five preset camera movements for each image
+So I built five preset camera movements (pan left, pan right, push in, pull out, orbit) and rendered each preset for each scene.
 
 <!-- block -->
 
@@ -940,127 +931,144 @@ So I rendered out five preset camera movements for each image
 <!-- block -->
 
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165225_871326.mp4" autoplay loop muted playsinline></video>
+<p class="media-caption">Yes, that is an abandoned theme park on a ski hill</p>
 
 <!-- block -->
 
-Once I had the my preset 'virtual camera' movements locked down, I rendered them out for ~50 of my favorite photos from the trip, producing about 300 videos total.
-I chose my favorites, and edited them together into the video you see at the top.
-Essentially felt like a 3D ken burns effect - and mirrored my experience with the ken burns effect as a video editor: useful and easy to build a workflow around, but kinda ‘mid’ if the experience is the main point
+I ran this on about 60 photos from the trip, five movements each. That gave me 300 videos total. I picked the best ones, cut them together, done. The result is the video you see at the top of this page.
+
+And it... worked? The result is basically a 3D Ken Burns effect. If you've ever made slideshows, you know Ken Burns: that slow pan-and-zoom thing that makes static photos feel slightly more alive. Same energy here. Useful, easy to systematize. But also a little *mid*—fine for reliving memories, not exactly exciting to watch.
+
+<!-- block -->
+
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_164736_643819.mp4" autoplay loop muted playsinline style="display: block; width: 525px"></video>
+
+<!-- block -->
+
+<!-- align:center -->
+I wanted more...
+<!-- /align -->
 
 <!-- block -->
 
 <!-- row -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260224_154454_955932.mp4" autoplay loop muted playsinline style="display: block; width: 509px"></video>
 <!-- col -->
-But I wasn't satisfied yet...
-I've grown to like the 'point cloud' effect I've started seeing in music videos and Vimeo [gems](https://vimeo.com/407635582), and wanted to see how I could apply that to these splats
-My goal became - create a sort of "hallway" effect, where the camera travels backwards through the splats, from one scene into the next.
-This is where I truly got in over my head
+I've been seeing this "point cloud" effect in music videos and Vimeo [experiments](https://vimeo.com/407635582), that look where you're flying through digital debris.
+
+Could I achieve that look with these splats? What if I stitched multiple scenes together into a kind of "hallway," where you travel backwards through one scene and emerge into the next?
+
+This is where things got out of hand.
 <!-- /row -->
 
 <!-- block -->
 
-Specifically, 40 'experiments' in rendering videos based on those Gaussian splats
-Below are some artifacts from my adventures in editing a video with Python code...
-A few of those experiments are below
+What followed was 40 different experiments trying to make this work. Over 36,000 lines of Python code across dozens of scripts. I was editing a video in code, which is exactly as tedious as it sounds.
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260224_143630_506231.webp" alt="More than 36,000 lines of Python code in these here folders" style="display: block; width: 477px">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260224_143630_506231.webp" alt="" style="display: block; width: 477px">
+<p class="media-caption">The scripts folder. This is what happens when you refuse to just use proper VFX software.</p>
 
 <!-- block -->
 
-Motivated by my new mission - create a 'hallway' of 3D scenes
-First, get the effect right with a single scene - tested some variations:
+Step one, get the "hallway" effect working with a single scene. I tested some variations:
 
 <!-- block -->
 
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165236_738685.mp4" autoplay loop muted playsinline></video>
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165236_738685.mp4" poster="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260224_172555_255743.webp" autoplay loop muted playsinline></video>
 
 <!-- block -->
 
-Worked great with the one image I had tested so far, but then started testing with other images and immediately had issues
-The render would come out with the subjects totally out of focus or just dots, because
-3D profiles varied a lot (some inside, some outside, etc)
-So I went back to creating splat viewers to attempt to identify/capture specific regions of each scene to keep in focus / align - for the hallway render
+These initial tests looked great on my test image. Then I tried other photos and everything broke.
+
+The problem is, every scene has different depth. When the virtual camera flies through the scene, it needs to know what to keep in focus—and that changes completely depending on the scene.
 
 <!-- block -->
 
 <!-- row -->
 <img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_165601_401747.webp" alt="" style="display: block; width: 287px">
-<p class="media-caption">The regular photo</p>
+<p class="media-caption">The original photo</p>
 <!-- col -->
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165625_416279.mp4" autoplay loop muted playsinline style="display: block; width: 510px"></video>
-<p class="media-caption">The gaussian splat</p>
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165625_416279.mp4" poster="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260224_172951_362564.webp" autoplay loop muted playsinline style="display: block; width: 414px"></video>
+<p class="media-caption">The 3D scene (and me getting lost in the sauce)</p>
 <!-- /row -->
 
 <!-- block -->
 
-More attempts at splat viewer UIs to allow me to specify the focal point of the scene
+So I built more viewer tools, trying to let myself mark "this is the important part of this scene, keep it in focus."
 
 <!-- block -->
 
 <!-- row -->
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165659_152409.mp4" autoplay loop muted playsinline style="display: block; width: 525px"></video>
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165659_152409.mp4" poster="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260224_173008_284788.webp" autoplay loop muted playsinline style="display: block; width: 525px"></video>
 <!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165727_806958.mp4" autoplay loop muted playsinline style="display: block; width: 326px"></video>
 <!-- /row -->
 
 <!-- block -->
 
-Eventually I realized I was overthinking it
-Just render out versions at different 'steps' representing different focal points, then choose the one that looked best
+Eventually I realized I was overcomplicating it.
+
+A simpler approach would be to simply render each scene at multiple depth settings, then pick the one that looks right.
 
 <!-- block -->
 
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165933_543451.mp4" autoplay loop muted playsinline style="display: block; width: 340px"></video>
-<p class="media-caption">Experiment in adjusting the &#39;focal point&#39; to ensure the relevant part of the image is sharp</p>
+<p class="media-caption">Stepping through different focal depths until the subject is sharp</p>
 
 <!-- block -->
 
-With the "focal point" configured, then came rendering the camera to 'move through' the scene
+With that sorted, I could render camera moves through each scene. One scene at a time worked fine. Two scenes at a time sort of worked too.
 
 <!-- block -->
 
 <!-- row -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_165947_669782.mp4" autoplay loop muted playsinline style="display: block; width: 310px"></video>
-<p class="media-caption">Video render moving through a single scene</p>
+<p class="media-caption">Flying through a single scene (I&#39;ll give that a B+)</p>
 <!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_170020_528037.mp4" autoplay loop muted playsinline style="display: block; width: 308px"></video>
-<p class="media-caption">Attempt at moving virtual camera through multiple scenes in a &#39;hallway&#39;</p>
+<p class="media-caption">Two scenes stitched together (grading that one a C-)</p>
 <!-- /row -->
 
 <!-- block -->
 
-Turns out,. integrating many splats into the same render turned out to be devilishly hard. Got this working with two scenes, sort of (above to the right), but became much more difficult with more scenes
-After repeated attempts, I still couldn't get this working properly
-So I rendered them all separately, then combined in post with simple cross-fade transitions. This is the closest I got to my 'original vision' for the video
+But the "hallway" I wanted—many scenes in one continuous render—turned out to be freakishly hard. I got it barely working with two scenes. Three scenes? Chaos. The splats would fight each other and overlap in a glitchy mess.
+
+After way too many attempts, I gave up on the dream of a true "point cloud hallway." I settled on rendering each scene separately, then cross-faded between them in post. Not the seamless flight I imagined, but close enough.
 
 <!-- block -->
 
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_170108_455521.mp4" controls style="display: block; width: 679px"></video>
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_170108_455521.mp4" poster="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260224_173226_225044.webp" controls style="display: block; width: 679px"></video>
+<p class="media-caption">The cross-fade version. Passable, but not what I wanted.</p>
 
 <!-- block -->
 
-Unsatisfied with the above, I made a sacrifice
-Instead of rendering the entire 3D splats into the same scene, I could use the splats to extract discrete image 'layers', then the virtual camera could just move through that instead of the splats
+<!-- row -->
+I still wasn't happy. So I tried a different approach entirely.
 
-<!-- block -->
+What if I didn't render the full 3D splats at all? What if I used the 3D data just to extract *layers*—foreground, midground, background—and then moved a camera through those flat layers instead?
 
+This turned out to be simpler, more predictable, and actually worked.
+<!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_170202_500001.mp4" autoplay loop muted playsinline></video>
+<p class="media-caption">The layers approach—moving a camera through sliced depth planes</p>
+<!-- /row -->
 
 <!-- block -->
 
-Satisfied enough and exasperated, ready to be done, I went forward with the final export - involving all of the scenes
+This was a breakthrough. It gave that "flying through the scene" feeling without all the complexity of rendering multiple 3D scenes together.
+
+Exhausted and ready to be done, I committed to this approach for the final video.
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="12.5" style="display: block; width: 359px;;;; margin-left: auto; margin-right: auto">
-<p class="media-caption">What a &quot;final export&quot; looks like when editing videos in Python code</p>
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
 
-Full video - moving a virtual camera through these virtual scenes
+Here's the full result—a virtual camera flying through reconstructed memories of Japan:
 
 <!-- block -->
 
@@ -1068,10 +1076,19 @@ Full video - moving a virtual camera through these virtual scenes
 
 <!-- block -->
 
-After all that, it’s truly felt like vastly more work and time sunk into this than I expected
-- Informs a theory about AI I and others have noticed - it will can absolutely create more work than it eliminates; which throws a wrench in the whole “AI is replacing you” idea. Just spent in maximalist mode cranking out task in way more depth, probably totally unnecessary… but sometimes satisfying in the end
+So. Was this worth it?
+
+I spent *way* more time on this than I would have just editing the photos in Premiere with some Ken Burns moves. Like, orders of magnitude more time. The irony of "using AI to save time" while sinking weeks into 40 failed experiments is not lost on me.
+
+I keep noticing this about AI tools: they rarely actually *save* time. What they do is make things *possible* that weren't possible before—or at least not possible for someone with my skillset. Filmmaker Billy would not have written a gaussian splat renderer from scratch. He probably wouldn't have learned Blender or Unity either. But with a little machine to help write the code, a new category of ideas became accessible.
+
+The problem is that "possible" and "practical" are different things. AI tools tempt my maximalist side. Suddenly I *can* try 40 variations, so I *do* try 40 variations. The ceiling rises, so I reach for it.
+
+Would this video have existed at all without the AI assist? No. Would I have learned as much doing it the traditional way? Definitely not. Was it satisfying in a weird, obsessive way? Yeah, kind of.
+
+I don't have a clean takeaway here. AI didn't replace my work; it multiplied it. I got a video I couldn't have made otherwise, but I also mass-produced my own suffering in ways that were entirely optional. Make of that what you will.
 
 <!-- block -->
 
 <img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170212_039761.webp" alt="" style="display: block; width: 690px">
-<p class="media-caption">I&#39;m sorry Adobe Premiere... I miss you too 😢</p>
+<p class="media-caption">What my &quot;video editing&quot; process looked like. I&#39;m sorry, Premiere. I took you for granted. I see that now.</p>
