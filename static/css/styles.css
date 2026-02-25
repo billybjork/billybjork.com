@@ -738,7 +738,7 @@ footer {
 /* Constrain media elements */
 .project-content img,
 .project-content video,
-.project-content iframe {
+.project-content iframe:not(.html-block-sandbox) {
     max-width: 100%;
     height: auto;
     object-fit: contain;
@@ -1062,6 +1062,7 @@ hr::after {
 .project-content .html-block-sandbox {
     width: 100%;
     min-height: 100px;
+    max-width: none;
     border: none;
     display: block;
 }

@@ -5,10 +5,24 @@
 
 import ProjectLoader from './loader';
 import ProjectInteractions from './interactions';
-import { createSandboxedIframe, cleanupIframe } from '../utils/html-sandbox';
+import {
+  createSandboxedIframe,
+  cleanupIframe,
+  applySandboxInlineStyle,
+  type SandboxAlignment,
+} from '../utils/html-sandbox';
 
 // ========== HTML SANDBOX HYDRATION ==========
 let sandboxPlaceholderObserver: IntersectionObserver | null = null;
+
+function inferLegacyHtmlBlockAlignment(html: string): SandboxAlignment | undefined {
+  const trimmed = html.trim();
+  const alignMatch = trimmed.match(
+    /^<div\b[^>]*\bstyle\s*=\s*["'][^"']*\btext-align\s*:\s*(center|right)\b[^"']*["'][^>]*>[\s\S]*<\/div>$/i
+  );
+  if (!alignMatch) return undefined;
+  return (alignMatch[1] as SandboxAlignment);
+}
 
 function hydrateSandboxPlaceholder(placeholder: Element): void {
   const encoded = placeholder.getAttribute('data-html-b64');
@@ -20,9 +34,7 @@ function hydrateSandboxPlaceholder(placeholder: Element): void {
     const inlineStyle = placeholder.getAttribute('style');
     const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
     iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
-    if (inlineStyle) {
-      iframe.style.cssText += `; ${inlineStyle}`;
-    }
+    applySandboxInlineStyle(iframe, inlineStyle, inferLegacyHtmlBlockAlignment(html));
     placeholder.replaceWith(iframe);
   } catch (e) {
     console.error('Failed to decode HTML block:', e);

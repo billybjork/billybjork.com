@@ -14,6 +14,10 @@ interface IframeRegistry {
   nonce: string;
 }
 
+export type SandboxAlignment = 'left' | 'center' | 'right';
+
+const PX_SIZE_VALUE_PATTERN = /^\s*([0-9]*\.?[0-9]+)\s*px(?:\s*!important)?\s*$/i;
+
 // Global registry: contentWindow -> { iframe, nonce }
 const iframeRegistry = new WeakMap<Window, IframeRegistry>();
 
@@ -45,6 +49,69 @@ function initGlobalResizeListener(): void {
 
 function generateNonce(): string {
   return crypto.randomUUID();
+}
+
+function extractPixelDimension(style: string, property: 'width' | 'height'): number | null {
+  const pattern = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, 'i');
+  const match = style.match(pattern);
+  if (!match) return null;
+
+  const size = match[1]?.match(PX_SIZE_VALUE_PATTERN);
+  if (!size) return null;
+
+  const value = Number.parseFloat(size[1] ?? '');
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+function extractMarginAutoAlignment(style: string): SandboxAlignment | null {
+  const marginLeftAuto = /(?:^|;)\s*margin-left\s*:\s*auto(?:\s*!important)?\s*(?:;|$)/i.test(style);
+  const marginRightAuto = /(?:^|;)\s*margin-right\s*:\s*auto(?:\s*!important)?\s*(?:;|$)/i.test(style);
+
+  if (marginLeftAuto && marginRightAuto) return 'center';
+  if (marginLeftAuto) return 'right';
+  return null;
+}
+
+function applySandboxAlignment(iframe: HTMLIFrameElement, align: SandboxAlignment): void {
+  iframe.style.marginLeft = '';
+  iframe.style.marginRight = '';
+
+  if (align === 'center') {
+    iframe.style.marginLeft = 'auto';
+    iframe.style.marginRight = 'auto';
+    return;
+  }
+
+  if (align === 'right') {
+    iframe.style.marginLeft = 'auto';
+    iframe.style.marginRight = '0';
+  }
+}
+
+export function applySandboxInlineStyle(
+  iframe: HTMLIFrameElement,
+  inlineStyle: string | null | undefined,
+  align?: SandboxAlignment
+): void {
+  if (inlineStyle) {
+    iframe.style.cssText += `; ${inlineStyle}`;
+  }
+
+  const effectiveAlign = align ?? (inlineStyle ? extractMarginAutoAlignment(inlineStyle) : null) ?? 'left';
+  applySandboxAlignment(iframe, effectiveAlign);
+
+  if (!inlineStyle) return;
+
+  const width = extractPixelDimension(inlineStyle, 'width');
+  const height = extractPixelDimension(inlineStyle, 'height');
+  if (!width || !height) return;
+
+  // Keep authored dimensions at full width, but downscale proportionally on narrow viewports.
+  iframe.style.width = `${width}px`;
+  iframe.style.height = 'auto';
+  iframe.style.aspectRatio = `${width} / ${height}`;
+  iframe.style.maxWidth = '100%';
 }
 
 function wrapHtmlContent(html: string, nonce: string): string {
