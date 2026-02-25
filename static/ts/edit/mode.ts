@@ -18,11 +18,12 @@ import {
   showNotification,
   fetchJSON,
 } from '../core/utils';
-import { createSandboxedIframe, cleanupIframe } from '../utils/html-sandbox';
+import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
 import EditSlash from './slash';
 import EditMedia, { type VideoUploadProgressUpdate } from './media';
 import EditUndo from './undo';
+import { persistScrollForNavigation } from './scroll-restore';
 
 // ========== ICONS ==========
 
@@ -78,6 +79,11 @@ interface ContainerScrollAnchor {
   offsetWithinContainer: number;
 }
 
+interface ModeSwitchBlockAnchor {
+  blockIndex: number;
+  blockTop: number;
+}
+
 type SaveAction =
   | { type: 'edit' }
   | { type: 'save_start' }
@@ -107,9 +113,12 @@ let abortController: AbortController | null = null;
 const AUTO_SAVE_DELAY = 2000;
 const RETRY_DELAY = 5000;
 const SAVED_FADE_DELAY = 3000;
+const SCROLL_RESTORE_PASSES = 3;
+const SCROLL_RESTORE_MEDIA_PASSES = 2;
 
 // Revision tracking for conflict detection
 let currentRevision: string | null = null;
+let cleanupCandidateUrls = new Set<string>();
 
 // Drag & Drop state
 const dragState: DragState = {
@@ -117,6 +126,39 @@ const dragState: DragState = {
   currentDropIndex: null,
   isDragging: false,
 };
+
+let renderScrollRestoreToken = 0;
+let containerScrollRestoreToken = 0;
+let modeSwitchScrollRestoreToken = 0;
+
+function trackCleanupCandidateUrl(url: string | null | undefined): void {
+  const cleanUrl = (url ?? '').trim();
+  if (!cleanUrl) return;
+  cleanupCandidateUrls.add(cleanUrl);
+}
+
+function isTrackableAssetUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return /\.(webp|png|jpe?g|gif|avif)$/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function trackPosterCleanupCandidatesFromBlock(block: Block | null | undefined): void {
+  if (!block) return;
+  if (block.type === 'video') {
+    trackCleanupCandidateUrl(block.poster);
+    return;
+  }
+  if (block.type === 'row') {
+    trackPosterCleanupCandidatesFromBlock(block.left);
+    trackPosterCleanupCandidatesFromBlock(block.right);
+  }
+}
 
 function withInstantScroll(action: () => void): void {
   const html = document.documentElement;
@@ -162,11 +204,50 @@ function captureRenderScrollAnchor(): RenderScrollAnchor | null {
   };
 }
 
+function scheduleScrollRestorePasses(
+  token: number,
+  getCurrentToken: () => number,
+  restoreOnce: () => void,
+  passCount: number
+): void {
+  if (passCount <= 0) return;
+
+  let remainingPasses = passCount;
+  const runPass = (): void => {
+    if (token !== getCurrentToken()) return;
+    restoreOnce();
+    remainingPasses -= 1;
+    if (remainingPasses > 0) {
+      requestAnimationFrame(runPass);
+    }
+  };
+
+  requestAnimationFrame(runPass);
+}
+
+function bindMediaShiftReanchors(
+  root: ParentNode,
+  onMediaShift: () => void
+): void {
+  root.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+    if (img.complete) return;
+    img.addEventListener('load', onMediaShift, { once: true });
+    img.addEventListener('error', onMediaShift, { once: true });
+  });
+
+  root.querySelectorAll<HTMLVideoElement>('video').forEach((video) => {
+    if (video.readyState >= 1) return;
+    video.addEventListener('loadedmetadata', onMediaShift, { once: true });
+    video.addEventListener('error', onMediaShift, { once: true });
+  });
+}
+
 function restoreRenderScrollAnchor(anchor: RenderScrollAnchor | null): void {
   if (!anchor || !container || blocks.length === 0) return;
 
-  requestAnimationFrame(() => {
-    if (!container) return;
+  const token = ++renderScrollRestoreToken;
+  const restoreOnce = (): void => {
+    if (!container || blocks.length === 0) return;
 
     let target: HTMLElement | null = null;
     if (anchor.blockId) {
@@ -188,6 +269,22 @@ function restoreRenderScrollAnchor(anchor: RenderScrollAnchor | null): void {
         behavior: 'auto',
       });
     });
+  };
+
+  scheduleScrollRestorePasses(
+    token,
+    () => renderScrollRestoreToken,
+    restoreOnce,
+    SCROLL_RESTORE_PASSES
+  );
+
+  bindMediaShiftReanchors(container, () => {
+    scheduleScrollRestorePasses(
+      token,
+      () => renderScrollRestoreToken,
+      restoreOnce,
+      SCROLL_RESTORE_MEDIA_PASSES
+    );
   });
 }
 
@@ -198,8 +295,75 @@ function captureContainerScrollAnchor(contentContainer: HTMLElement): ContainerS
   };
 }
 
-function restoreContainerScrollAnchor(contentContainer: HTMLElement, anchor: ContainerScrollAnchor): void {
-  requestAnimationFrame(() => {
+function captureContentBlockAnchor(contentContainer: HTMLElement): ModeSwitchBlockAnchor | null {
+  const blocks = Array.from(contentContainer.querySelectorAll<HTMLElement>('.content-block'));
+  if (blocks.length === 0) return null;
+
+  const anchor =
+    blocks.find((block) => block.getBoundingClientRect().bottom >= 0) ??
+    blocks[blocks.length - 1] ??
+    null;
+  if (!anchor) return null;
+
+  const blockIndex = blocks.indexOf(anchor);
+  if (blockIndex < 0) return null;
+
+  return {
+    blockIndex,
+    blockTop: anchor.getBoundingClientRect().top,
+  };
+}
+
+function restoreModeSwitchBlockAnchor(
+  anchor: ModeSwitchBlockAnchor | null,
+  stabilityRoot: ParentNode = container ?? document.body
+): void {
+  if (!anchor || !container || blocks.length === 0) return;
+
+  const token = ++modeSwitchScrollRestoreToken;
+  const restoreOnce = (): void => {
+    if (!container || blocks.length === 0) return;
+
+    const clampedIndex = Math.max(0, Math.min(anchor.blockIndex, blocks.length - 1));
+    const target = container.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${clampedIndex}"]`);
+    if (!target) return;
+
+    const delta = target.getBoundingClientRect().top - anchor.blockTop;
+    if (Math.abs(delta) < 1) return;
+
+    withInstantScroll(() => {
+      window.scrollTo({
+        top: clampScrollTop(window.scrollY + delta),
+        left: 0,
+        behavior: 'auto',
+      });
+    });
+  };
+
+  scheduleScrollRestorePasses(
+    token,
+    () => modeSwitchScrollRestoreToken,
+    restoreOnce,
+    SCROLL_RESTORE_PASSES
+  );
+
+  bindMediaShiftReanchors(stabilityRoot, () => {
+    scheduleScrollRestorePasses(
+      token,
+      () => modeSwitchScrollRestoreToken,
+      restoreOnce,
+      SCROLL_RESTORE_MEDIA_PASSES
+    );
+  });
+}
+
+function restoreContainerScrollAnchor(
+  contentContainer: HTMLElement,
+  anchor: ContainerScrollAnchor,
+  stabilityRoot: ParentNode = contentContainer
+): void {
+  const token = ++containerScrollRestoreToken;
+  const restoreOnce = (): void => {
     const contentTop = window.scrollY + contentContainer.getBoundingClientRect().top;
     const nextScrollTop = contentTop + anchor.offsetWithinContainer;
     withInstantScroll(() => {
@@ -209,6 +373,22 @@ function restoreContainerScrollAnchor(contentContainer: HTMLElement, anchor: Con
         behavior: 'auto',
       });
     });
+  };
+
+  scheduleScrollRestorePasses(
+    token,
+    () => containerScrollRestoreToken,
+    restoreOnce,
+    SCROLL_RESTORE_PASSES
+  );
+
+  bindMediaShiftReanchors(stabilityRoot, () => {
+    scheduleScrollRestorePasses(
+      token,
+      () => containerScrollRestoreToken,
+      restoreOnce,
+      SCROLL_RESTORE_MEDIA_PASSES
+    );
   });
 }
 
@@ -310,7 +490,9 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Parse markdown into blocks
   const markdown = 'markdown' in data ? data.markdown : '';
   blocks = EditBlocks.parseIntoBlocks(markdown || '');
+  cleanupCandidateUrls = new Set();
   const initialScrollAnchor = captureContainerScrollAnchor(contentContainer);
+  const initialContentBlockAnchor = captureContentBlockAnchor(contentContainer);
 
   // Create editor wrapper
   const editorWrapper = document.createElement('div');
@@ -379,7 +561,14 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   // Render blocks
   renderBlocks();
-  restoreContainerScrollAnchor(contentContainer, initialScrollAnchor);
+  const stabilityRoot = editMode === 'project'
+    ? (contentContainer.closest('.project-item') ?? contentContainer)
+    : contentContainer;
+  if (initialContentBlockAnchor) {
+    restoreModeSwitchBlockAnchor(initialContentBlockAnchor, stabilityRoot);
+  } else {
+    restoreContainerScrollAnchor(contentContainer, initialScrollAnchor, stabilityRoot);
+  }
 
   // Warn before leaving with unsaved changes
   window.addEventListener('beforeunload', handleBeforeUnload);
@@ -404,6 +593,10 @@ function buildProjectSavePayload(markdown: string, options: { force?: boolean } 
     video: project.video ?? {},
     markdown,
   };
+
+  if (cleanupCandidateUrls.size > 0) {
+    payload.cleanup_candidates = Array.from(cleanupCandidateUrls);
+  }
 
   if (options.force) {
     payload.force = true;
@@ -467,6 +660,9 @@ function showConflictBanner(): void {
         if (result.revision) {
           currentRevision = result.revision;
         }
+        if (editMode === 'project') {
+          cleanupCandidateUrls.clear();
+        }
         isDirty = false;
         dispatchSaveAction({ type: 'save_ok' });
         showNotification('Changes saved (overwritten)', 'success');
@@ -517,6 +713,7 @@ export function cleanup(): void {
   // Reset save state
   dispatchSaveAction({ type: 'reset' });
   currentRevision = null;
+  cleanupCandidateUrls.clear();
 
   // Remove conflict banner if present
   document.querySelector('.edit-conflict-banner')?.remove();
@@ -821,6 +1018,9 @@ async function performAutoSave(): Promise<void> {
     if (result.revision) {
       currentRevision = result.revision;
     }
+    if (editMode === 'project') {
+      cleanupCandidateUrls.clear();
+    }
 
     isDirty = false;
     dispatchSaveAction({ type: 'save_ok' });
@@ -1026,6 +1226,182 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
   let activeLineIndex: number | null = null;
   const slashEnabled = !context.rowSide;
 
+  type CaretPositionLike = {
+    offsetNode: Node;
+    offset: number;
+  };
+
+  type CaretPointDocument = Document & {
+    caretPositionFromPoint?: (x: number, y: number) => CaretPositionLike | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+
+  const clamp = (value: number, min: number, max: number): number => (
+    Math.max(min, Math.min(max, value))
+  );
+
+  const mapLiteralToRawBoundaries = (text: string, rawStart: number): number[] => {
+    const map = [rawStart];
+    for (let i = 0; i < text.length; i++) {
+      map.push(rawStart + i + 1);
+    }
+    return map;
+  };
+
+  const appendBoundaryMap = (target: number[], incoming: number[]): void => {
+    if (!incoming.length) return;
+    target[target.length - 1] = incoming[0] ?? target[target.length - 1] ?? 0;
+    if (incoming.length > 1) {
+      target.push(...incoming.slice(1));
+    }
+  };
+
+  const mapInlineToRawBoundaries = (text: string, rawStart: number, depth = 0): number[] => {
+    const map = [rawStart];
+    if (!text) return map;
+
+    if (depth >= INLINE_MAX_DEPTH) {
+      appendBoundaryMap(map, mapLiteralToRawBoundaries(text, rawStart));
+      return map;
+    }
+
+    let cursor = 0;
+    while (cursor < text.length) {
+      const remaining = text.slice(cursor);
+      const match = findNextInlineMatch(remaining);
+
+      if (!match) {
+        appendBoundaryMap(map, mapLiteralToRawBoundaries(remaining, rawStart + cursor));
+        break;
+      }
+
+      if (match.index > 0) {
+        const literal = remaining.slice(0, match.index);
+        appendBoundaryMap(map, mapLiteralToRawBoundaries(literal, rawStart + cursor));
+      }
+
+      const tokenStart = cursor + match.index;
+      const tokenRawStart = rawStart + tokenStart;
+      const tokenText = remaining.slice(match.index, match.index + match.length);
+      const contentIndex = tokenText.indexOf(match.content);
+
+      if (contentIndex < 0) {
+        appendBoundaryMap(map, mapLiteralToRawBoundaries(tokenText, tokenRawStart));
+        cursor = tokenStart + match.length;
+        continue;
+      }
+
+      const contentRawStart = tokenRawStart + contentIndex;
+      const tokenMap = match.tagName === 'code'
+        ? mapLiteralToRawBoundaries(match.content, contentRawStart)
+        : mapInlineToRawBoundaries(match.content, contentRawStart, depth + 1);
+      appendBoundaryMap(map, tokenMap);
+
+      cursor = tokenStart + match.length;
+    }
+
+    return map;
+  };
+
+  const mapRenderedToRawBoundaries = (lineText: string, lineType: string | undefined): number[] => {
+    if (!lineText) return [0];
+    if (lineType === 'divider') return [lineText.length];
+
+    let bodyStart = 0;
+    if (lineType?.startsWith('heading-')) {
+      const headingPrefix = lineText.match(/^(\s*)(#{1,6})\s+/);
+      if (headingPrefix) bodyStart = headingPrefix[0].length;
+    } else if (lineType === 'quote') {
+      const quotePrefix = lineText.match(/^(\s*)>\s+/);
+      if (quotePrefix) bodyStart = quotePrefix[0].length;
+    }
+
+    const body = lineText.slice(bodyStart);
+    const map = [bodyStart];
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = linkRegex.exec(body)) !== null) {
+      const offset = match.index;
+      if (offset > lastIndex) {
+        const before = body.slice(lastIndex, offset);
+        appendBoundaryMap(map, mapInlineToRawBoundaries(before, bodyStart + lastIndex));
+      }
+
+      const wholeMatch = match[0] ?? '';
+      const linkText = match[1] ?? '';
+      const linkUrl = match[2] ?? '';
+      if (sanitizeUrl(linkUrl)) {
+        appendBoundaryMap(map, mapInlineToRawBoundaries(linkText, bodyStart + offset + 1));
+      } else {
+        appendBoundaryMap(map, mapLiteralToRawBoundaries(wholeMatch, bodyStart + offset));
+      }
+
+      lastIndex = offset + wholeMatch.length;
+    }
+
+    if (lastIndex < body.length) {
+      const tail = body.slice(lastIndex);
+      appendBoundaryMap(map, mapInlineToRawBoundaries(tail, bodyStart + lastIndex));
+    }
+
+    return map;
+  };
+
+  const getPreviewTextOffsetFromPoint = (preview: HTMLElement, event: MouseEvent): number | null => {
+    const doc = preview.ownerDocument as CaretPointDocument;
+    const x = event.clientX;
+    const y = event.clientY;
+
+    let container: Node | null = null;
+    let offset = 0;
+
+    if (typeof doc.caretPositionFromPoint === 'function') {
+      const pos = doc.caretPositionFromPoint(x, y);
+      if (pos) {
+        container = pos.offsetNode;
+        offset = pos.offset;
+      }
+    }
+
+    if (!container && typeof doc.caretRangeFromPoint === 'function') {
+      const range = doc.caretRangeFromPoint(x, y);
+      if (range) {
+        container = range.startContainer;
+        offset = range.startOffset;
+      }
+    }
+
+    if (!container) return null;
+    if (container !== preview && !preview.contains(container)) return null;
+
+    const range = doc.createRange();
+    range.selectNodeContents(preview);
+    try {
+      range.setEnd(container, offset);
+    } catch {
+      return null;
+    }
+
+    return range.toString().length;
+  };
+
+  const getClickedCaretForPreview = (row: HTMLElement, event: MouseEvent): number | null => {
+    const textarea = row.querySelector<HTMLTextAreaElement>('.text-line-input');
+    const preview = row.querySelector<HTMLElement>('.text-block-line-preview');
+    if (!textarea || !preview) return null;
+
+    const renderedOffset = getPreviewTextOffsetFromPoint(preview, event);
+    if (renderedOffset === null) return null;
+
+    const boundaries = mapRenderedToRawBoundaries(textarea.value, row.dataset.lineType);
+    if (!boundaries.length) return null;
+
+    const boundaryIndex = clamp(renderedOffset, 0, boundaries.length - 1);
+    return boundaries[boundaryIndex] ?? textarea.value.length;
+  };
+
   const updateBlockContent = (): void => {
     const nextContent = lines.join('\n');
     updateBlockInContext(
@@ -1084,7 +1460,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     preview.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      activateLine(row);
+      activateLine(row, getClickedCaretForPreview(row, e));
     });
 
     row.addEventListener('click', (e) => {
@@ -1394,10 +1770,154 @@ function appendInlineFormatted(container: Node, text: string): void {
  * Parse inline markdown tokens
  */
 function parseInlineTokens(text: string): DocumentFragment {
+  return parseInlineTokensRecursive(text, 0);
+}
+
+interface InlineMatch {
+  index: number;
+  length: number;
+  tagName: 'strong' | 'em' | 'u' | 'code' | 's';
+  content: string;
+}
+
+const INLINE_MAX_DEPTH = 8;
+
+/**
+ * Recursive inline parser for a safe subset of markdown/html inline styles.
+ */
+function parseInlineTokensRecursive(text: string, depth: number): DocumentFragment {
   const fragment = document.createDocumentFragment();
-  // Simplified parsing - just add text for now, real implementation would parse bold/italic/code
-  fragment.appendChild(document.createTextNode(text));
+  if (!text) return fragment;
+  if (depth >= INLINE_MAX_DEPTH) {
+    fragment.appendChild(document.createTextNode(text));
+    return fragment;
+  }
+
+  let cursor = 0;
+  while (cursor < text.length) {
+    const remaining = text.slice(cursor);
+    const match = findNextInlineMatch(remaining);
+    if (!match) {
+      fragment.appendChild(document.createTextNode(remaining));
+      break;
+    }
+
+    if (match.index > 0) {
+      fragment.appendChild(document.createTextNode(remaining.slice(0, match.index)));
+    }
+
+    const el = document.createElement(match.tagName);
+    if (match.tagName === 'code') {
+      el.textContent = match.content;
+    } else {
+      el.appendChild(parseInlineTokensRecursive(match.content, depth + 1));
+    }
+    fragment.appendChild(el);
+
+    cursor += match.index + match.length;
+  }
+
   return fragment;
+}
+
+function findNextInlineMatch(text: string): InlineMatch | null {
+  const matchers: Array<(input: string) => InlineMatch | null> = [
+    matchInlineCodeBackticks,
+    matchHtmlUnderline,
+    matchHtmlStrong,
+    matchHtmlEmphasis,
+    matchHtmlCode,
+    matchMarkdownStrongAsterisk,
+    matchMarkdownStrongUnderscore,
+    matchMarkdownStrikethrough,
+    matchMarkdownEmphasisAsterisk,
+    matchMarkdownEmphasisUnderscore,
+  ];
+
+  let best: InlineMatch | null = null;
+
+  matchers.forEach((matcher) => {
+    const current = matcher(text);
+    if (!current) return;
+
+    if (!best || current.index < best.index) {
+      best = current;
+    }
+  });
+
+  return best;
+}
+
+function toInlineMatch(match: RegExpMatchArray | null, tagName: InlineMatch['tagName'], contentIndex = 1): InlineMatch | null {
+  if (!match || typeof match.index !== 'number') return null;
+  const content = match[contentIndex];
+  if (!content) return null;
+  return {
+    index: match.index,
+    length: match[0].length,
+    tagName,
+    content,
+  };
+}
+
+function matchInlineCodeBackticks(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/`([^`\n]+?)`/), 'code');
+}
+
+function matchHtmlUnderline(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/<u>([\s\S]+?)<\/u>/i), 'u');
+}
+
+function matchHtmlStrong(input: string): InlineMatch | null {
+  const match = input.match(/<(strong|b)>([\s\S]+?)<\/(strong|b)>/i);
+  if (!match || typeof match.index !== 'number') return null;
+  const open = (match[1] || '').toLowerCase();
+  const close = (match[3] || '').toLowerCase();
+  if (!open || open !== close) return null;
+  return {
+    index: match.index,
+    length: match[0].length,
+    tagName: 'strong',
+    content: match[2] ?? '',
+  };
+}
+
+function matchHtmlEmphasis(input: string): InlineMatch | null {
+  const match = input.match(/<(em|i)>([\s\S]+?)<\/(em|i)>/i);
+  if (!match || typeof match.index !== 'number') return null;
+  const open = (match[1] || '').toLowerCase();
+  const close = (match[3] || '').toLowerCase();
+  if (!open || open !== close) return null;
+  return {
+    index: match.index,
+    length: match[0].length,
+    tagName: 'em',
+    content: match[2] ?? '',
+  };
+}
+
+function matchHtmlCode(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/<code>([\s\S]+?)<\/code>/i), 'code');
+}
+
+function matchMarkdownStrongAsterisk(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/\*\*([^*\n][\s\S]*?)\*\*/), 'strong');
+}
+
+function matchMarkdownStrongUnderscore(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/__([^_\n][\s\S]*?)__/), 'strong');
+}
+
+function matchMarkdownStrikethrough(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/~~([^~\n][\s\S]*?)~~/), 's');
+}
+
+function matchMarkdownEmphasisAsterisk(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/\*([^*\n][^*\n]*?)\*/), 'em');
+}
+
+function matchMarkdownEmphasisUnderscore(input: string): InlineMatch | null {
+  return toInlineMatch(input.match(/_([^_\n][^_\n]*?)_/), 'em');
 }
 
 /**
@@ -1491,6 +2011,9 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
     video.className = 'block-video';
     wrapper.appendChild(video);
 
+    const posterControls = document.createElement('div');
+    posterControls.className = 'video-poster-controls';
+
     const optionsRow = document.createElement('label');
     optionsRow.className = 'video-option-row';
 
@@ -1498,11 +2021,6 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
     autoplayToggle.type = 'checkbox';
     autoplayToggle.className = 'video-option-checkbox';
     autoplayToggle.checked = !!block.autoplay;
-    autoplayToggle.addEventListener('change', () => {
-      const autoplay = autoplayToggle.checked;
-      applyVideoPlaybackSettings(video, autoplay);
-      updateBlockFieldsInContext(context, { autoplay }, { render: false });
-    });
     optionsRow.appendChild(autoplayToggle);
 
     const autoplayLabel = document.createElement('span');
@@ -1510,17 +2028,11 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
     autoplayLabel.textContent = 'Autoplay (muted loop)';
     optionsRow.appendChild(autoplayLabel);
 
-    wrapper.appendChild(optionsRow);
-
-    const posterControls = document.createElement('div');
-    posterControls.className = 'video-poster-controls';
-
     const posterInput = document.createElement('input');
     posterInput.type = 'url';
     posterInput.className = 'video-poster-input';
     posterInput.placeholder = 'Poster image URL (optional)...';
     posterInput.value = block.poster || '';
-    posterControls.appendChild(posterInput);
 
     const actionsRow = document.createElement('div');
     actionsRow.className = 'video-poster-actions';
@@ -1549,8 +2061,31 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
     posterUploadInput.className = 'video-poster-upload-input';
     posterUploadInput.hidden = true;
 
+    let isPosterActionInFlight = false;
+    let currentPoster = (block.poster || '').trim();
+
+    const syncPosterControlState = (): void => {
+      const hidePosterFields = autoplayToggle.checked;
+      posterControls.classList.toggle('poster-fields-hidden', hidePosterFields);
+      posterInput.disabled = hidePosterFields || isPosterActionInFlight;
+      uploadPosterBtn.disabled = hidePosterFields || isPosterActionInFlight;
+      captureFrameBtn.disabled = hidePosterFields || isPosterActionInFlight;
+      clearPosterBtn.disabled = hidePosterFields || isPosterActionInFlight;
+    };
+
+    autoplayToggle.addEventListener('change', () => {
+      const autoplay = autoplayToggle.checked;
+      applyVideoPlaybackSettings(video, autoplay);
+      updateBlockFieldsInContext(context, { autoplay }, { render: false });
+      syncPosterControlState();
+    });
+
     const syncPosterToBlock = (poster: string): void => {
       const cleanPoster = poster.trim();
+      if (currentPoster && currentPoster !== cleanPoster && isTrackableAssetUrl(currentPoster)) {
+        trackCleanupCandidateUrl(currentPoster);
+      }
+      currentPoster = cleanPoster;
       applyVideoPoster(video, cleanPoster);
       updateBlockFieldsInContext(context, { poster: cleanPoster }, { render: false });
       clearPosterBtn.hidden = cleanPoster.length === 0;
@@ -1559,12 +2094,9 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
       }
     };
 
-    let isPosterActionInFlight = false;
     const setPosterActionState = (inFlight: boolean): void => {
       isPosterActionInFlight = inFlight;
-      uploadPosterBtn.disabled = inFlight;
-      captureFrameBtn.disabled = inFlight;
-      clearPosterBtn.disabled = inFlight;
+      syncPosterControlState();
     };
 
     posterInput.addEventListener('input', () => {
@@ -1615,10 +2147,14 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
 
     const initialPoster = (block.poster || '').trim();
     applyVideoPoster(video, initialPoster);
+    currentPoster = initialPoster;
     clearPosterBtn.hidden = initialPoster.length === 0;
     if (posterInput.value !== initialPoster) {
       posterInput.value = initialPoster;
     }
+    syncPosterControlState();
+    posterControls.appendChild(optionsRow);
+    posterControls.appendChild(posterInput);
     posterControls.appendChild(actionsRow);
     posterControls.appendChild(posterUploadInput);
     wrapper.appendChild(posterControls);
@@ -1829,9 +2365,7 @@ function renderHtmlBlock(block: HtmlBlock, context: BlockContext): HTMLElement {
     const previewIframe = iframe;
     const hasManualHeight = !!block.style && /(^|;)\s*height\s*:/.test(block.style);
     previewIframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
-    if (block.style) {
-      previewIframe.style.cssText += `; ${block.style}`;
-    }
+    applySandboxInlineStyle(previewIframe, block.style, block.align);
     previewContainer.appendChild(previewIframe);
 
     selectOverlay = document.createElement('button');
@@ -2211,6 +2745,11 @@ export function insertBlockAfter(blockId: string, type: BlockType, props: Partia
  * Delete a block
  */
 export function deleteBlock(index: number): void {
+  const removedBlock = blocks[index];
+  if (removedBlock) {
+    trackPosterCleanupCandidatesFromBlock(removedBlock);
+  }
+
   if (blocks.length <= 1) {
     applyBlocksUpdate([createBlock('text') as Block]);
   } else {
@@ -2244,6 +2783,7 @@ function handleSlashCommand(
     const execData = data as SlashExecuteData;
     if (execData.replaceBlockIndex !== null) {
       const focusIndex = execData.replaceBlockIndex;
+      trackPosterCleanupCandidatesFromBlock(blocks[focusIndex]);
       updateTopLevelBlock(focusIndex, () => createBlock(execData.commandId) as Block);
       if (execData.commandId === 'text' || execData.commandId === 'callout') {
         setTimeout(() => {
@@ -2320,11 +2860,31 @@ export function markDirty(): void {
   scheduleAutoSave();
 }
 
+async function flushCleanupCandidates(): Promise<void> {
+  if (editMode !== 'project' || cleanupCandidateUrls.size === 0) return;
+
+  const urls = Array.from(cleanupCandidateUrls);
+  try {
+    const response = await fetch('/api/cleanup-assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+      keepalive: true,
+    });
+    if (response.ok) {
+      cleanupCandidateUrls.clear();
+    }
+  } catch {
+    // Best effort cleanup only.
+  }
+}
+
 /**
  * Handle manual save
  */
 async function handleSave(): Promise<void> {
   if (!isDirty && saveState !== SaveState.ERROR) {
+    persistScrollForNavigation(window.location.pathname);
     cleanup();
     window.location.reload();
     return;
@@ -2383,10 +2943,14 @@ async function handleSave(): Promise<void> {
     if (result.revision) {
       currentRevision = result.revision;
     }
+    if (editMode === 'project') {
+      cleanupCandidateUrls.clear();
+    }
 
     isDirty = false;
     dispatchSaveAction({ type: 'save_ok' });
 
+    persistScrollForNavigation(window.location.pathname);
     cleanup();
     window.location.reload();
 
@@ -2400,12 +2964,14 @@ async function handleSave(): Promise<void> {
 /**
  * Handle cancel
  */
-function handleCancel(): void {
+async function handleCancel(): Promise<void> {
   if (isDirty) {
     if (!confirm('You have unsaved changes. Discard them?')) {
       return;
     }
   }
+  await flushCleanupCandidates();
+  persistScrollForNavigation(window.location.pathname);
   cleanup();
   window.location.reload();
 }

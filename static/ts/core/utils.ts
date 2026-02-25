@@ -175,8 +175,9 @@ export function setupAutoResizeTextarea(
     if (onUpdate) onUpdate(textarea.value);
   });
 
-  // Initial resize after DOM settles
-  setTimeout(autoResize, 0);
+  // Size immediately to avoid post-render layout shifts, then refine next frame.
+  autoResize();
+  requestAnimationFrame(autoResize);
 
   return autoResize;
 }
