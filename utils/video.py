@@ -205,8 +205,8 @@ def generate_sprite_sheet(
         cmd = [
             'ffmpeg',
             '-y',
-            '-ss', str(start_time),
             '-i', video_path,
+            '-ss', str(start_time),
             '-t', str(duration),
             '-vf', f'fps={fps},scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,crop={frame_width}:{frame_height}',
             '-q:v', '5',
@@ -244,8 +244,8 @@ def generate_sprite_sheet(
             ffmpeg_tile_cmd = [
                 'ffmpeg',
                 '-y',
-                '-ss', str(start_time),
                 '-i', video_path,
+                '-ss', str(start_time),
                 '-t', str(duration),
                 '-vf', f'fps={fps},scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,crop={frame_width}:{frame_height},tile={tile_w}x{tile_h}',
                 '-frames:v', '1',
@@ -292,8 +292,8 @@ def generate_thumbnail(
     cmd = [
         'ffmpeg',
         '-y',
-        '-ss', str(time),
         '-i', video_path,
+        '-ss', str(time),
         '-vframes', '1',
         '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease',
         '-c:v', 'libwebp',
