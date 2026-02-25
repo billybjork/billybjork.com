@@ -5,6 +5,7 @@
  */
 
 import { isDevMode, isShowDraftsActive } from '../core/utils';
+import { persistScrollForNavigation, restorePersistedScroll } from './scroll-restore';
 
 // ========== CONSTANTS ==========
 
@@ -79,7 +80,9 @@ function addProjectControls(projectItem: HTMLElement): void {
     e.stopPropagation();
 
     if (!isIsolationMode()) {
-      window.location.href = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
+      const destination = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
+      persistScrollForNavigation(new URL(destination).pathname, '.project-item.active .project-content');
+      window.location.href = destination;
       return;
     }
 
@@ -220,7 +223,9 @@ function initEditModeKeyboardShortcut(): void {
         const slug = projectItem.dataset.slug;
         if (slug) {
           if (!isIsolationMode()) {
-            window.location.href = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
+            const destination = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
+            persistScrollForNavigation(new URL(destination).pathname, '.project-item.active .project-content');
+            window.location.href = destination;
             return;
           }
 
@@ -237,6 +242,8 @@ function initEditModeKeyboardShortcut(): void {
 // ========== INITIALIZATION ==========
 
 function initializeEditMode(): void {
+  restorePersistedScroll();
+
   // Trigger sync of show_drafts from URL to sessionStorage
   isShowDraftsActive();
 
