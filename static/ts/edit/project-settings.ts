@@ -13,6 +13,12 @@ interface VideoData {
   hls?: string;
   spriteSheet?: string;
   thumbnail?: string;
+  frames?: number;
+  columns?: number;
+  rows?: number;
+  frame_width?: number;
+  frame_height?: number;
+  fps?: number;
   duration?: number;
 }
 

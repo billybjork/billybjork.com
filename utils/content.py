@@ -294,10 +294,22 @@ def load_project(slug: str, include_html: bool = True) -> Optional[dict]:
         project['video_link'] = video.get('hls')
         project['thumbnail_link'] = video.get('thumbnail')
         project['sprite_sheet_link'] = video.get('spriteSheet')
+        project['frames'] = video.get('frames')
+        project['columns'] = video.get('columns')
+        project['rows'] = video.get('rows')
+        project['frame_width'] = video.get('frame_width')
+        project['frame_height'] = video.get('frame_height')
+        project['fps'] = video.get('fps')
     else:
         project['video_link'] = None
         project['thumbnail_link'] = None
         project['sprite_sheet_link'] = None
+        project['frames'] = None
+        project['columns'] = None
+        project['rows'] = None
+        project['frame_width'] = None
+        project['frame_height'] = None
+        project['fps'] = None
 
     return project
 
@@ -535,6 +547,12 @@ class ProjectInfo:
     video_link: Optional[str] = None
     thumbnail_link: Optional[str] = None
     sprite_sheet_link: Optional[str] = None
+    frames: Optional[int] = None
+    columns: Optional[int] = None
+    rows: Optional[int] = None
+    frame_width: Optional[int] = None
+    frame_height: Optional[int] = None
+    fps: Optional[int] = None
     youtube_link: Optional[str] = None
     formatted_date: str = field(default="", init=False)
 
@@ -555,5 +573,11 @@ class ProjectInfo:
             video_link=data.get("video_link"),
             thumbnail_link=data.get("thumbnail_link"),
             sprite_sheet_link=data.get("sprite_sheet_link"),
+            frames=data.get("frames"),
+            columns=data.get("columns"),
+            rows=data.get("rows"),
+            frame_width=data.get("frame_width"),
+            frame_height=data.get("frame_height"),
+            fps=data.get("fps"),
             youtube_link=data.get("youtube_link"),
         )

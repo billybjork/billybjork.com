@@ -170,7 +170,7 @@ def _validate_save_project_input(data: dict[str, Any]) -> tuple[str, str]:
 
 def _build_project_frontmatter(
     data: dict[str, Any], slug: str
-) -> tuple[dict[str, Any], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Pure transformation from request data to frontmatter + normalized video payload."""
     frontmatter: dict[str, Any] = {
         "name": data.get("name", slug),
@@ -182,11 +182,26 @@ def _build_project_frontmatter(
 
     raw_video = data.get("video", {})
     video = raw_video if isinstance(raw_video, dict) else {}
-    normalized_video: dict[str, str] = {}
+    normalized_video: dict[str, Any] = {}
     for key in ("hls", "thumbnail", "spriteSheet"):
         value = video.get(key)
         if isinstance(value, str) and value:
             normalized_video[key] = value
+
+    for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps"):
+        value = video.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)) and value > 0:
+            normalized_video[key] = int(value)
+            continue
+        if isinstance(value, str):
+            try:
+                parsed = int(float(value.strip()))
+            except ValueError:
+                continue
+            if parsed > 0:
+                normalized_video[key] = parsed
 
     if normalized_video:
         frontmatter["video"] = normalized_video
@@ -281,6 +296,12 @@ async def get_project(slug: str):
             "hls": project_data.get("video_link"),
             "thumbnail": project_data.get("thumbnail_link"),
             "spriteSheet": project_data.get("sprite_sheet_link"),
+            "frames": project_data.get("frames"),
+            "columns": project_data.get("columns"),
+            "rows": project_data.get("rows"),
+            "frame_width": project_data.get("frame_width"),
+            "frame_height": project_data.get("frame_height"),
+            "fps": project_data.get("fps"),
         },
         "markdown": project_data.get("markdown_content", ""),
         "html": project_data.get("html_content", ""),
@@ -884,13 +905,23 @@ async def generate_sprite_sheet_endpoint(request: Request):
             )
 
         # Combine results
+        video_payload: dict[str, Any] = {
+            "hls": hls_url,
+            "thumbnail": result["thumbnail"],
+            "spriteSheet": result["spriteSheet"],
+        }
+        sprite_meta = result.get("spriteMeta")
+        if isinstance(sprite_meta, dict):
+            for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps"):
+                value = sprite_meta.get(key)
+                if isinstance(value, bool):
+                    continue
+                if isinstance(value, (int, float)) and value > 0:
+                    video_payload[key] = int(value)
+
         response = {
             "success": True,
-            "video": {
-                "hls": hls_url,
-                "thumbnail": result["thumbnail"],
-                "spriteSheet": result["spriteSheet"],
-            },
+            "video": video_payload,
         }
 
         return response

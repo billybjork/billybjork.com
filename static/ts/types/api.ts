@@ -6,6 +6,12 @@ export interface VideoData {
   hls?: string;
   thumbnail?: string;
   spriteSheet?: string;
+  frames?: number;
+  columns?: number;
+  rows?: number;
+  frame_width?: number;
+  frame_height?: number;
+  fps?: number;
 }
 
 export interface ProjectData {
