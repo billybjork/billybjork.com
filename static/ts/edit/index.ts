@@ -15,12 +15,7 @@ import ProjectCreate from './project-create';
 
 // Expose modules to window for backwards compatibility
 if (typeof window !== 'undefined') {
-  window.EditUtils = EditUtils;
-  window.EditBlocks = EditBlocks;
   window.EditMode = EditMode;
-  window.EditMedia = EditMedia;
-  window.EditSlash = EditSlash;
-  window.EditUndo = EditUndo;
   window.ProjectSettings = ProjectSettings;
   window.ProjectCreate = ProjectCreate;
 }

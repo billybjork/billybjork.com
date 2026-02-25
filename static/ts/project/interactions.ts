@@ -5,6 +5,7 @@
 
 import type { ProjectEventDetail } from '../types/events';
 import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import { closeProject as closeProjectBySlug } from './loader';
 
 // ========== UTILITY FUNCTIONS ==========
 
@@ -1124,8 +1125,8 @@ function initializeEventListeners(): void {
             closeProject(closeBtn);
           } else {
             const slug = activeProject.dataset.slug;
-            if (slug && window.ProjectLoader) {
-              window.ProjectLoader.closeProject(slug);
+            if (slug) {
+              closeProjectBySlug(slug);
             }
           }
         }
@@ -1170,14 +1171,6 @@ export function init(): void {
 
   window.addEventListener('load', scrollToHashTarget);
   window.addEventListener('hashchange', scrollToHashTarget);
-}
-
-// Expose functions to global scope
-if (typeof window !== 'undefined') {
-  window.copyToClipboard = copyToClipboard;
-  window.handleProjectContent = handleProjectContent;
-  window.closeAllOpenProjects = closeAllOpenProjects;
-  window.cleanupActiveHLSPlayers = cleanupActiveHLSPlayers;
 }
 
 // Export for module usage

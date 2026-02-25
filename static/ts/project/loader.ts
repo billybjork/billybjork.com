@@ -459,9 +459,4 @@ const ProjectLoader = {
   init,
 };
 
-// Expose to window
-if (typeof window !== 'undefined') {
-  window.ProjectLoader = ProjectLoader;
-}
-
 export default ProjectLoader;

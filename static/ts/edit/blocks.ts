@@ -148,6 +148,15 @@ function detectBlockType(block: PartialBlock, trimmed: string): void {
     block.type = 'html';
     block.style = decodeHtmlCommentStyle(htmlMatch[1]);
     block.html = (htmlMatch[2] ?? '').trim();
+    block.align = parseAlignmentFromStyle(block.style);
+    if (block.align === 'left') {
+      const legacyAlignMatch = block.html.match(
+        /^<div\b[^>]*\bstyle\s*=\s*["'][^"']*\btext-align\s*:\s*(center|right)\b[^"']*["'][^>]*>[\s\S]*<\/div>$/i
+      );
+      if (legacyAlignMatch) {
+        block.align = legacyAlignMatch[1] as Alignment;
+      }
+    }
     return;
   }
 
@@ -386,11 +395,6 @@ export function parseIntoBlocks(markdown: string): Block[] {
   return blocks.length ? blocks : [{ id: generateBlockId(0), type: 'text', content: '', align: 'left' } as TextBlock];
 }
 
-// Backwards compatibility alias
-export function parseMarkdown(markdown: string): Block[] {
-  return parseIntoBlocks(markdown);
-}
-
 // ========== FORMATTING ==========
 
 /**
@@ -457,13 +461,13 @@ export function formatCalloutHtml(block: CalloutBlock): string {
  */
 export function formatHtmlBlock(block: HtmlBlock): string {
   const htmlContent = block.html || '';
-  const startMarker = buildHtmlStartMarker(block.style);
+  const hasStyle = Boolean(block.style && block.style.trim());
+  const hasAlignment = Boolean(block.align && block.align !== 'left');
+  const markerStyle = hasStyle || hasAlignment
+    ? buildMediaStyleString(block)
+    : block.style;
+  const startMarker = buildHtmlStartMarker(markerStyle);
   const captionMarkup = formatCaptionParagraph(block.caption);
-  // Wrap in alignment div if not left-aligned
-  if (block.align && block.align !== 'left') {
-    const alignStyle = getTextAlignmentStyle(block.align);
-    return `${startMarker}\n<div style="${alignStyle}">\n${htmlContent}\n</div>\n${HTML_END}${captionMarkup}`;
-  }
   return `${startMarker}\n${htmlContent}\n${HTML_END}${captionMarkup}`;
 }
 
@@ -558,9 +562,6 @@ export function createBlock<T extends BlockType>(
   }
 }
 
-// Backwards compatibility alias
-export const createEmptyBlock = createBlock;
-
 // ========== PUBLIC API (for window.EditBlocks compatibility) ==========
 
 const EditBlocks = {
@@ -574,7 +575,6 @@ const EditBlocks = {
 
   // Parsing
   parseIntoBlocks,
-  parseMarkdown,
   parseSingleBlock,
 
   // Formatting
@@ -588,7 +588,6 @@ const EditBlocks = {
 
   // Factory
   createBlock,
-  createEmptyBlock,
   generateBlockId,
 };
 

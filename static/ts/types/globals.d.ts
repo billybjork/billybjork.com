@@ -66,24 +66,11 @@ interface HTMLVideoElement {
 // Window extensions for our modules
 interface Window {
   // Edit mode modules
-  EditUtils: typeof import('../core/utils').EditUtils;
-  EditBlocks: typeof import('../edit/blocks').default;
   EditMode: typeof import('../edit/mode').default;
-  EditMedia: typeof import('../edit/media').default;
-  EditSlash: typeof import('../edit/slash').default;
-  EditUndo: typeof import('../edit/undo').default;
 
   // Project modules
-  ProjectLoader: typeof import('../project/loader').default;
   ProjectSettings: typeof import('../edit/project-settings').default;
   ProjectCreate: typeof import('../edit/project-create').default;
-
-  // Utility functions
-  copyToClipboard: (text: string, message?: string) => void;
-  handleProjectContent: (projectItem: HTMLElement, smoothScroll?: boolean) => Promise<void>;
-  closeAllOpenProjects: () => void;
-  cleanupActiveHLSPlayers: () => void;
-  checkAndHighlightCode?: (element: Element) => void;
 
   // External libraries
   Hls: typeof Hls;

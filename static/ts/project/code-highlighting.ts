@@ -67,14 +67,6 @@ export function checkAndHighlightCode(targetElement: Element): void {
   }
 }
 
-// Export for window global
-const CodeHighlighting = {
+export default {
   checkAndHighlightCode,
 };
-
-export default CodeHighlighting;
-
-// Make checkAndHighlightCode available globally for backwards compatibility
-if (typeof window !== 'undefined') {
-  window.checkAndHighlightCode = checkAndHighlightCode;
-}
