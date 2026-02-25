@@ -6,8 +6,14 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/japan-simulated/1771550729/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/went-to-japan-forgot-to-use-my-camera_1771993214.webp
-  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/went-to-japan-forgot-to-use-my-camera_1771993214_sprite_sheet.jpg
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/went-to-japan-forgot-to-use-my-camera_1771995444.webp
+  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/went-to-japan-forgot-to-use-my-camera_1771995444_sprite_sheet.jpg
+  frames: 40
+  columns: 5
+  rows: 8
+  frame_width: 320
+  frame_height: 180
+  fps: 20
 ---
 
 ---
@@ -57,7 +63,10 @@ With some help from Claude Code, I built a basic splat viewer to navigate the wo
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px; margin-left: auto; margin-right: auto" -->
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;; margin-left: auto; margin-right: auto" -->
+<div style="text-align: center">
+<div style="text-align: center">
+<div style="text-align: center">
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -905,6 +914,9 @@ document.getElementById('info').textContent=String(err&&err.message?err.message:
 
 </body>
 </html>
+</div>
+</div>
+</div>
 <!-- /html -->
 
 <!-- block -->
@@ -1063,7 +1075,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
