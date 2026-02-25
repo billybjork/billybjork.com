@@ -3,10 +3,10 @@
         id="thumbnail-{{ project.slug }}"
         class="thumbnail lazy-thumbnail"
         {% if project.sprite_sheet_link %}data-bg="{{ project.sprite_sheet_link }}"{% endif %}
-        data-frames="{{ project.frames | default(60) }}"
-        data-frame-width="{{ project.frame_width | default(320) }}"
-        data-frame-height="{{ project.frame_height | default(180) }}"
-        data-columns="{{ project.columns | default(5) }}"
+        data-frames="{{ project.frames | default(60, true) }}"
+        data-frame-width="{{ project.frame_width | default(320, true) }}"
+        data-frame-height="{{ project.frame_height | default(180, true) }}"
+        data-columns="{{ project.columns | default(5, true) }}"
         {% if data_animate %}
             data-animate="true"
         {% endif %}>
