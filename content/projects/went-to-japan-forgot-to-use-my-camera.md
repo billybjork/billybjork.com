@@ -3,11 +3,11 @@ name: Went to Japan. Forgot to use my camera.
 slug: went-to-japan-forgot-to-use-my-camera
 date: '2026-02-20'
 pinned: false
-draft: true
+draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/japan-simulated/1771550729/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/japan-simulated_1771554215.webp
-  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/japan-simulated_1771554215_sprite_sheet.jpg
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/went-to-japan-forgot-to-use-my-camera_1771993214.webp
+  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/went-to-japan-forgot-to-use-my-camera_1771993214_sprite_sheet.jpg
 ---
 
 ---
@@ -57,7 +57,7 @@ With some help from Claude Code, I built a basic splat viewer to navigate the wo
 
 <!-- block -->
 
-<!-- html style="height: 524px; width: 524px" -->
+<!-- html style="display: block; height: 524px; width: 524px; margin-left: auto; margin-right: auto" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -909,7 +909,7 @@ document.getElementById('info').textContent=String(err&&err.message?err.message:
 
 <!-- block -->
 
-Cool. So I've got these 3D scenes. I can play around with them in the browser. But how do I actually turn them into a *video*?
+Cool. So I've got these 3D scenes. I can play around with them in the browser. But how to actually turn them into a *video*?
 
 The answer? Program a virtual camera to move through the 3D space, record what it sees, and you get video.
 
@@ -952,7 +952,7 @@ I wanted more...
 <!-- block -->
 
 <!-- row -->
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260224_154454_955932.mp4" autoplay loop muted playsinline style="display: block; width: 509px"></video>
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260224_154454_955932.mp4" autoplay loop muted playsinline></video>
 <!-- col -->
 I've been seeing this "point cloud" effect in music videos and Vimeo [experiments](https://vimeo.com/407635582), that look where you're flying through digital debris.
 
@@ -1052,7 +1052,7 @@ What if I didn't render the full 3D splats at all? What if I used the 3D data ju
 This turned out to be simpler, more predictable, and actually worked.
 <!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_170202_500001.mp4" autoplay loop muted playsinline></video>
-<p class="media-caption">The layers approach—moving a camera through sliced depth planes</p>
+<p class="media-caption">The layered approach—moving a camera through sliced depth planes</p>
 <!-- /row -->
 
 <!-- block -->
@@ -1063,7 +1063,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
@@ -1082,7 +1082,7 @@ I spent *way* more time on this than I would have just editing the photos in Pre
 
 I keep noticing this about AI tools: they rarely actually *save* time. What they do is make things *possible* that weren't possible before—or at least not possible for someone with my skillset. Filmmaker Billy would not have written a gaussian splat renderer from scratch. He probably wouldn't have learned Blender or Unity either. But with a little machine to help write the code, a new category of ideas became accessible.
 
-The problem is that "possible" and "practical" are different things. AI tools tempt my maximalist side. Suddenly I *can* try 40 variations, so I *do* try 40 variations. The ceiling rises, so I reach for it.
+The problem is that "possible" and "practical" are different things. AI tools tempt my maximalist side. Suddenly I *can* try 40 variations, so I *do* try 40 variations. The ceiling rose, so I reached for it.
 
 Would this video have existed at all without the AI assist? No. Would I have learned as much doing it the traditional way? Definitely not. Was it satisfying in a weird, obsessive way? Yeah, kind of.
 
