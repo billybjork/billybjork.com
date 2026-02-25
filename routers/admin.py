@@ -209,6 +209,21 @@ def _collect_asset_refs(markdown_content: str, video: Optional[dict[str, Any]] =
     return refs
 
 
+def _collect_cleanup_candidates(data: dict[str, Any], limit: int = 200) -> set[str]:
+    """Extract optional client-provided URLs that should be checked for orphan cleanup."""
+    raw_candidates = data.get("cleanup_candidates")
+    if not isinstance(raw_candidates, list):
+        return set()
+
+    candidates: set[str] = set()
+    for item in raw_candidates[:limit]:
+        if isinstance(item, str):
+            value = item.strip()
+            if value:
+                candidates.add(value)
+    return candidates
+
+
 def _extract_s3_keys(urls: set[str]) -> set[str]:
     """Pure conversion from URL set to S3 key set."""
     keys = set()
@@ -336,7 +351,9 @@ async def save_project_endpoint(request: Request):
     # Cleanup orphaned assets
     new_refs = _collect_asset_refs(markdown_content, video)
     removed_urls = old_refs - new_refs
-    keys_to_check = _extract_s3_keys(removed_urls)
+    cleanup_candidates = _collect_cleanup_candidates(data) - new_refs
+    cleanup_urls = removed_urls | cleanup_candidates
+    keys_to_check = _extract_s3_keys(cleanup_urls)
     if keys_to_check:
         cleanup_orphans(keys_to_check)
 
@@ -463,6 +480,21 @@ async def save_about_endpoint(request: Request):
 
     new_revision = content_revision(ABOUT_FILE)
     return {"success": True, "revision": new_revision}
+
+
+@router.post("/cleanup-assets")
+async def cleanup_assets_endpoint(request: Request):
+    """Run orphan cleanup checks for a caller-provided list of asset URLs."""
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid request body")
+
+    candidates = _collect_cleanup_candidates({"cleanup_candidates": data.get("urls")})
+    keys_to_check = _extract_s3_keys(candidates)
+    if keys_to_check:
+        cleanup_orphans(keys_to_check)
+
+    return {"success": True, "checked": len(keys_to_check)}
 
 
 @router.post("/upload-media")
