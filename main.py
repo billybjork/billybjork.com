@@ -92,7 +92,9 @@ async def stop_background_cleanup_loop() -> None:
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == HTTP_404_NOT_FOUND:
         return templates.TemplateResponse(
-            "404.html", {"request": request}, status_code=HTTP_404_NOT_FOUND
+            "404.html",
+            {"request": request, "load_project_bundle": False},
+            status_code=HTTP_404_NOT_FOUND,
         )
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
@@ -100,7 +102,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(500)
 async def server_error_handler(request: Request, exc: Exception):
     return templates.TemplateResponse(
-        "500.html", {"request": request}, status_code=HTTP_500_INTERNAL_SERVER_ERROR
+        "500.html",
+        {"request": request, "load_project_bundle": False},
+        status_code=HTTP_500_INTERNAL_SERVER_ERROR,
     )
 
 
