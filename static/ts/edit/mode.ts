@@ -2219,6 +2219,34 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     return null;
   };
 
+  // Handle clicks in gaps between lines - find and activate the closest line
+  lineContainer.addEventListener('click', (e) => {
+    // Only handle clicks directly on the container, not bubbled from rows
+    if (e.target !== lineContainer) return;
+
+    const rows = Array.from(lineContainer.querySelectorAll<HTMLElement>('.text-block-line'));
+    if (!rows.length) return;
+
+    const clickY = e.clientY;
+    let closestRow: HTMLElement | null = null;
+    let closestDistance = Infinity;
+
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      const rowMiddle = rect.top + rect.height / 2;
+      const distance = Math.abs(clickY - rowMiddle);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestRow = row;
+      }
+    }
+
+    if (closestRow && !closestRow.classList.contains('is-editing')) {
+      e.preventDefault();
+      activateLine(closestRow);
+    }
+  });
+
   renderLines();
   return lineContainer;
 }
