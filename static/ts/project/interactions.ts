@@ -174,7 +174,6 @@ const MOBILE_BREAKPOINT = 768;
 const VIDEO_VIEWPORT_PADDING_MOBILE = 12;
 const VIDEO_VIEWPORT_PADDING_DESKTOP = 24;
 const VIDEO_MIN_RENDER_HEIGHT = 180;
-const SKIP_FOUC_ONCE_KEY = 'bb_skip_fouc_once';
 const DEBUG_HLS = document.body.dataset.debugHls === 'true';
 
 function hlsDebug(...args: unknown[]): void {
@@ -262,6 +261,7 @@ export function preloadHlsScript(): Promise<void> {
  */
 function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = false): Promise<void> {
   hlsDebug('[HLS] setupHLSPlayer called', { autoplay });
+  videoElement.dataset.loaded = 'true';
   return new Promise((resolve, reject) => {
     const streamUrl = videoElement.dataset.hlsUrl;
     hlsDebug('[HLS] Stream URL:', streamUrl);
@@ -431,6 +431,7 @@ function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
   }
 
   destroyHlsInstance(videoElement);
+  delete videoElement.dataset.loaded;
   if (videoElement.src && videoElement.src.startsWith('blob:')) {
     const blobUrl = videoElement.src;
     URL.revokeObjectURL(blobUrl);
@@ -643,6 +644,10 @@ function initializeLazyVideos(root: ParentNode = document): void {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const video = entry.target as HTMLVideoElement;
+          if (video.dataset.loaded === 'true') {
+            observer.unobserve(video);
+            return;
+          }
           setupHLSPlayer(video, false).catch(err => {
             console.error('Failed to initialize HLS player for video:', err);
           });
@@ -837,14 +842,6 @@ function handleProjectsLoaded(): void {
   updateThumbnails();
 }
 
-function handleProjectLoaded(event: CustomEvent<ProjectEventDetail>): void {
-  const { element } = event.detail;
-  const projectItem = element?.closest<HTMLElement>('.project-item');
-  if (projectItem) {
-    handleProjectContent(projectItem);
-  }
-}
-
 function buildIsolationHomeUrl(): URL {
   const url = new URL('/', window.location.origin);
   const params = new URLSearchParams(window.location.search);
@@ -856,16 +853,7 @@ function buildIsolationHomeUrl(): URL {
   return url;
 }
 
-function markSkipFoucOnce(): void {
-  try {
-    sessionStorage.setItem(SKIP_FOUC_ONCE_KEY, 'true');
-  } catch {
-    // Ignore storage errors and continue with normal navigation.
-  }
-}
-
 function navigateHomeFromIsolation(): void {
-  markSkipFoucOnce();
   window.location.href = buildIsolationHomeUrl().toString();
 }
 
@@ -917,7 +905,6 @@ function closeProject(button: HTMLElement): void {
 function initializeEventListeners(): void {
   document.body.addEventListener('project:afterSwap', handleProjectAfterSwap as EventListener);
   document.body.addEventListener('project:beforeSwap', handleProjectBeforeSwap);
-  document.body.addEventListener('project:loaded', handleProjectLoaded as EventListener);
   document.body.addEventListener('projects:loaded', handleProjectsLoaded);
   document.body.addEventListener('project:error', () => {
     showNotification('Failed to load content. Please try again.', true);
@@ -1004,31 +991,6 @@ function initializeEventListeners(): void {
     }
 
     navigateHomeFromIsolation();
-  });
-
-  // Make /me navigation feel instant by skipping one-time FOUC on the destination page.
-  document.body.addEventListener('click', function(event) {
-    const meLink = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
-    if (!meLink) return;
-
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-    if (meLink.target && meLink.target !== '_self') {
-      return;
-    }
-
-    let destination: URL;
-    try {
-      destination = new URL(meLink.href, window.location.origin);
-    } catch {
-      return;
-    }
-    if (destination.origin !== window.location.origin || destination.pathname !== '/me') {
-      return;
-    }
-
-    markSkipFoucOnce();
   });
 
   // Media lightbox (images and eligible content videos)

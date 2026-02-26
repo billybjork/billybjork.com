@@ -180,12 +180,6 @@ export async function openProject(slug: string, options: OpenProjectOptions = {}
 
     loadCodeHighlightingIfNeeded(detailsContainer);
 
-    dispatchEvent<ProjectEventDetail>('project:loaded', {
-      element: detailsContainer,
-      slug: slug,
-      isOpen: true
-    });
-
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       return;
