@@ -60,11 +60,11 @@ Now, how do I open these  .ply files? Didn’t think I’d get that far. From th
 
 <!-- block -->
 
-So Claude and I whipped up a simple web UI to look at the splats in all their 3D glory. Here's a tiny version of that you can play with:
+So Claude and I whipped up a simple web UI to look at the **splats** in all their 3D glory. Here's a tiny version of that you can play with:
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1081,7 +1081,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
