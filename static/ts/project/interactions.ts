@@ -4,7 +4,21 @@
  */
 
 import type { ProjectEventDetail } from '../types/events';
-import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import {
+  DEFAULT_HLS_CONFIG,
+  canPlayNativeHls,
+  destroyHlsInstance,
+  loadHlsScript,
+} from '../core/hls';
+import { copyToClipboard, showNotification } from './clipboard';
+import { resolveHashTarget, scrollToHashTarget } from './hash-scroll';
+import {
+  closeActiveLightbox,
+  initializeLightboxMedia,
+  isEligibleLightboxVideo,
+  openImageLightbox,
+  openVideoLightbox,
+} from './lightbox';
 import { closeProject as closeProjectBySlug } from './loader';
 
 // ========== UTILITY FUNCTIONS ==========
@@ -31,182 +45,6 @@ function scrollToProjectHeader(projectHeader: HTMLElement): void {
     top: scrollToPosition,
     behavior: 'smooth'
   });
-}
-
-/**
- * Generic function to display notifications
- */
-function showNotification(message: string, isError: boolean = false): void {
-  const notification = document.createElement('div');
-  notification.className = `copy-notification${isError ? ' error' : ''}`;
-  notification.textContent = message;
-  document.body.appendChild(notification);
-
-  setTimeout(() => {
-    if (notification.parentNode) {
-      document.body.removeChild(notification);
-    }
-  }, 4000);
-}
-
-function closeLightboxOverlay(overlay: HTMLElement): void {
-  if (overlay.dataset.closing === 'true') return;
-  overlay.dataset.closing = 'true';
-
-  const lightboxVideo = overlay.querySelector<HTMLVideoElement>('video');
-  if (lightboxVideo) {
-    lightboxVideo.pause();
-  }
-
-  unlockBodyScroll();
-  overlay.classList.remove('visible');
-  overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
-}
-
-function closeActiveLightbox(): boolean {
-  const lightbox = document.querySelector<HTMLElement>('.image-lightbox');
-  if (!lightbox) return false;
-  closeLightboxOverlay(lightbox);
-  return true;
-}
-
-const LIGHTBOX_VIDEO_TRIGGER_CLASS = 'lightbox-trigger-video';
-
-function videoHasNativeFullscreenControls(videoElement: HTMLVideoElement): boolean {
-  return videoElement.controls || videoElement.hasAttribute('controls');
-}
-
-function isEligibleLightboxVideo(videoElement: HTMLVideoElement): boolean {
-  if (!videoElement.closest('.project-content')) return false;
-  if (videoElement.closest('.video-container')) return false;
-  if (videoElement.dataset.lightbox === 'off') return false;
-  if (videoHasNativeFullscreenControls(videoElement)) return false;
-  return (
-    videoElement.loop ||
-    videoElement.autoplay ||
-    videoElement.hasAttribute('loop') ||
-    videoElement.hasAttribute('autoplay')
-  );
-}
-
-function initializeLightboxMedia(root: ParentNode = document): void {
-  const videos = root.querySelectorAll<HTMLVideoElement>('.project-content video');
-  videos.forEach(video => {
-    video.classList.toggle(LIGHTBOX_VIDEO_TRIGGER_CLASS, isEligibleLightboxVideo(video));
-  });
-}
-
-function createLightboxOverlay(): { overlay: HTMLElement; closeButton: HTMLButtonElement } {
-  const overlay = document.createElement('div');
-  overlay.className = 'image-lightbox';
-
-  const closeButton = document.createElement('button');
-  closeButton.className = 'image-lightbox-close';
-  closeButton.setAttribute('type', 'button');
-  closeButton.setAttribute('aria-label', 'Close media');
-  closeButton.innerHTML = '&times;';
-
-  overlay.appendChild(closeButton);
-  return { overlay, closeButton };
-}
-
-function attachLightboxCloseHandlers(overlay: HTMLElement, closeButton: HTMLButtonElement): void {
-  const closeLightbox = () => closeLightboxOverlay(overlay);
-  closeButton.addEventListener('click', closeLightbox);
-  overlay.addEventListener('click', (event) => {
-    if (event.target === overlay) {
-      closeLightbox();
-    }
-  });
-}
-
-function openImageLightbox(image: HTMLImageElement): void {
-  closeActiveLightbox();
-
-  const { overlay, closeButton } = createLightboxOverlay();
-  const enlargedImage = document.createElement('img');
-  enlargedImage.src = image.currentSrc || image.src;
-  enlargedImage.alt = image.alt || '';
-
-  overlay.appendChild(enlargedImage);
-  document.body.appendChild(overlay);
-  lockBodyScroll();
-  requestAnimationFrame(() => overlay.classList.add('visible'));
-  attachLightboxCloseHandlers(overlay, closeButton);
-}
-
-function openVideoLightbox(video: HTMLVideoElement): void {
-  closeActiveLightbox();
-
-  const { overlay, closeButton } = createLightboxOverlay();
-  const enlargedVideo = video.cloneNode(true) as HTMLVideoElement;
-
-  enlargedVideo.removeAttribute('id');
-  enlargedVideo.classList.remove('lazy-video', 'lazy-inline-video', 'hls-video', LIGHTBOX_VIDEO_TRIGGER_CLASS);
-
-  const shouldAutoplay = video.autoplay || video.hasAttribute('autoplay') || video.loop || video.hasAttribute('loop');
-  const shouldLoop = video.loop || video.hasAttribute('loop');
-
-  enlargedVideo.controls = false;
-  enlargedVideo.removeAttribute('controls');
-  enlargedVideo.autoplay = shouldAutoplay;
-  enlargedVideo.loop = shouldLoop;
-  enlargedVideo.muted = true;
-  enlargedVideo.defaultMuted = true;
-  enlargedVideo.playsInline = true;
-  enlargedVideo.preload = 'auto';
-
-  if (shouldAutoplay) {
-    enlargedVideo.setAttribute('autoplay', '');
-  } else {
-    enlargedVideo.removeAttribute('autoplay');
-  }
-
-  if (shouldLoop) {
-    enlargedVideo.setAttribute('loop', '');
-  } else {
-    enlargedVideo.removeAttribute('loop');
-  }
-
-  enlargedVideo.setAttribute('muted', '');
-  enlargedVideo.setAttribute('playsinline', '');
-
-  if (video.currentSrc) {
-    enlargedVideo.src = video.currentSrc;
-  }
-
-  overlay.appendChild(enlargedVideo);
-  document.body.appendChild(overlay);
-  lockBodyScroll();
-  requestAnimationFrame(() => {
-    overlay.classList.add('visible');
-    if (shouldAutoplay) {
-      enlargedVideo.play().catch(() => {
-        // Ignore autoplay errors; user can still close the modal.
-      });
-    }
-  });
-
-  attachLightboxCloseHandlers(overlay, closeButton);
-}
-
-/**
- * Copies text to clipboard and shows a notification
- */
-function copyToClipboard(text: string, notificationMessage: string = 'URL copied to clipboard!'): void {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text)
-      .then(() => {
-        showNotification(notificationMessage);
-      })
-      .catch(err => {
-        console.error('Failed to copy using Clipboard API: ', err);
-        showNotification('Failed to copy the URL.', true);
-      });
-  } else {
-    console.warn('Clipboard API not supported in this browser.');
-    showNotification('Copy to clipboard not supported in this browser.', true);
-  }
 }
 
 /**
@@ -332,13 +170,18 @@ function initializeLazyThumbnails(root: ParentNode = document): void {
 
 // ========== HLS VIDEO PLAYER ==========
 
-const HLS_JS_SRC = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
-let hlsScriptPromise: Promise<void> | null = null;
 const MOBILE_BREAKPOINT = 768;
 const VIDEO_VIEWPORT_PADDING_MOBILE = 12;
 const VIDEO_VIEWPORT_PADDING_DESKTOP = 24;
 const VIDEO_MIN_RENDER_HEIGHT = 180;
 const SKIP_FOUC_ONCE_KEY = 'bb_skip_fouc_once';
+const DEBUG_HLS = document.body.dataset.debugHls === 'true';
+
+function hlsDebug(...args: unknown[]): void {
+  if (DEBUG_HLS) {
+    console.log(...args);
+  }
+}
 
 function getVideoContainer(videoElement: HTMLVideoElement): HTMLElement | null {
   return videoElement.closest<HTMLElement>('.video-container');
@@ -415,36 +258,13 @@ export function preloadHlsScript(): Promise<void> {
 }
 
 /**
- * Lazy-load HLS.js only when needed.
- */
-function loadHlsScript(): Promise<void> {
-  if (window.Hls) {
-    return Promise.resolve();
-  }
-  if (hlsScriptPromise) {
-    return hlsScriptPromise;
-  }
-
-  hlsScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = HLS_JS_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load HLS.js'));
-    document.head.appendChild(script);
-  });
-
-  return hlsScriptPromise;
-}
-
-/**
  * Sets up HLS video player for a given video element.
  */
 function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = false): Promise<void> {
-  console.log('[HLS] setupHLSPlayer called', { autoplay });
+  hlsDebug('[HLS] setupHLSPlayer called', { autoplay });
   return new Promise((resolve, reject) => {
     const streamUrl = videoElement.dataset.hlsUrl;
-    console.log('[HLS] Stream URL:', streamUrl);
+    hlsDebug('[HLS] Stream URL:', streamUrl);
     if (!streamUrl) {
       console.error('No HLS URL provided for video element');
       reject('No HLS URL provided');
@@ -473,10 +293,10 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
       resolve();
     };
 
-    const canPlayNative = videoElement.canPlayType('application/vnd.apple.mpegurl');
-    console.log('[HLS] Native HLS support:', canPlayNative ? 'yes' : 'no');
-    console.log('[HLS] HLS.js loaded:', !!window.Hls);
-    console.log('[HLS] HLS.js supported:', window.Hls ? Hls.isSupported() : 'n/a');
+    const canPlayNative = canPlayNativeHls(videoElement);
+    hlsDebug('[HLS] Native HLS support:', canPlayNative ? 'yes' : 'no');
+    hlsDebug('[HLS] HLS.js loaded:', !!window.Hls);
+    hlsDebug('[HLS] HLS.js supported:', window.Hls ? Hls.isSupported() : 'n/a');
 
     const initializeHls = () => {
       if (!window.Hls || !Hls.isSupported()) {
@@ -498,13 +318,10 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
 
       if (videoElement.hlsInstance) {
         console.warn('HLS instance already exists for this video element. Destroying existing instance.');
-        videoElement.hlsInstance.destroy();
+        destroyHlsInstance(videoElement);
       }
 
-      const hls = new Hls({
-        abrEwmaDefaultEstimate: 5000000,
-        capLevelToPlayerSize: true,
-      });
+      const hls = new Hls(DEFAULT_HLS_CONFIG);
       videoElement.hlsInstance = hls;
       hls.loadSource(streamUrl);
       hls.attachMedia(videoElement);
@@ -518,12 +335,12 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
 
       hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('[HLS] Available quality levels:');
+          hlsDebug('[HLS] Available quality levels:');
           hls.levels.forEach((level, i) => {
-            console.log(`  [${i}] ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
+            hlsDebug(`  [${i}] ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
           });
-          console.log(`[HLS] Starting level: ${hls.startLevel} (auto: ${hls.autoLevelEnabled})`);
-          console.log(`[HLS] Current level: ${hls.currentLevel}, Next level: ${hls.nextLevel}`);
+          hlsDebug(`[HLS] Starting level: ${hls.startLevel} (auto: ${hls.autoLevelEnabled})`);
+          hlsDebug(`[HLS] Current level: ${hls.currentLevel}, Next level: ${hls.nextLevel}`);
           initializeVideo();
         });
       });
@@ -531,7 +348,7 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
         const levelData = data as { level: number };
         const level = hls.levels[levelData.level];
         if (level) {
-          console.log(`[HLS] Switched to level ${levelData.level}: ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
+          hlsDebug(`[HLS] Switched to level ${levelData.level}: ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
         }
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -565,19 +382,19 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
     };
 
     if (window.Hls && Hls.isSupported()) {
-      console.log('[HLS] Using HLS.js (already loaded)');
+      hlsDebug('[HLS] Using HLS.js (already loaded)');
       initializeHls();
       return;
     }
 
-    console.log('[HLS] Loading HLS.js script...');
+    hlsDebug('[HLS] Loading HLS.js script...');
     loadHlsScript()
       .then(() => {
         if (Hls.isSupported()) {
-          console.log('[HLS] HLS.js loaded and supported, using HLS.js');
+          hlsDebug('[HLS] HLS.js loaded and supported, using HLS.js');
           initializeHls();
         } else if (canPlayNative) {
-          console.log('[HLS] HLS.js not supported, falling back to native');
+          hlsDebug('[HLS] HLS.js not supported, falling back to native');
           videoElement.src = streamUrl;
           if (autoplay && !document.body.classList.contains('editing')) {
             videoElement.play().catch(() => {});
@@ -590,7 +407,7 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
       })
       .catch(err => {
         if (canPlayNative) {
-          console.log('[HLS] HLS.js failed to load, falling back to native');
+          hlsDebug('[HLS] HLS.js failed to load, falling back to native');
           videoElement.src = streamUrl;
           if (autoplay && !document.body.classList.contains('editing')) {
             videoElement.play().catch(() => {});
@@ -613,10 +430,7 @@ function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
     videoElement.videoLayoutCleanup = null;
   }
 
-  if (videoElement.hlsInstance) {
-    videoElement.hlsInstance.destroy();
-    videoElement.hlsInstance = null;
-  }
+  destroyHlsInstance(videoElement);
   if (videoElement.src && videoElement.src.startsWith('blob:')) {
     const blobUrl = videoElement.src;
     URL.revokeObjectURL(blobUrl);
@@ -1300,45 +1114,6 @@ function initializeEventListeners(): void {
       startAnimationLoop();
     }
   });
-}
-
-// ========== HASH SCROLLING ==========
-
-function resolveHashTarget(hash: string): HTMLElement | null {
-  const rawId = hash.startsWith('#') ? hash.slice(1) : hash;
-  if (!rawId) return null;
-
-  let decodedId = rawId;
-  try {
-    decodedId = decodeURIComponent(rawId);
-  } catch {
-    decodedId = rawId;
-  }
-
-  const direct = document.getElementById(decodedId) || document.getElementById(rawId);
-  if (direct) return direct;
-
-  // Fallback for stale/legacy hashes like "heading_1" when only "heading" exists.
-  const baseDecoded = decodedId.replace(/_\d+$/, '');
-  if (baseDecoded && baseDecoded !== decodedId) {
-    const fallback = document.getElementById(baseDecoded);
-    if (fallback) return fallback;
-  }
-
-  const baseRaw = rawId.replace(/_\d+$/, '');
-  if (baseRaw && baseRaw !== rawId) {
-    const fallback = document.getElementById(baseRaw);
-    if (fallback) return fallback;
-  }
-
-  return null;
-}
-
-function scrollToHashTarget(behavior: ScrollBehavior = 'auto'): void {
-  const target = resolveHashTarget(window.location.hash);
-  if (!target) return;
-
-  target.scrollIntoView({ behavior, block: 'start' });
 }
 
 // ========== MAIN INITIALIZATION ==========
