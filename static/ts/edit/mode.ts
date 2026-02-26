@@ -1905,6 +1905,38 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
         return;
       }
 
+      if (
+        e.key === 'ArrowLeft'
+        && !e.shiftKey
+        && !e.metaKey
+        && !e.ctrlKey
+        && !e.altKey
+        && textarea.selectionStart === 0
+        && textarea.selectionEnd === 0
+      ) {
+        if (lineIndex > 0) {
+          e.preventDefault();
+          renderLines(lineIndex - 1, lines[lineIndex - 1]?.length ?? 0);
+        }
+        return;
+      }
+
+      if (
+        e.key === 'ArrowRight'
+        && !e.shiftKey
+        && !e.metaKey
+        && !e.ctrlKey
+        && !e.altKey
+        && textarea.selectionStart === textarea.value.length
+        && textarea.selectionEnd === textarea.value.length
+      ) {
+        if (lineIndex < lines.length - 1) {
+          e.preventDefault();
+          renderLines(lineIndex + 1, 0);
+        }
+        return;
+      }
+
       if (e.key === 'ArrowUp' && textarea.selectionStart === 0 && textarea.selectionEnd === 0) {
         if (lineIndex > 0) {
           e.preventDefault();

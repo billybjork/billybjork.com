@@ -14,6 +14,7 @@
     --spacing-small: 0.5rem;
     --spacing-medium: 1rem;
     --spacing-large: 2rem;
+    --project-mobile-inline-padding: clamp(0.75rem, 4vw, 1rem);
     --content-block-space: 1.5rem;
     --transition-duration: 0.3s;
     --transition-ease: ease-in-out;
@@ -164,6 +165,7 @@ a:hover {
 #main-header .site-title {
     font-size: var(--font-size-large);
     margin: 0;
+    white-space: nowrap;
     @media(max-width: 768px) {
         font-size: var(--font-size-small);
     }
@@ -210,22 +212,7 @@ a:hover {
     }
 }
 
-#main-header .new-project-btn {
-    padding: 6px 12px;
-    background: rgba(100, 100, 100, 0.8);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-#main-header .new-project-btn:hover {
-    background: rgba(120, 120, 120, 0.9);
-}
-
+#main-header .new-project-btn,
 #main-header .show-drafts-toggle {
     padding: 6px 12px;
     background: rgba(100, 100, 100, 0.8);
@@ -234,12 +221,47 @@ a:hover {
     border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1;
+    white-space: nowrap;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
+#main-header .new-project-btn *,
+#main-header .show-drafts-toggle * {
+    color: inherit;
+}
+
+#main-header .new-project-btn:hover,
 #main-header .show-drafts-toggle:hover {
     background: rgba(120, 120, 120, 0.9);
+}
+
+#main-header .new-project-btn .btn-icon,
+#main-header .show-drafts-toggle .btn-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+#main-header nav.compact-edit-actions {
+    gap: var(--spacing-small);
+}
+
+#main-header nav.compact-edit-actions .new-project-btn .btn-label,
+#main-header nav.compact-edit-actions .show-drafts-toggle .btn-label {
+    display: none;
+}
+
+#main-header nav.compact-edit-actions .new-project-btn,
+#main-header nav.compact-edit-actions .show-drafts-toggle {
+    padding: 6px;
+    min-width: 30px;
+    justify-content: center;
+    gap: 0;
 }
 
 #main-header .show-drafts-toggle.active {
@@ -358,6 +380,8 @@ footer {
 }
 
 .project-item {
+    --project-shell-inline-padding: 0;
+    --project-close-inline-offset: var(--spacing-medium);
     opacity: 0;
     transform: translateY(20px);
     position: relative;
@@ -377,6 +401,8 @@ footer {
         transform 0.3s var(--transition-ease),
         opacity 0.3s var(--transition-ease);
     @media (max-width: 768px) {
+            --project-shell-inline-padding: var(--project-mobile-inline-padding);
+            --project-close-inline-offset: var(--project-mobile-inline-padding);
             width: 100%;
             max-width: none;
             border-radius: 0;
@@ -403,6 +429,7 @@ footer {
     position: relative;
     align-items: stretch;
     width: 100%;
+    padding-inline: var(--project-shell-inline-padding);
     background-color: transparent;
     color: var(--primary-color);
     transform: translateX(-10px);
@@ -411,6 +438,9 @@ footer {
     transition: 
         color 0.3s ease,
         transform 0.3s ease;
+    @media (max-width: 768px) {
+        transform: translateX(0);
+    }
 }
 
 .project-header-content {
@@ -433,7 +463,7 @@ footer {
 .project-item.active .project-header-content {
     max-width: 95%;
     @media (max-width: 768px) {
-            max-width: 90%;
+            max-width: 100%;
     }
 }
 
@@ -497,7 +527,7 @@ footer {
 
 .close-project {
     position: absolute;
-    right: var(--spacing-medium);
+    right: var(--project-close-inline-offset);
     top: var(--spacing-medium);
     font-size: 2em;
     background: none;
@@ -510,9 +540,6 @@ footer {
         opacity 0.3s ease,
         visibility 0.3s ease,
         transform 0.3s ease;
-    @media (max-width: 768px) {
-        right: 0.5%;
-    }
 }
 
 .project-item.active .close-project {
@@ -548,6 +575,7 @@ footer {
 
 .project-content {
     overflow: hidden;
+    padding-inline: var(--project-shell-inline-padding);
 }
 
 /* Block spacing - driven by editor block separators */

@@ -10,6 +10,13 @@ import { persistScrollForNavigation, restorePersistedScroll } from './scroll-res
 // ========== CONSTANTS ==========
 
 const SHOW_DRAFTS_KEY = 'bb_show_drafts';
+const NEW_PROJECT_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+const EDIT_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const DRAFTS_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+
+let headerCompactionObserver: ResizeObserver | null = null;
+let headerCompactionResizeHandlerBound = false;
+let headerCompactionFrame: number | null = null;
 
 // ========== HELPERS ==========
 
@@ -118,6 +125,45 @@ function removeProjectControls(projectItem: HTMLElement): void {
   }
 }
 
+function initHeaderNavCompaction(): void {
+  const mainHeader = document.querySelector<HTMLElement>('#main-header');
+  const nav = mainHeader?.querySelector<HTMLElement>('nav');
+  if (!mainHeader || !nav) return;
+
+  const updateCompaction = (): void => {
+    nav.classList.remove('compact-edit-actions');
+    if (!nav.querySelector('.new-project-btn, .show-drafts-toggle')) return;
+
+    if (mainHeader.scrollWidth > mainHeader.clientWidth + 1) {
+      nav.classList.add('compact-edit-actions');
+    }
+  };
+
+  const scheduleCompactionUpdate = (): void => {
+    if (headerCompactionFrame !== null) {
+      cancelAnimationFrame(headerCompactionFrame);
+    }
+    headerCompactionFrame = requestAnimationFrame(() => {
+      headerCompactionFrame = null;
+      updateCompaction();
+    });
+  };
+
+  scheduleCompactionUpdate();
+
+  if (!headerCompactionResizeHandlerBound) {
+    window.addEventListener('resize', scheduleCompactionUpdate, { passive: true });
+    headerCompactionResizeHandlerBound = true;
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    headerCompactionObserver?.disconnect();
+    headerCompactionObserver = new ResizeObserver(scheduleCompactionUpdate);
+    headerCompactionObserver.observe(mainHeader);
+    headerCompactionObserver.observe(nav);
+  }
+}
+
 /**
  * Add new project button to header (or Edit button on /me page)
  */
@@ -126,10 +172,15 @@ function addNewProjectButton(): void {
   if (!header || header.querySelector('.new-project-btn')) return;
 
   const isAboutPage = window.location.pathname === '/me';
+  const buttonLabel = isAboutPage ? 'Edit' : 'New Project';
+  const buttonIcon = isAboutPage ? EDIT_ICON : NEW_PROJECT_ICON;
 
   const btn = document.createElement('button');
+  btn.type = 'button';
   btn.className = 'new-project-btn';
-  btn.textContent = isAboutPage ? 'Edit' : '+ New Project';
+  btn.title = buttonLabel;
+  btn.setAttribute('aria-label', buttonLabel);
+  btn.innerHTML = `${buttonIcon}<span class="btn-label">${buttonLabel}</span>`;
   btn.addEventListener('click', async (e) => {
     e.preventDefault();
     if (isAboutPage) {
@@ -162,8 +213,11 @@ function addShowDraftsToggle(): void {
   const isActive = isShowDraftsActive();
 
   const btn = document.createElement('button');
+  btn.type = 'button';
   btn.className = 'show-drafts-toggle' + (isActive ? ' active' : '');
-  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;margin-right:5px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Drafts';
+  btn.title = 'Drafts';
+  btn.setAttribute('aria-label', isActive ? 'Hide drafts' : 'Show drafts');
+  btn.innerHTML = `${DRAFTS_ICON}<span class="btn-label">Drafts</span>`;
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     const url = new URL(window.location.href);
@@ -261,6 +315,7 @@ function initializeEditMode(): void {
 
   addNewProjectButton();
   addShowDraftsToggle();
+  initHeaderNavCompaction();
 
   document.querySelectorAll<HTMLElement>('.project-item.active').forEach(addProjectControls);
 
