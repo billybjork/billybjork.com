@@ -185,8 +185,8 @@ def _build_project_frontmatter(
     normalized_video: dict[str, Any] = {}
     for key in ("hls", "thumbnail", "spriteSheet"):
         value = video.get(key)
-        if isinstance(value, str) and value:
-            normalized_video[key] = value
+        if isinstance(value, str) and value.strip():
+            normalized_video[key] = value.strip()
 
     for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps"):
         value = video.get(key)
