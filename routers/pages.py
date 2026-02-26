@@ -74,11 +74,19 @@ async def read_root(
         if show_drafts_only:
             all_projects = [
                 project
-                for project in load_all_projects(include_drafts=True, include_html=False)
+                for project in load_all_projects(
+                    include_drafts=True,
+                    include_html=False,
+                    include_revision=False,
+                )
                 if project.get("is_draft", False)
             ]
         else:
-            all_projects = load_all_projects(include_drafts=False, include_html=False)
+            all_projects = load_all_projects(
+                include_drafts=False,
+                include_html=False,
+                include_revision=False,
+            )
 
         start_idx = (page - 1) * limit
         end_idx = start_idx + limit
@@ -153,10 +161,13 @@ async def read_about(request: Request):
             "current_year": datetime.now().year,
             "about_content": about_html,
             "about_photo_link": general_info.about_photo_link,
+            "about_photo_srcset": general_info.about_photo_srcset,
+            "about_photo_sizes": general_info.about_photo_sizes,
             "general_info": general_info,
             "is_dev_mode": is_dev_mode,
             "page_title": "About",
             "page_meta_description": "Learn more about Billy Bjork and his work.",
+            "load_project_bundle": False,
         },
     )
 
@@ -170,7 +181,7 @@ async def read_project(
     show_drafts: bool = Query(False),
 ):
     try:
-        project_data = load_project(project_slug)
+        project_data = load_project(project_slug, include_revision=False)
         if not project_data:
             raise HTTPException(status_code=404, detail="Project not found")
 

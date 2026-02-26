@@ -31,7 +31,10 @@ def _to_rfc822(d) -> str:
 
 @router.get("/feed.xml", include_in_schema=False)
 async def rss_feed():
-    projects = load_all_projects(include_drafts=False)
+    projects = load_all_projects(
+        include_drafts=False,
+        include_revision=False,
+    )
 
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
