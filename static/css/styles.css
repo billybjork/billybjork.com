@@ -798,6 +798,8 @@ footer {
 
 .image-lightbox img,
 .image-lightbox video {
+    min-height: 50vh;
+    min-width: 50vw;
     max-height: 85vh;
     max-width: 92vw;
     object-fit: contain;
