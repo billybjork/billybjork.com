@@ -6,11 +6,16 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import re
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from functools import lru_cache
 from html import escape
 from pathlib import Path
+from threading import RLock
+from time import monotonic
 from typing import Optional
 
 import markdown
@@ -57,6 +62,122 @@ CONTENT_DIR = Path(__file__).parent.parent / "content"
 PROJECTS_DIR = CONTENT_DIR / "projects"
 SETTINGS_FILE = CONTENT_DIR / "settings.json"
 ABOUT_FILE = CONTENT_DIR / "about.md"
+
+
+@dataclass
+class _ParsedProjectCacheEntry:
+    mtime_ns: int
+    size: int
+    cached_at: float
+    frontmatter: dict
+    markdown_content: str
+    revision: str
+
+
+@dataclass
+class _RenderedProjectCacheEntry:
+    mtime_ns: int
+    size: int
+    cached_at: float
+    html_content: str
+
+
+@dataclass
+class _AboutCacheEntry:
+    mtime_ns: int
+    size: int
+    cached_at: float
+    html_content: str
+    markdown_content: str
+    revision: str
+
+
+PROJECT_CACHE_MAX_ENTRIES = max(1, int(os.getenv("PROJECT_CACHE_MAX_ENTRIES", "256")))
+PROJECT_CACHE_TTL_SECONDS = max(1, int(os.getenv("PROJECT_CACHE_TTL_SECONDS", "1800")))
+
+_cache_lock = RLock()
+_project_parse_cache: "OrderedDict[str, _ParsedProjectCacheEntry]" = OrderedDict()
+_project_html_cache: "OrderedDict[str, _RenderedProjectCacheEntry]" = OrderedDict()
+_about_cache: Optional[_AboutCacheEntry] = None
+
+
+def _revision_from_content(content: str) -> str:
+    return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def _is_fresh(cached_at: float, now: float) -> bool:
+    return (now - cached_at) <= PROJECT_CACHE_TTL_SECONDS
+
+
+def _prune_project_cache_locked(
+    cache: "OrderedDict[str, _ParsedProjectCacheEntry | _RenderedProjectCacheEntry]",
+    now: float,
+) -> None:
+    stale_keys = [key for key, entry in cache.items() if not _is_fresh(entry.cached_at, now)]
+    for key in stale_keys:
+        cache.pop(key, None)
+
+    while len(cache) > PROJECT_CACHE_MAX_ENTRIES:
+        cache.popitem(last=False)
+
+
+def _project_stat(filepath: Path) -> tuple[int, int]:
+    stat = filepath.stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
+def _invalidate_project_cache(slug: str) -> None:
+    with _cache_lock:
+        _project_parse_cache.pop(slug, None)
+        _project_html_cache.pop(slug, None)
+
+
+def _invalidate_about_cache() -> None:
+    global _about_cache
+    with _cache_lock:
+        _about_cache = None
+
+
+def _get_cached_project_parse(slug: str, filepath: Path) -> _ParsedProjectCacheEntry:
+    mtime_ns, size = _project_stat(filepath)
+    now = monotonic()
+    with _cache_lock:
+        cached = _project_parse_cache.get(slug)
+        if cached and cached.mtime_ns == mtime_ns and cached.size == size and _is_fresh(cached.cached_at, now):
+            _project_parse_cache.move_to_end(slug)
+            return cached
+        if cached:
+            _project_parse_cache.pop(slug, None)
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        content = f.read()
+    frontmatter, markdown_content = parse_frontmatter(content)
+    parsed = _ParsedProjectCacheEntry(
+        mtime_ns=mtime_ns,
+        size=size,
+        cached_at=now,
+        frontmatter=frontmatter,
+        markdown_content=markdown_content,
+        revision=_revision_from_content(content),
+    )
+
+    with _cache_lock:
+        _project_parse_cache[slug] = parsed
+        _project_parse_cache.move_to_end(slug)
+        _prune_project_cache_locked(_project_parse_cache, now)
+        cached_html = _project_html_cache.get(slug)
+        if cached_html and (cached_html.mtime_ns != mtime_ns or cached_html.size != size):
+            _project_html_cache.pop(slug, None)
+        _prune_project_cache_locked(_project_html_cache, now)
+    return parsed
+
+
+@lru_cache(maxsize=512)
+def _parse_iso_date(value: str) -> date:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return date.min
 
 
 def parse_frontmatter(content: str) -> tuple[dict, str]:
@@ -146,24 +267,36 @@ def parse_row_block(md_block: str) -> Optional[tuple[str, str]]:
     return left_md, right_md
 
 
-def _convert_markdown(md_content: str) -> str:
-    """Convert markdown string to HTML with project-standard extensions."""
-    md = markdown.Markdown(extensions=[
+def _build_markdown_renderer() -> markdown.Markdown:
+    return markdown.Markdown(extensions=[
         FencedCodeExtension(),
         TableExtension(),
-        'nl2br',
-        'sane_lists',  # Better list handling - prevents tight coupling with adjacent content
-        'smarty',  # Smart quotes and dashes
-        'toc',  # Generates IDs for headings (enables anchor links)
+        "nl2br",
+        "sane_lists",  # Better list handling - prevents tight coupling with adjacent content
+        "smarty",  # Smart quotes and dashes
+        "toc",  # Generates IDs for headings (enables anchor links)
     ])
+
+
+def _convert_markdown(
+    md_content: str,
+    renderer: Optional[markdown.Markdown] = None,
+) -> str:
+    """Convert markdown string to HTML with project-standard extensions."""
+    md = renderer or _build_markdown_renderer()
+    if renderer is not None:
+        md.reset()
     return md.convert(md_content)
 
 
-def render_markdown_block(md_content: str) -> str:
+def render_markdown_block(
+    md_content: str,
+    renderer: Optional[markdown.Markdown] = None,
+) -> str:
     """Render a markdown block using the project markdown pipeline."""
     md = process_html_blocks(md_content)
     md = strip_layout_markers(md)
-    html = _convert_markdown(md)
+    html = _convert_markdown(md, renderer=renderer)
     html = convert_alignment_comments(html).strip()
     return optimize_media_loading(html).strip()
 
@@ -180,6 +313,9 @@ def convert_alignment_comments(html_content: str) -> str:
 
 def optimize_media_loading(html_content: str) -> str:
     """Apply lazy-loading defaults to project-body media markup."""
+    if "<img" not in html_content and "<iframe" not in html_content and "<video" not in html_content:
+        return html_content
+
     soup = BeautifulSoup(html_content, "html.parser")
 
     for image in soup.find_all("img"):
@@ -221,12 +357,13 @@ def markdown_to_html(md_content: str) -> str:
         blocks = [md_content]
 
     rendered_blocks: list[str] = []
+    renderer = _build_markdown_renderer()
     for block in blocks:
         row_columns = parse_row_block(block)
         if row_columns:
             left_md, right_md = row_columns
-            left_html = render_markdown_block(left_md)
-            right_html = render_markdown_block(right_md)
+            left_html = render_markdown_block(left_md, renderer=renderer)
+            right_html = render_markdown_block(right_md, renderer=renderer)
             rendered_blocks.append(
                 '<div class="content-block content-block-row">'
                 '<div class="content-row">'
@@ -237,7 +374,7 @@ def markdown_to_html(md_content: str) -> str:
             )
             continue
 
-        html = render_markdown_block(block)
+        html = render_markdown_block(block, renderer=renderer)
         if html:
             rendered_blocks.append(f'<div class="content-block">{html}</div>')
 
@@ -262,7 +399,11 @@ def content_revision(filepath: Path) -> Optional[str]:
     return "sha256:" + hashlib.sha256(data).hexdigest()[:16]
 
 
-def load_project(slug: str, include_html: bool = True) -> Optional[dict]:
+def load_project(
+    slug: str,
+    include_html: bool = True,
+    include_revision: bool = True,
+) -> Optional[dict]:
     """
     Load a project by slug.
     Returns dict with frontmatter fields and 'html_content'.
@@ -271,12 +412,33 @@ def load_project(slug: str, include_html: bool = True) -> Optional[dict]:
         return None
     filepath = PROJECTS_DIR / f"{slug}.md"
     if not filepath.exists():
+        _invalidate_project_cache(slug)
         return None
 
-    with open(filepath, 'r', encoding='utf-8') as f:
-        content = f.read()
-
-    frontmatter, markdown_content = parse_frontmatter(content)
+    parsed = _get_cached_project_parse(slug, filepath)
+    frontmatter = parsed.frontmatter
+    markdown_content = parsed.markdown_content
+    html_content = ""
+    if include_html:
+        now = monotonic()
+        with _cache_lock:
+            html_cached = _project_html_cache.get(slug)
+            if html_cached and html_cached.mtime_ns == parsed.mtime_ns and html_cached.size == parsed.size and _is_fresh(html_cached.cached_at, now):
+                html_content = html_cached.html_content
+                _project_html_cache.move_to_end(slug)
+            elif html_cached:
+                _project_html_cache.pop(slug, None)
+        if not html_content:
+            html_content = markdown_to_html(markdown_content)
+            with _cache_lock:
+                _project_html_cache[slug] = _RenderedProjectCacheEntry(
+                    mtime_ns=parsed.mtime_ns,
+                    size=parsed.size,
+                    cached_at=now,
+                    html_content=html_content,
+                )
+                _project_html_cache.move_to_end(slug)
+                _prune_project_cache_locked(_project_html_cache, now)
 
     # Build project dict
     project = {
@@ -286,9 +448,9 @@ def load_project(slug: str, include_html: bool = True) -> Optional[dict]:
         'is_draft': frontmatter.get('draft', False),
         'pinned': frontmatter.get('pinned', False),
         'youtube_link': frontmatter.get('youtube'),
-        'html_content': markdown_to_html(markdown_content) if include_html else "",
+        'html_content': html_content,
         'markdown_content': markdown_content,
-        'revision': content_revision(filepath),
+        'revision': parsed.revision if include_revision else None,
     }
 
     # Video fields
@@ -317,7 +479,11 @@ def load_project(slug: str, include_html: bool = True) -> Optional[dict]:
     return project
 
 
-def load_all_projects(include_drafts: bool = False, include_html: bool = True) -> list[dict]:
+def load_all_projects(
+    include_drafts: bool = False,
+    include_html: bool = True,
+    include_revision: bool = True,
+) -> list[dict]:
     """
     Load all projects from the content directory.
     Returns list of project dicts sorted by date (newest first), with pinned at top.
@@ -329,7 +495,11 @@ def load_all_projects(include_drafts: bool = False, include_html: bool = True) -
 
     for filepath in PROJECTS_DIR.glob("*.md"):
         slug = filepath.stem
-        project = load_project(slug, include_html=include_html)
+        project = load_project(
+            slug,
+            include_html=include_html,
+            include_revision=include_revision,
+        )
         if project:
             if include_drafts or not project.get('is_draft', False):
                 projects.append(project)
@@ -340,10 +510,7 @@ def load_all_projects(include_drafts: bool = False, include_html: bool = True) -
         # Handle date sorting
         d = p.get('creation_date')
         if isinstance(d, str):
-            try:
-                d = datetime.strptime(d, '%Y-%m-%d').date()
-            except ValueError:
-                d = date.min
+            d = _parse_iso_date(d)
         elif d is None:
             d = date.min
         return (-pinned, -d.toordinal() if d else 0)
@@ -366,6 +533,7 @@ def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
     with open(filepath, 'w', encoding='utf-8') as f:
         f.write(content)
 
+    _invalidate_project_cache(slug)
     _sync_to_s3(filepath)
     return True
 
@@ -381,6 +549,7 @@ def delete_project(slug: str) -> bool:
     if filepath.exists():
         _archive_to_s3(filepath)
         filepath.unlink()
+        _invalidate_project_cache(slug)
         _delete_from_s3(filepath)
         return True
     return False
@@ -408,6 +577,8 @@ def load_settings() -> dict:
         'linkedin_link': social.get('linkedin'),
         'github_link': social.get('github'),
         'about_photo_link': about.get('photo_url'),
+        'about_photo_srcset': about.get('photo_srcset'),
+        'about_photo_sizes': about.get('photo_sizes'),
     }
 
 
@@ -427,6 +598,8 @@ def save_settings(settings: dict) -> bool:
         },
         'about': {
             'photo_url': settings.get('about_photo_link', ''),
+            'photo_srcset': settings.get('about_photo_srcset', ''),
+            'photo_sizes': settings.get('about_photo_sizes', ''),
         }
     }
 
@@ -442,16 +615,38 @@ def load_about() -> tuple[str, str, Optional[str]]:
     Load about page content.
     Returns (html_content, markdown_content, revision).
     """
+    global _about_cache
+
     if not ABOUT_FILE.exists():
+        _invalidate_about_cache()
         return '', '', None
+
+    mtime_ns, size = _project_stat(ABOUT_FILE)
+    now = monotonic()
+    with _cache_lock:
+        cached = _about_cache
+        if cached and cached.mtime_ns == mtime_ns and cached.size == size and _is_fresh(cached.cached_at, now):
+            return cached.html_content, cached.markdown_content, cached.revision
 
     with open(ABOUT_FILE, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    frontmatter, markdown_content = parse_frontmatter(content)
+    _, markdown_content = parse_frontmatter(content)
     html_content = markdown_to_html(markdown_content)
+    revision = _revision_from_content(content)
 
-    return html_content, markdown_content, content_revision(ABOUT_FILE)
+    about_cache_entry = _AboutCacheEntry(
+        mtime_ns=mtime_ns,
+        size=size,
+        cached_at=now,
+        html_content=html_content,
+        markdown_content=markdown_content,
+        revision=revision,
+    )
+    with _cache_lock:
+        _about_cache = about_cache_entry
+
+    return html_content, markdown_content, revision
 
 
 def save_about(markdown_content: str) -> bool:
@@ -466,6 +661,7 @@ def save_about(markdown_content: str) -> bool:
     with open(ABOUT_FILE, 'w', encoding='utf-8') as f:
         f.write(content)
 
+    _invalidate_about_cache()
     _sync_to_s3(ABOUT_FILE)
     return True
 
@@ -521,6 +717,8 @@ class GeneralInfo:
     linkedin_link: Optional[str] = None
     github_link: Optional[str] = None
     about_photo_link: Optional[str] = None
+    about_photo_srcset: Optional[str] = None
+    about_photo_sizes: Optional[str] = None
     about_content: Optional[str] = None
 
     @classmethod
@@ -532,6 +730,8 @@ class GeneralInfo:
             linkedin_link=settings.get("linkedin_link"),
             github_link=settings.get("github_link"),
             about_photo_link=settings.get("about_photo_link"),
+            about_photo_srcset=settings.get("about_photo_srcset"),
+            about_photo_sizes=settings.get("about_photo_sizes"),
         )
 
 
