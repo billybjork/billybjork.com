@@ -3,9 +3,10 @@
     <section class="video-container">
         <video id="video-player-{{ project.id }}"
                class="lazy-video"
-               controls 
-               playsinline 
-               preload="auto" 
+               controls
+               playsinline
+               autoplay
+               preload="auto"
                fetchpriority="high"
                {% if project.thumbnail_link %}poster="{{ project.thumbnail_link }}"{% endif %}
                data-hls-url="{{ project.video_link }}">
@@ -35,7 +36,7 @@
                 <li>
                     <button
                         class="copy-text-link"
-                        data-copy-text="{{ request.url }}"
+                        data-copy-text="{{ request.url.scheme }}://{{ request.url.netloc }}{{ request.url.path }}"
                         data-notification-message="URL copied to clipboard!"
                         aria-label="Share"
                     >

@@ -6,6 +6,7 @@
 
 import type { ProjectEventDetail, ProjectsLoadedEventDetail } from '../types/events';
 import { checkAndHighlightCode } from './code-highlighting';
+import { preloadHlsScript } from './interactions';
 
 // ========== STATE ==========
 
@@ -411,8 +412,22 @@ function handleProjectClick(event: MouseEvent): void {
 
 // ========== INITIALIZATION ==========
 
+function handleProjectPointerDown(event: MouseEvent | TouchEvent): void {
+  const target = event.target as HTMLElement;
+  const projectHeader = target.closest<HTMLElement>('.project-header');
+  const thumbnail = target.closest<HTMLElement>('.thumbnail');
+
+  if (projectHeader || thumbnail) {
+    // Start loading HLS.js early, before the click completes
+    preloadHlsScript();
+  }
+}
+
 function initialize(): void {
   document.body.addEventListener('click', handleProjectClick);
+  // Preload HLS.js on mousedown/touchstart for faster video autoplay
+  document.body.addEventListener('mousedown', handleProjectPointerDown);
+  document.body.addEventListener('touchstart', handleProjectPointerDown, { passive: true });
   if (isProjectUrlSyncEnabled()) {
     window.addEventListener('popstate', handlePopState);
   }

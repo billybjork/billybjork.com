@@ -406,6 +406,14 @@ function bindVideoLayout(videoElement: HTMLVideoElement): void {
 }
 
 /**
+ * Preload HLS.js script. Safe to call multiple times.
+ * Called early (on mousedown/touchstart) to have HLS.js ready by click time.
+ */
+export function preloadHlsScript(): Promise<void> {
+  return loadHlsScript();
+}
+
+/**
  * Lazy-load HLS.js only when needed.
  */
 function loadHlsScript(): Promise<void> {
@@ -453,7 +461,8 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
         return;
       }
 
-      if (autoplay) {
+      // If early play didn't work (no src yet), try again now that media is loaded
+      if (autoplay && videoElement.paused) {
         videoElement.play().catch(e => {
           if (e.name !== 'AbortError') {
             console.error("Autoplay failed:", e);
@@ -472,6 +481,12 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
       if (!window.Hls || !Hls.isSupported()) {
         if (canPlayNative) {
           videoElement.src = streamUrl;
+          // Try to play immediately to preserve user gesture context
+          if (autoplay && !document.body.classList.contains('editing')) {
+            videoElement.play().catch(() => {
+              // Will retry after loadedmetadata
+            });
+          }
           videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
           return;
         }
@@ -492,6 +507,14 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
       videoElement.hlsInstance = hls;
       hls.loadSource(streamUrl);
       hls.attachMedia(videoElement);
+
+      // Try to play immediately after attaching media to preserve user gesture context
+      if (autoplay && !document.body.classList.contains('editing')) {
+        videoElement.play().catch(() => {
+          // Expected to fail here, will retry after manifest is parsed
+        });
+      }
+
       hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           console.log('[HLS] Available quality levels:');
@@ -555,6 +578,9 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
         } else if (canPlayNative) {
           console.log('[HLS] HLS.js not supported, falling back to native');
           videoElement.src = streamUrl;
+          if (autoplay && !document.body.classList.contains('editing')) {
+            videoElement.play().catch(() => {});
+          }
           videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
         } else {
           console.error('HLS is not supported in this browser');
@@ -565,6 +591,9 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
         if (canPlayNative) {
           console.log('[HLS] HLS.js failed to load, falling back to native');
           videoElement.src = streamUrl;
+          if (autoplay && !document.body.classList.contains('editing')) {
+            videoElement.play().catch(() => {});
+          }
           videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
           return;
         }
