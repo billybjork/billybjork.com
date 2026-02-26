@@ -53,6 +53,8 @@ def format_project_for_template(project: ProjectInfo, is_open: bool = False) -> 
         "columns": project.columns if project.columns else 5,
         "frame_width": project.frame_width if project.frame_width else 320,
         "frame_height": project.frame_height if project.frame_height else 180,
+        "video_width": project.video_width,
+        "video_height": project.video_height,
         "youtube_link": project.youtube_link,
         "formatted_date": project.formatted_date,
         "pinned": project.pinned,
@@ -112,12 +114,6 @@ async def read_root(
                 },
             )
 
-        # Compute og_image_link for homepage (use first project's og_image if available)
-        og_image_link = None
-        if projects:
-            first_project = ProjectInfo.from_dict(projects[0])
-            og_image_link = first_project.og_image_link
-
         return templates.TemplateResponse(
             "index.html",
             {
@@ -130,7 +126,7 @@ async def read_root(
                 "has_more": has_more,
                 "limit": limit,
                 "show_drafts": show_drafts_only,
-                "og_image_link": og_image_link,
+                "og_image_link": general_info.about_photo_link,
             },
         )
     except Exception as e:
@@ -167,6 +163,7 @@ async def read_about(request: Request):
             "is_dev_mode": is_dev_mode,
             "page_title": "About",
             "page_meta_description": "Learn more about Billy Bjork and his work.",
+            "og_image_link": general_info.about_photo_link,
             "load_project_bundle": False,
         },
     )
