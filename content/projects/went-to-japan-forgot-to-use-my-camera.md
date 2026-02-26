@@ -51,6 +51,8 @@ I got curious and looked into how it worked. Turns out the feature is based on a
 
 <!-- row -->
 I downloaded the model and got it running on my laptop (no cloud was harmed) then fed it some photos. Out came “splat” files, which I now think of as ‘3D reconstructions’ of one or more input images.
+
+Now, how do I open these  .ply files? Didn’t think I’d get that far. From the file previews, I can hardly tell what photo each splat file came from.
 <!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_160227_005472.mp4" autoplay loop muted playsinline style="display: block; width: 384px"></video>
 <p class="media-caption">New file format unlocked</p>
@@ -58,16 +60,11 @@ I downloaded the model and got it running on my laptop (no cloud was harmed) the
 
 <!-- block -->
 
-How do I open these  .ply files? Didn’t think I’d get that far. From the file previews, I can hardly tell what photo each splat file came from.
-
 So Claude and I whipped up a simple web UI to look at the splats in all their 3D glory. Here's a tiny version of that you can play with:
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
-<div style="text-align: center">
-<div style="text-align: center">
-<div style="text-align: center">
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -915,14 +912,11 @@ document.getElementById('info').textContent=String(err&&err.message?err.message:
 
 </body>
 </html>
-</div>
-</div>
-</div>
 <!-- /html -->
 
 <!-- block -->
 
-I almost forgot. The goal wasn’t to build the next Unreal Engine, it was to make a fun edit from the trip. I needed a way to turn these splats into video clips I can pull into a timeline.
+I almost forgot. The goal's not to build the next Unreal Engine, it's to make a fun edit from the trip. I needed a way to turn these splats into video clips I can pull into a timeline.
 
 Through After Effects, I got familiar with the idea of a “virtual camera.” Figured I could do something similar here, with a coding agent and some Python libraries. I was right.
 
@@ -1087,7 +1081,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
