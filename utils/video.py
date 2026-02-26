@@ -9,7 +9,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Tuple
+from typing import Callable, Tuple
 
 from .media_paths import (
     content_video_key,
@@ -18,6 +18,9 @@ from .media_paths import (
     hero_thumbnail_key,
 )
 from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, get_s3_client
+
+CACHE_CONTROL_IMMUTABLE = 'max-age=31536000'
+ProgressCallback = Callable[[str, float], None]
 
 __all__ = [
     "check_ffmpeg",
@@ -32,6 +35,58 @@ __all__ = [
     "generate_hls_only",
     "generate_sprite_and_thumbnail",
 ]
+
+
+def _report_progress(progress_callback: ProgressCallback | None, stage: str, progress: float) -> None:
+    if progress_callback:
+        progress_callback(stage, progress)
+
+
+def _upload_local_file(
+    s3_client,
+    local_path: str | Path,
+    s3_key: str,
+    *,
+    content_type: str
+) -> None:
+    with open(local_path, 'rb') as f:
+        s3_client.upload_fileobj(
+            f,
+            S3_BUCKET,
+            s3_key,
+            ExtraArgs={
+                'ContentType': content_type,
+                'CacheControl': CACHE_CONTROL_IMMUTABLE,
+            }
+        )
+
+
+def _upload_hls_outputs(
+    s3_client,
+    hls_dir: str,
+    project_slug: str,
+    version: str,
+    *,
+    progress_callback: ProgressCallback | None,
+    progress_start: float,
+    progress_span: float
+) -> str:
+    hls_prefix = hero_hls_prefix(project_slug, version)
+    hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
+    total_hls = len(hls_files)
+
+    for i, file_path in enumerate(hls_files):
+        _report_progress(
+            progress_callback,
+            f'Uploading HLS to S3... ({i + 1}/{total_hls})',
+            progress_start + (i / max(total_hls, 1)) * progress_span,
+        )
+        relative_path = file_path.relative_to(hls_dir).as_posix()
+        s3_key = f'{hls_prefix}/{relative_path}'
+        content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
+        _upload_local_file(s3_client, file_path, s3_key, content_type=content_type)
+
+    return f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
 
 
 def check_ffmpeg() -> bool:
@@ -445,8 +500,7 @@ def process_hero_video(
         raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
 
     def _report(stage, progress):
-        if progress_callback:
-            progress_callback(stage, progress)
+        _report_progress(progress_callback, stage, progress)
 
     # Use timestamp in paths to bust CDN cache when video is replaced
     version = str(int(time.time()))
@@ -488,44 +542,21 @@ def process_hero_video(
                 else:
                     _report('HLS ready, waiting for sprite sheet...' if completed < 2 else 'Encoding complete!', 10 + completed * 20)
 
-        # Upload HLS files to S3 with versioned path
         s3 = get_s3_client()
-        hls_prefix = hero_hls_prefix(project_slug, version)
-        hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
-        total_hls = len(hls_files)
-        for i, file_path in enumerate(hls_files):
-            _report(f'Uploading HLS to S3... ({i + 1}/{total_hls})', 50 + (i / max(total_hls, 1)) * 25)
-            relative_path = file_path.relative_to(hls_dir)
-            s3_key = f'{hls_prefix}/{relative_path}'
-
-            content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
-
-            with open(file_path, 'rb') as f:
-                s3.upload_fileobj(
-                    f,
-                    S3_BUCKET,
-                    s3_key,
-                    ExtraArgs={
-                        'ContentType': content_type,
-                        'CacheControl': 'max-age=31536000',
-                    }
-                )
-
-        results['hls'] = f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
+        results['hls'] = _upload_hls_outputs(
+            s3,
+            hls_dir,
+            project_slug,
+            version,
+            progress_callback=_report,
+            progress_start=50,
+            progress_span=25,
+        )
 
         # Upload sprite sheet to S3 with versioned filename
         _report('Uploading sprite sheet...', 78)
         sprite_key = hero_sprite_key(project_slug, version)
-        with open(sprite_path, 'rb') as f:
-            s3.upload_fileobj(
-                f,
-                S3_BUCKET,
-                sprite_key,
-                ExtraArgs={
-                    'ContentType': 'image/jpeg',
-                    'CacheControl': 'max-age=31536000',
-                }
-            )
+        _upload_local_file(s3, sprite_path, sprite_key, content_type='image/jpeg')
 
         results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
         results['spriteMeta'] = sprite_meta
@@ -540,16 +571,7 @@ def process_hero_video(
         )
 
         thumbnail_key = hero_thumbnail_key(project_slug, version)
-        with open(thumb_path, 'rb') as f:
-            s3.upload_fileobj(
-                f,
-                S3_BUCKET,
-                thumbnail_key,
-                ExtraArgs={
-                    'ContentType': 'image/webp',
-                    'CacheControl': 'max-age=31536000',
-                }
-            )
+        _upload_local_file(s3, thumb_path, thumbnail_key, content_type='image/webp')
 
         results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
         _report('Complete!', 100)
@@ -582,8 +604,7 @@ def generate_hls_only(
         raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
 
     def _report(stage, progress):
-        if progress_callback:
-            progress_callback(stage, progress)
+        _report_progress(progress_callback, stage, progress)
 
     # Use timestamp in path to bust CDN cache when video is replaced
     version = str(int(time.time()))
@@ -594,32 +615,19 @@ def generate_hls_only(
         _report('Generating HLS streams...', 10)
         generate_hls(video_path, hls_dir, start_time=trim_start)
 
-        # Upload HLS files to S3 with versioned path
         s3 = get_s3_client()
-        hls_prefix = hero_hls_prefix(project_slug, version)
-        hls_files = [p for p in Path(hls_dir).rglob('*') if p.is_file()]
-        total_hls = len(hls_files)
-
-        for i, file_path in enumerate(hls_files):
-            _report(f'Uploading HLS to S3... ({i + 1}/{total_hls})', 10 + (i / max(total_hls, 1)) * 85)
-            relative_path = file_path.relative_to(hls_dir)
-            s3_key = f'{hls_prefix}/{relative_path}'
-
-            content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
-
-            with open(file_path, 'rb') as f:
-                s3.upload_fileobj(
-                    f,
-                    S3_BUCKET,
-                    s3_key,
-                    ExtraArgs={
-                        'ContentType': content_type,
-                        'CacheControl': 'max-age=31536000',
-                    }
-                )
+        hls_url = _upload_hls_outputs(
+            s3,
+            hls_dir,
+            project_slug,
+            version,
+            progress_callback=_report,
+            progress_start=10,
+            progress_span=85,
+        )
 
         _report('HLS complete!', 100)
-        return f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
+        return hls_url
 
 
 def generate_sprite_and_thumbnail(
@@ -649,8 +657,7 @@ def generate_sprite_and_thumbnail(
         raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
 
     def _report(stage, progress):
-        if progress_callback:
-            progress_callback(stage, progress)
+        _report_progress(progress_callback, stage, progress)
 
     # Use timestamp in filename to bust CDN cache when assets are replaced
     version = str(int(time.time()))
@@ -672,16 +679,7 @@ def generate_sprite_and_thumbnail(
         _report('Uploading sprite sheet...', 40)
         s3 = get_s3_client()
         sprite_key = hero_sprite_key(project_slug, version)
-        with open(sprite_path, 'rb') as f:
-            s3.upload_fileobj(
-                f,
-                S3_BUCKET,
-                sprite_key,
-                ExtraArgs={
-                    'ContentType': 'image/jpeg',
-                    'CacheControl': 'max-age=31536000',
-                }
-            )
+        _upload_local_file(s3, sprite_path, sprite_key, content_type='image/jpeg')
 
         results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
         results['spriteMeta'] = sprite_meta
@@ -697,16 +695,7 @@ def generate_sprite_and_thumbnail(
 
         # Upload thumbnail with versioned filename
         thumbnail_key = hero_thumbnail_key(project_slug, version)
-        with open(thumb_path, 'rb') as f:
-            s3.upload_fileobj(
-                f,
-                S3_BUCKET,
-                thumbnail_key,
-                ExtraArgs={
-                    'ContentType': 'image/webp',
-                    'CacheControl': 'max-age=31536000',
-                }
-            )
+        _upload_local_file(s3, thumb_path, thumbnail_key, content_type='image/webp')
 
         results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
         _report('Complete!', 100)
@@ -738,15 +727,6 @@ def process_content_video(video_path: str) -> str:
 
         # Upload to S3
         s3 = get_s3_client()
-        with open(output_path, 'rb') as f:
-            s3.upload_fileobj(
-                f,
-                S3_BUCKET,
-                s3_key,
-                ExtraArgs={
-                    'ContentType': 'video/mp4',
-                    'CacheControl': 'max-age=31536000',
-                }
-            )
+        _upload_local_file(s3, output_path, s3_key, content_type='video/mp4')
 
         return f'https://{CLOUDFRONT_DOMAIN}/{s3_key}'

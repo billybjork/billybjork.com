@@ -54,7 +54,7 @@ def _save_registry(registry: dict) -> None:
         from .content_sync import sync_to_s3
         sync_to_s3(ASSETS_FILE)
     except Exception:
-        pass  # Never let S3 sync failure break a local write
+        logger.exception("Best-effort S3 sync failed for %s", ASSETS_FILE)
 
 
 def compute_hash(data: bytes) -> str:
