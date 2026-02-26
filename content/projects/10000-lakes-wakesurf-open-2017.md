@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/10,000_lakes_wakesurf_open___2017/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/10k-lakes.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/10k-lakes--_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://www.youtube.com/watch?v=1oNObYqiw4Y
 ---
-
 Client: 10K Lakes Open
 
 Wakesurfing on the Mississippi

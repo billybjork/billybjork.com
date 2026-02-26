@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/Wild-Card---Full-Movie/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/wild-card.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/wild-card_sprite_sheet.jpg
+  video_width: 1280
+  video_height: 720
 ---
-
 Covering a year of shenanigans, hammers, and broken bones Wild Card is a full-length snowboard film featuring a group of Minnesota teens finding new ways to slide on snow. Through the ups and downs of contests, urban missions, and park sessions, Wild Card is a search and destroy snowboard mission to devour all terrain in sight.
 
 Produced by Billy Bjork and Jared Floersch in collaboration with ClosedCircuitMedia and NewFrontierFilms.

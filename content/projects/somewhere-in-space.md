@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/somewhere_in_space/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/somewhere-in-space.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/somewhere-in-space_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://www.youtube.com/watch?v=Ft7DoI2MYvk
 ---
-
 #### Video by:
 - Billy Bjork
 

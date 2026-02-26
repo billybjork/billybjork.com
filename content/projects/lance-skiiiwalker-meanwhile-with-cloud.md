@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/lance_skiiiwalker_-__meanwhile_with_cloud_/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/meanwhile-with-cloud.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/lance_skiiiwalker_-__meanwhile_with_cloud__sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 ---
-
 Lance Skiiiwalker and his 4 year old daughter, discussing the King Kong movie.
 
 Unreleased track from [Tales From The Telescope](https://lanceskiiiwalker.bandcamp.com/album/tales-from-the-telescope-chapter-1)

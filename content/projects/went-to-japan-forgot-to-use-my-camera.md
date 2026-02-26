@@ -14,6 +14,8 @@ video:
   frame_width: 320
   frame_height: 180
   fps: 20
+  video_width: 1216
+  video_height: 2160
 ---
 
 ---
@@ -32,7 +34,7 @@ The whole experience changes when you’ve got a specific video in mind — you�
 
 I did, out of habit, pack a couple cameras when I traveled to Japan last month. They mostly stayed in my bag. How could I worry about getting the shot when I’m fully occupied choosing a snack at the konbini?
 
-Of course we still ended up with a huge shared photo album. When I got home, like clockwork, I found myself wanting to make *something* from our wonderful time in Japan. But what to make from a pile of iPhone pics?
+Of course we still ended up with a huge shared photo album. And when I got home, like clockwork, I found myself wanting to make *something* from our wonderful time in Japan. But what to make from a pile of iPhone pics?
 
 <!-- block -->
 
@@ -60,11 +62,11 @@ Now, how do I open these  .ply files? Didn’t think I’d get that far. From th
 
 <!-- block -->
 
-So Claude and I whipped up a simple web UI to look at the **splats** in all their 3D glory. Here's a tiny version of that you can play with:
+So Claude and I whipped up a simple web UI to look at the splats in all their 3D glory. Here's a tiny version of that you can play with:
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1081,7 +1083,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->

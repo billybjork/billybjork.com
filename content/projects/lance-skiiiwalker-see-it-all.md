@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/lance_skiiiwalker_-_see_it_all/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/see-it-all.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/lance_skiiiwalker_-_see_it_all_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://youtu.be/Dp8kmqwSOxE?si=4BFC2CogZj8zGsOl
 ---
-
 Official music video for Lance Skiiiwalker's "See It All"
 
 [EP Tales From The Telescope Chapter 1: Rebirth ](https://smarturl.it/TFTTCH1)

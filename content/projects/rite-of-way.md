@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/rite_of_way/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/rite-of-way.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/rite-of-way_sprite_sheet.jpg
+  video_width: 1080
+  video_height: 608
 ---
-
 #### Written and directed by:
 - Riley Helm
 

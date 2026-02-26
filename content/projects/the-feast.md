@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/The-Feast_Updated/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/the-feast.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/the_feast___full_movie_sprite_sheet.jpg
+  video_width: 1080
+  video_height: 608
 ---
-
 After munching on on Breakfast, Lunch, and Dinner, the biggest treat of the Young & Hungry series is THE FEAST. Rapid and raw, all killer no filler- The Feast is piping hot and ready to be served. Sink in your teeth and enjoy some youthful Midwest street snowboarding.
 
 Featuring Brandon Kirkland, Alex Kirkland, Eli Lamm, Zak Peterson, Robbie Roethler, Walker Murphy, Billy Bjork, Evan Severson, Nick Sorenson, Nick Belbas, Matt Stanek, Victor Smith, Sam Stillman, George McDowall, and Trent Lodge.

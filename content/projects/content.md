@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/content_/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/content.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/content_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://www.youtube.com/watch?v=Nr6GHe5vTIk
 ---
-
 #### Featured in:
 - [The Inertia](https://www.theinertia.com/mountain/this-short-film-will-remind-you-that-snowboarding-and-the-internet-grew-up-together/)
 - [Snowboard Magazine](https://snowboardmag.com/videos/watch-content-an-ode-to-sno)

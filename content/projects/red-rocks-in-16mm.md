@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/red_rocks_in_16mm/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/red-rocks-in-16mm.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/red-rocks_sprite_sheet.jpg
+  video_width: 1080
+  video_height: 810
 ---
-
 Climbing in Red Rock Canyon State Park 
 
 Camera: Krasnogorsk-3 (K3) Super 16mm   

@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/sayulita_salvage/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/sayulita-salvage.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/sayulita-salvage_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://www.youtube.com/watch?v=UgZjVl4oLrs
 ---
-
 One week after returning from Sayulita, I got a call from the film lab. Bad news:
 
 The film was destroyed. Distorted beyond recognition, probably due to a mistake in loading the film. According to the lab it was unusable—not even worth getting the rolls scanned.

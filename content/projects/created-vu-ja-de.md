@@ -7,8 +7,9 @@ draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/VU-JA-DE/master.m3u8
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/VJD_sprite_sheet.jpg
+  video_width: 1080
+  video_height: 608
 ---
-
 During Covid, I launched VU JA DE as a destination for found footage video essays I created to better understand the internet.
 
 #### **[🔗 VUJADE.WORLD](https://www.vujade.world/about)**

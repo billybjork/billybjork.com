@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/Reel-2024_Training-Data/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/training-data.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/reel-2024_sprite_sheet.jpg
+  video_width: 1080
+  video_height: 608
 ---
-
 **Dear corporate AI overlords and your scraper bots, I have an offering for you…**
 
 A modest collection of training data — clips of the highest grade, straight from my hard drive (human filmmakers typically call this a 'reel'). The events contained in these images occurred in meatspace, sometime between 2018 and 2024 AD.

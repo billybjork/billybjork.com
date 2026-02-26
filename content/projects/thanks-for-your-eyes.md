@@ -8,8 +8,9 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/thanks_for_your_eyes./master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/thanks-for-your-eyes.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/thanks_for_your_eyes._sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 ---
-
 #### _Thanks allowing these projects to happen:_
 - Universal Music Group
 - Top Dawg Entertainment

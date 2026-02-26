@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/showdown_feat._big_sky/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/showdown-big-sky.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/showdown_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://www.youtube.com/watch?v=E_v08am8qjw
 ---
-
 Three days in Montana, brought to you by the great people at Showdown Montana.
 
 #### Video by:

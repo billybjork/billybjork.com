@@ -8,9 +8,10 @@ video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/lance_skiiiwalker_-_beantown/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/beantown.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/lance_skiiiwalker_-_beantown_sprite_sheet.jpg
+  video_width: 1920
+  video_height: 1080
 youtube: https://www.youtube.com/watch?v=4h0MZGVVXcM
 ---
-
 Official music video for Lance Skiiiwalker's "[Beantown](https://ffm.to/beantown)"
 
 #### Created by:
