@@ -4,6 +4,14 @@
  */
 
 import { showNotification, fetchJSON, withShowDrafts, lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import { destroyHlsInstance as destroyVideoHlsInstance } from '../core/hls';
+import { formatMinutesSeconds } from '../core/text';
+import {
+  renderPreviewStatus as renderProjectSettingsPreviewStatus,
+  switchPreviewToHls as switchProjectSettingsPreviewToHls,
+} from './project-settings-video-preview';
+import { buildProjectSettingsMarkup, buildProjectVideoViewMarkup } from './project-settings-templates';
+import { renderProjectSettingsTimelineFrames } from './project-settings-timeline';
 
 const MIN_SPRITE_DURATION = 1;
 const MAX_SPRITE_DURATION = 6;
@@ -73,12 +81,14 @@ interface ProjectSettingsState {
   _hlsComplete: boolean;
   _hlsPollTimer: ReturnType<typeof setInterval> | null;
   _thumbnailPollTimer: ReturnType<typeof setTimeout> | null;
-  _hlsScriptPromise: Promise<void> | null;
   _hlsPreviewUrl: string | null;
   _blobPreviewFailed: boolean;
   _previewCodecErrorShown: boolean;
   _hlsPreviewErrorShown: boolean;
   _renderedThumbCount: number;
+  _thumbPollErrorLogged: boolean;
+  _hlsPollErrorLogged: boolean;
+  _processingPollErrorLogged: boolean;
 }
 
 const ProjectSettings: ProjectSettingsState & {
@@ -94,7 +104,6 @@ const ProjectSettings: ProjectSettingsState & {
   extractExistingVideoThumbnails(content: Element): Promise<void>;
   pollRemainingThumbnails(): void;
   pollHlsProgress(progressFill: HTMLElement, progressText: HTMLElement, progressDiv: HTMLElement): void;
-  loadHlsScript(): Promise<void>;
   switchPreviewToHls(hlsUrl: string): Promise<void>;
   updatePreviewStatus(message?: string, tone?: string): void;
   renderServerThumbnails(framesB64: string[]): void;
@@ -108,9 +117,6 @@ const ProjectSettings: ProjectSettingsState & {
   processVideo(): Promise<void>;
   handleProcessingError(message: string, processBtn: HTMLButtonElement | null, progressDiv: HTMLElement | null): void;
   cancelUpload(): void;
-  formatTime(seconds: number): string;
-  escAttr(str: string): string;
-  escHtml(str: string): string;
   saveSettings(): Promise<void>;
   saveVideoData(videoData: VideoData): Promise<void>;
   deleteProject(): Promise<void>;
@@ -150,12 +156,14 @@ const ProjectSettings: ProjectSettingsState & {
   _hlsComplete: false,
   _hlsPollTimer: null,
   _thumbnailPollTimer: null,
-  _hlsScriptPromise: null,
   _hlsPreviewUrl: null,
   _blobPreviewFailed: false,
   _previewCodecErrorShown: false,
   _hlsPreviewErrorShown: false,
   _renderedThumbCount: 0,
+  _thumbPollErrorLogged: false,
+  _hlsPollErrorLogged: false,
+  _processingPollErrorLogged: false,
 
   /**
    * Show settings modal for a project
@@ -244,71 +252,7 @@ const ProjectSettings: ProjectSettingsState & {
     // Remove video class
     content.classList.remove('edit-settings-content--video');
 
-    content.innerHTML = `
-      <div class="edit-settings-header">
-        <h2>Project Settings</h2>
-        <button class="edit-settings-close">&times;</button>
-      </div>
-      <form class="edit-settings-form" id="settings-form">
-        <div class="edit-form-group">
-          <label for="settings-name">Project Name</label>
-          <input type="text" id="settings-name" name="name" value="${this.escAttr(data.name || '')}" required>
-        </div>
-        <div class="edit-form-group">
-          <label for="settings-slug">URL Slug</label>
-          <input type="text" id="settings-slug" name="slug" value="${this.escAttr(data.slug || '')}" required pattern="[a-z0-9\\-]+">
-        </div>
-        <div class="edit-form-group">
-          <label for="settings-date">Date</label>
-          <input type="date" id="settings-date" name="date" value="${data.date || ''}" required>
-        </div>
-        <div class="edit-form-group">
-          <label for="settings-youtube">YouTube Link</label>
-          <input type="url" id="settings-youtube" name="youtube" value="${this.escAttr(data.youtube || '')}" placeholder="https://youtube.com/watch?v=...">
-        </div>
-        <div class="edit-form-row">
-          <div class="edit-form-group edit-form-checkbox">
-            <label>
-              <input type="checkbox" id="settings-draft" name="draft" ${data.draft ? 'checked' : ''}>
-              Draft
-            </label>
-          </div>
-          <div class="edit-form-group edit-form-checkbox">
-            <label>
-              <input type="checkbox" id="settings-pinned" name="pinned" ${data.pinned ? 'checked' : ''}>
-              Pinned
-            </label>
-          </div>
-        </div>
-
-        <div class="edit-form-section">
-          <h3>Hero Video</h3>
-          <div class="edit-form-group">
-            <label>Current Video</label>
-            ${
-              data.video?.hls
-                ? `<div class="edit-video-info">
-                    <span>HLS: ${data.video.hls.split('/').pop()}</span>
-                    <div class="edit-video-actions">
-                      <button type="button" class="edit-btn-small" id="update-hero-sprite">Update Sprite</button>
-                      <button type="button" class="edit-btn-small" id="upload-hero-video">Replace</button>
-                    </div>
-                   </div>`
-                : `<button type="button" class="edit-btn edit-btn-secondary" id="upload-hero-video">Upload Hero Video</button>`
-            }
-            <input type="file" id="hero-video-input" accept="video/*" style="display: none;">
-          </div>
-        </div>
-
-        <div class="edit-settings-actions">
-          <button type="button" class="edit-btn edit-btn-danger" id="delete-project">Delete Project</button>
-          <div class="edit-settings-actions-right">
-            <button type="button" class="edit-btn edit-btn-secondary" id="settings-cancel">Cancel</button>
-            <button type="submit" class="edit-btn edit-btn-primary">Save Settings</button>
-          </div>
-        </div>
-      </form>
-    `;
+    content.innerHTML = buildProjectSettingsMarkup(data);
 
     this.setupSettingsListeners();
   },
@@ -398,6 +342,9 @@ const ProjectSettings: ProjectSettingsState & {
     this._previewCodecErrorShown = false;
     this._hlsPreviewErrorShown = false;
     this._renderedThumbCount = 0;
+    this._thumbPollErrorLogged = false;
+    this._hlsPollErrorLogged = false;
+    this._processingPollErrorLogged = false;
 
     if (!this.modal) return;
     const content = this.modal.querySelector('.edit-settings-content');
@@ -405,55 +352,11 @@ const ProjectSettings: ProjectSettingsState & {
 
     content.classList.add('edit-settings-content--video');
     const processButtonText = this.getProcessButtonText();
-    const modalTitle = isUploadFlow ? 'Process Hero Video' : 'Update Hero Sprite';
-    const fileInfoText = isUploadFlow && file
-      ? `${this.escHtml(file.name)} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`
-      : 'Using current hero HLS stream';
-    const initialProgressText = isUploadFlow ? 'Uploading...' : 'Loading current video...';
-
-    content.innerHTML = `
-      <div class="edit-settings-header">
-        <h2>${modalTitle}</h2>
-        <button class="edit-settings-close">&times;</button>
-      </div>
-      <div class="edit-hero-video-preview">
-        <video class="edit-hero-video-player" controls playsinline></video>
-      </div>
-      <div class="edit-hero-file-info">${fileInfoText}</div>
-      <div class="edit-hero-preview-status" hidden></div>
-      <div class="edit-hero-timeline">
-        <div class="edit-hero-timeline-track">
-          <canvas class="edit-hero-timeline-thumbs"></canvas>
-          <div class="edit-hero-timeline-dim-left"></div>
-          <div class="edit-hero-timeline-dim-right"></div>
-          <div class="edit-hero-sprite-range">
-            <div class="edit-hero-sprite-handle edit-hero-sprite-handle--start" data-handle="start">
-              <div class="edit-hero-sprite-handle-grip"></div>
-            </div>
-            <div class="edit-hero-sprite-handle edit-hero-sprite-handle--end" data-handle="end">
-              <div class="edit-hero-sprite-handle-grip"></div>
-            </div>
-          </div>
-          <div class="edit-hero-playhead"></div>
-        </div>
-      </div>
-      <div class="edit-hero-timeline-loading" hidden>Refining timeline preview...</div>
-      <div class="edit-hero-time-display">
-        <span class="edit-hero-current-time">0:00</span>
-        <span class="edit-hero-sprite-info">Sprite: 0:00 - 0:03 (3.0s)</span>
-        <span class="edit-hero-total-time">0:00</span>
-      </div>
-      <div class="edit-hero-progress" style="display: none;">
-        <div class="edit-hero-progress-bar">
-          <div class="edit-hero-progress-fill"></div>
-        </div>
-        <div class="edit-hero-progress-text">${initialProgressText}</div>
-      </div>
-      <div class="edit-hero-actions">
-        <button type="button" class="edit-btn edit-btn-secondary" id="hero-video-cancel">Cancel</button>
-        <button type="button" class="edit-btn edit-btn-primary" id="hero-video-process" disabled>${processButtonText}</button>
-      </div>
-    `;
+    content.innerHTML = buildProjectVideoViewMarkup({
+      isUploadFlow,
+      file,
+      processButtonText,
+    });
 
     // Get reference to video element
     this.videoEl = content.querySelector('.edit-hero-video-player');
@@ -537,7 +440,7 @@ const ProjectSettings: ProjectSettingsState & {
 
             // Update UI with duration
             const totalTimeEl = content.querySelector('.edit-hero-total-time');
-            if (totalTimeEl) totalTimeEl.textContent = this.formatTime(this.videoDuration);
+            if (totalTimeEl) totalTimeEl.textContent = formatMinutesSeconds(this.videoDuration);
             this.updateSpriteRange();
 
             // Render first frame immediately on timeline
@@ -685,7 +588,7 @@ const ProjectSettings: ProjectSettingsState & {
       this._hlsSessionId = null;
 
       const totalTimeEl = content.querySelector('.edit-hero-total-time');
-      if (totalTimeEl) totalTimeEl.textContent = this.formatTime(this.videoDuration);
+      if (totalTimeEl) totalTimeEl.textContent = formatMinutesSeconds(this.videoDuration);
       this.updateSpriteRange();
 
       this.renderServerThumbnails(result.frames || []);
@@ -730,6 +633,7 @@ const ProjectSettings: ProjectSettingsState & {
         if (!res.ok) return;
 
         const data = await res.json();
+        this._thumbPollErrorLogged = false;
         const timelineLoading = this.modal?.querySelector('.edit-hero-timeline-loading') as HTMLElement | null;
         // Re-render with all available frames
         if (data.frames && data.frames.length > this._renderedThumbCount) {
@@ -746,8 +650,11 @@ const ProjectSettings: ProjectSettingsState & {
         } else if (timelineLoading) {
           timelineLoading.hidden = true;
         }
-      } catch {
-        // Polling error, keep trying
+      } catch (error) {
+        if (!this._thumbPollErrorLogged) {
+          this._thumbPollErrorLogged = true;
+          console.warn('Timeline thumbnail polling failed; retrying.', error);
+        }
         this._thumbnailPollTimer = setTimeout(poll, 1000);
       }
     };
@@ -775,6 +682,7 @@ const ProjectSettings: ProjectSettingsState & {
         if (!res.ok) return;
 
         const data = await res.json();
+        this._hlsPollErrorLogged = false;
 
         if (data.status === 'complete') {
           if (this._hlsPollTimer) {
@@ -818,293 +726,50 @@ const ProjectSettings: ProjectSettingsState & {
           progressFill.style.width = `${barProgress}%`;
           progressText.textContent = data.stage || `Encoding HLS... ${Math.round(hlsProgress)}%`;
         }
-      } catch {
-        // Polling error, keep trying
+      } catch (error) {
+        if (!this._hlsPollErrorLogged) {
+          this._hlsPollErrorLogged = true;
+          console.warn('HLS progress polling failed; retrying.', error);
+        }
       }
     }, 1000);
-  },
-
-  /**
-   * Lazy-load HLS.js for editor preview playback.
-   */
-  loadHlsScript(): Promise<void> {
-    if (window.Hls) return Promise.resolve();
-    if (this._hlsScriptPromise) return this._hlsScriptPromise;
-
-    const hlsJsSrc = document.body.dataset.hlsJsSrc || 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
-    this._hlsScriptPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = hlsJsSrc;
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load HLS.js'));
-      document.head.appendChild(script);
-    });
-
-    return this._hlsScriptPromise;
   },
 
   /**
    * Switch preview playback from local blob source to encoded HLS stream.
    */
   async switchPreviewToHls(hlsUrl: string): Promise<void> {
-    if (!hlsUrl || !this.videoEl || this.currentView !== 'video') return;
-    if (this._hlsPreviewUrl === hlsUrl) return;
-
-    const video = this.videoEl;
-    const resumeTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-    const shouldResumePlayback = !video.paused || this._spriteLooping;
-    const canPlayNative = !!video.canPlayType('application/vnd.apple.mpegurl');
-
-    const restorePlaybackState = (): void => {
-      if (resumeTime > 0) {
-        try {
-          video.currentTime = resumeTime;
-        } catch {
-          // Ignore
-        }
-      }
-      if (shouldResumePlayback) {
-        video.play().catch(() => {});
-      }
-    };
-
-    const destroyHlsInstance = (): void => {
-      if (video.hlsInstance) {
-        video.hlsInstance.destroy();
-        video.hlsInstance = null;
-      }
-    };
-
-    const attachWithHlsJs = (): Promise<void> =>
-      new Promise((resolve, reject) => {
-        if (!window.Hls || !window.Hls.isSupported()) {
-          reject(new Error('HLS.js not supported'));
-          return;
-        }
-
-        destroyHlsInstance();
-        const hls = new window.Hls({
-          abrEwmaDefaultEstimate: 5000000,
-          capLevelToPlayerSize: true,
-        });
-        video.hlsInstance = hls;
-
-        let settled = false;
-        const finish = (ok: boolean, error?: Error): void => {
-          if (settled) return;
-          settled = true;
-          if (ok) {
-            restorePlaybackState();
-            resolve();
-          } else {
-            destroyHlsInstance();
-            reject(error || new Error('HLS.js failed to initialize'));
-          }
-        };
-
-        hls.on(window.Hls.Events.MANIFEST_PARSED, () => finish(true));
-        hls.on(window.Hls.Events.ERROR, (_: string, data: unknown) => {
-          const errorData = data as { fatal?: boolean; details?: string } | null;
-          if (errorData && errorData.fatal) {
-            finish(false, new Error(errorData.details || 'HLS.js fatal error'));
-          }
-        });
-
-        hls.loadSource(hlsUrl);
-        hls.attachMedia(video);
-      });
-
-    const attachNatively = (): Promise<void> =>
-      new Promise((resolve, reject) => {
-        if (!canPlayNative) {
-          reject(new Error('Native HLS not supported'));
-          return;
-        }
-
-        const onLoaded = (): void => {
-          cleanup();
-          restorePlaybackState();
-          resolve();
-        };
-        const onError = (): void => {
-          cleanup();
-          reject(new Error('Native HLS failed to load'));
-        };
-        const cleanup = (): void => {
-          video.removeEventListener('loadedmetadata', onLoaded);
-          video.removeEventListener('error', onError);
-        };
-
-        destroyHlsInstance();
-        video.addEventListener('loadedmetadata', onLoaded);
-        video.addEventListener('error', onError);
-        video.src = hlsUrl;
-        video.load();
-      });
-
-    let switched = false;
-    try {
-      await attachWithHlsJs();
-      switched = true;
-    } catch {
-      try {
-        await this.loadHlsScript();
-        await attachWithHlsJs();
-        switched = true;
-      } catch {
-        if (canPlayNative) {
-          try {
-            await attachNatively();
-            switched = true;
-          } catch {
-            // Keep existing preview source on failure.
-          }
-        }
-      }
-    }
-
-    if (!switched) {
-      video.dataset.previewSource = 'blob';
-      if (this._blobPreviewFailed && !this._hlsPreviewErrorShown) {
-        this._hlsPreviewErrorShown = true;
-        this.updatePreviewStatus('Preview unavailable: HLS preview could not be initialized.', 'error');
-        showNotification('HLS preview could not be initialized. Video will still process, but live preview is unavailable.', 'error', 5000);
-      } else {
-        this.updatePreviewStatus();
-      }
-      return;
-    }
-
-    this._hlsPreviewUrl = hlsUrl;
-    video.classList.add('hls-video-preview');
-    video.dataset.previewSource = 'hls';
-    this.updatePreviewStatus();
-    if (this.objectUrl) {
-      URL.revokeObjectURL(this.objectUrl);
-      this.objectUrl = null;
-    }
+    const nextState = await switchProjectSettingsPreviewToHls({
+      hlsUrl,
+      videoEl: this.videoEl,
+      currentView: this.currentView,
+      currentPreviewUrl: this._hlsPreviewUrl,
+      spriteLooping: this._spriteLooping,
+      blobPreviewFailed: this._blobPreviewFailed,
+      hlsPreviewErrorShown: this._hlsPreviewErrorShown,
+      objectUrl: this.objectUrl,
+      setStatus: (message, tone) => this.updatePreviewStatus(message, tone),
+    });
+    this._hlsPreviewUrl = nextState.hlsPreviewUrl;
+    this._hlsPreviewErrorShown = nextState.hlsPreviewErrorShown;
+    this.objectUrl = nextState.objectUrl;
   },
 
   /**
    * Update preview source status text in the video modal.
    */
   updatePreviewStatus(message = '', tone = 'info'): void {
-    if (!this.modal || this.currentView !== 'video') return;
-    const el = this.modal.querySelector('.edit-hero-preview-status') as HTMLElement | null;
-    if (!el) return;
-    if (!message) {
-      el.hidden = true;
-      el.textContent = '';
-      el.classList.remove('is-info', 'is-warning', 'is-error', 'is-success');
-      return;
-    }
-    el.hidden = false;
-    el.textContent = message;
-    el.classList.remove('is-info', 'is-warning', 'is-error', 'is-success');
-    el.classList.add(`is-${tone}`);
+    renderProjectSettingsPreviewStatus(this.modal, this.currentView, message, tone);
   },
 
   /**
    * Render server-extracted thumbnail frames on the timeline canvas.
    */
   renderServerThumbnails(framesB64: string[]): void {
-    if (!this.modal) return;
-    const canvas = this.modal.querySelector('.edit-hero-timeline-thumbs') as HTMLCanvasElement | null;
-    if (!canvas || !framesB64 || framesB64.length === 0) return;
-    this._renderedThumbCount = framesB64.length;
-
-    const track = canvas.parentElement;
-    if (!track) return;
-    const trackWidth = track.clientWidth;
-    const trackHeight = track.clientHeight;
-
-    // Size canvas to match track at device pixel ratio
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = trackWidth * dpr;
-    canvas.height = trackHeight * dpr;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, trackWidth, trackHeight);
-
-    const numThumbs = framesB64.length;
-    const loadedImages: Array<HTMLImageElement | null> = new Array(numThumbs).fill(null);
-    let completed = 0;
-
-    const drawSlice = (img: HTMLImageElement, index: number): void => {
-      // Integer slice boundaries avoid hairline seams.
-      const x0 = Math.floor((index * trackWidth) / numThumbs);
-      const x1 = index === numThumbs - 1
-        ? trackWidth
-        : Math.floor(((index + 1) * trackWidth) / numThumbs);
-      const drawWidth = Math.max(1, x1 - x0);
-
-      // "Cover" crop so each slice fills destination without squish.
-      const srcAspect = img.width / img.height;
-      const dstAspect = drawWidth / trackHeight;
-      let sx = 0;
-      let sy = 0;
-      let sw = img.width;
-      let sh = img.height;
-
-      if (srcAspect > dstAspect) {
-        sw = Math.max(1, Math.round(img.height * dstAspect));
-        sx = Math.max(0, Math.floor((img.width - sw) / 2));
-      } else if (srcAspect < dstAspect) {
-        sh = Math.max(1, Math.round(img.width / dstAspect));
-        sy = Math.max(0, Math.floor((img.height - sh) / 2));
-      }
-
-      // Slight overlap hides anti-aliased seam artifacts between slices.
-      const dstX = Math.max(0, x0 - (index > 0 ? 1 : 0));
-      const dstW = Math.min(trackWidth - dstX, drawWidth + (index > 0 ? 1 : 0));
-      ctx.drawImage(img, sx, sy, sw, sh, dstX, 0, dstW, trackHeight);
-    };
-
-    const finishOne = (): void => {
-      completed++;
-      if (completed !== numThumbs) return;
-
-      ctx.clearRect(0, 0, trackWidth, trackHeight);
-
-      // Fill any failed slots with nearest valid neighbor to avoid visible holes.
-      let lastValid: HTMLImageElement | null = null;
-      for (let i = 0; i < numThumbs; i++) {
-        const current = loadedImages[i] ?? null;
-        if (current) {
-          lastValid = current;
-        } else if (lastValid) {
-          loadedImages[i] = lastValid;
-        }
-      }
-      let nextValid: HTMLImageElement | null = null;
-      for (let i = numThumbs - 1; i >= 0; i--) {
-        const current = loadedImages[i] ?? null;
-        if (current) {
-          nextValid = current;
-        } else if (nextValid) {
-          loadedImages[i] = nextValid;
-        }
-      }
-
-      for (let i = 0; i < numThumbs; i++) {
-        const img = loadedImages[i];
-        if (img) drawSlice(img, i);
-      }
-
-      canvas.classList.add('loaded');
-    };
-
-    framesB64.forEach((b64Data, i) => {
-      const img = new Image();
-      img.onload = (): void => {
-        loadedImages[i] = img;
-        finishOne();
-      };
-      img.onerror = finishOne;
-      img.src = 'data:image/jpeg;base64,' + b64Data;
-    });
+    const rendered = renderProjectSettingsTimelineFrames(this.modal, framesB64);
+    if (rendered > 0) {
+      this._renderedThumbCount = rendered;
+    }
   },
 
   /**
@@ -1118,7 +783,7 @@ const ProjectSettings: ProjectSettingsState & {
       if (!this.videoEl) return;
       this.updatePlayhead();
       const currentTimeEl = content.querySelector('.edit-hero-current-time');
-      if (currentTimeEl) currentTimeEl.textContent = this.formatTime(this.videoEl.currentTime);
+      if (currentTimeEl) currentTimeEl.textContent = formatMinutesSeconds(this.videoEl.currentTime);
 
       // Sprite loop: wrap back to start when reaching end of sprite range
       if (this._spriteLooping && this.videoEl.currentTime >= this.spriteStart + this.spriteDuration) {
@@ -1162,7 +827,25 @@ const ProjectSettings: ProjectSettingsState & {
 
     // Sprite range drag (middle of range)
     const spriteRange = this._cachedRange;
+    let finishDrag = (): void => {};
     if (spriteRange) {
+      finishDrag = (): void => {
+        if (!this._isDraggingSprite) return;
+        if (this._rafId) {
+          cancelAnimationFrame(this._rafId);
+          this._rafId = null;
+        }
+        this._isDraggingSprite = false;
+        this._dragTarget = null;
+        this._cachedRange?.classList.remove('is-dragging');
+        // Resume looping playback if it was active before drag
+        if (this._wasLoopingBeforeDrag && this.videoEl) {
+          this.videoEl.currentTime = this.spriteStart;
+          this.videoEl.play();
+        }
+        this._wasLoopingBeforeDrag = false;
+      };
+
       const startDrag = (clientX: number, target: 'range' | 'start' | 'end'): void => {
         this._isDraggingSprite = true;
         this._dragTarget = target;
@@ -1256,20 +939,7 @@ const ProjectSettings: ProjectSettingsState & {
     document.addEventListener('mousemove', this._mouseMoveHandler);
 
     this._mouseUpHandler = (): void => {
-      if (!this._isDraggingSprite) return;
-      if (this._rafId) {
-        cancelAnimationFrame(this._rafId);
-        this._rafId = null;
-      }
-      this._isDraggingSprite = false;
-      this._dragTarget = null;
-      this._cachedRange?.classList.remove('is-dragging');
-      // Resume looping playback if it was active before drag
-      if (this._wasLoopingBeforeDrag && this.videoEl) {
-        this.videoEl.currentTime = this.spriteStart;
-        this.videoEl.play();
-      }
-      this._wasLoopingBeforeDrag = false;
+      finishDrag();
     };
     document.addEventListener('mouseup', this._mouseUpHandler);
 
@@ -1283,20 +953,7 @@ const ProjectSettings: ProjectSettingsState & {
     document.addEventListener('touchmove', this._touchMoveHandler, { passive: true });
 
     this._touchEndHandler = (): void => {
-      if (!this._isDraggingSprite) return;
-      if (this._rafId) {
-        cancelAnimationFrame(this._rafId);
-        this._rafId = null;
-      }
-      this._isDraggingSprite = false;
-      this._dragTarget = null;
-      this._cachedRange?.classList.remove('is-dragging');
-      // Resume looping playback if it was active before drag
-      if (this._wasLoopingBeforeDrag && this.videoEl) {
-        this.videoEl.currentTime = this.spriteStart;
-        this.videoEl.play();
-      }
-      this._wasLoopingBeforeDrag = false;
+      finishDrag();
     };
     document.addEventListener('touchend', this._touchEndHandler);
 
@@ -1365,9 +1022,8 @@ const ProjectSettings: ProjectSettingsState & {
    * Clean up video-related state and listeners
    */
   cleanupVideoState(): void {
-    if (this.videoEl && this.videoEl.hlsInstance) {
-      this.videoEl.hlsInstance.destroy();
-      this.videoEl.hlsInstance = null;
+    if (this.videoEl) {
+      destroyVideoHlsInstance(this.videoEl);
     }
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl);
@@ -1425,6 +1081,9 @@ const ProjectSettings: ProjectSettingsState & {
     this._previewCodecErrorShown = false;
     this._hlsPreviewErrorShown = false;
     this._renderedThumbCount = 0;
+    this._thumbPollErrorLogged = false;
+    this._hlsPollErrorLogged = false;
+    this._processingPollErrorLogged = false;
     this._dragTarget = null;
     this._dragOffset = 0;
     // Clean up RAF and cached elements
@@ -1532,7 +1191,7 @@ const ProjectSettings: ProjectSettingsState & {
 
     if (info) {
       const end = this.spriteStart + this.spriteDuration;
-      info.textContent = `Sprite: ${this.formatTime(this.spriteStart)} - ${this.formatTime(end)} (${this.spriteDuration.toFixed(1)}s)`;
+      info.textContent = `Sprite: ${formatMinutesSeconds(this.spriteStart)} - ${formatMinutesSeconds(end)} (${this.spriteDuration.toFixed(1)}s)`;
     }
   },
 
@@ -1597,6 +1256,7 @@ const ProjectSettings: ProjectSettingsState & {
           if (!res.ok) return;
 
           const data = await res.json();
+          this._processingPollErrorLogged = false;
 
           if (data.status === 'complete') {
             if (processingPollTimer) {
@@ -1625,8 +1285,11 @@ const ProjectSettings: ProjectSettingsState & {
             const stageText = data.stage || `Encoding video... ${Math.round(hlsProgress)}%`;
             progressText.textContent = stageText;
           }
-        } catch {
-          // Polling error, keep trying
+        } catch (error) {
+          if (!this._processingPollErrorLogged) {
+            this._processingPollErrorLogged = true;
+            console.warn('Processing HLS progress polling failed; retrying.', error);
+          }
         }
       }, 1000);
     }
@@ -1736,29 +1399,6 @@ const ProjectSettings: ProjectSettingsState & {
       this.activeXhr = null;
     }
     this.showSettingsView();
-  },
-
-  /**
-   * Format time as M:SS
-   */
-  formatTime(seconds: number): string {
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  },
-
-  /**
-   * Escape HTML attribute value
-   */
-  escAttr(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  },
-
-  /**
-   * Escape HTML text content
-   */
-  escHtml(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   },
 
   /**

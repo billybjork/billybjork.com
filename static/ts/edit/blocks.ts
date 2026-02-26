@@ -149,14 +149,6 @@ function detectBlockType(block: PartialBlock, trimmed: string): void {
     block.style = decodeHtmlCommentStyle(htmlMatch[1]);
     block.html = (htmlMatch[2] ?? '').trim();
     block.align = parseAlignmentFromStyle(block.style);
-    if (block.align === 'left') {
-      const legacyAlignMatch = block.html.match(
-        /^<div\b[^>]*\bstyle\s*=\s*["'][^"']*\btext-align\s*:\s*(center|right)\b[^"']*["'][^>]*>[\s\S]*<\/div>$/i
-      );
-      if (legacyAlignMatch) {
-        block.align = legacyAlignMatch[1] as Alignment;
-      }
-    }
     return;
   }
 
@@ -237,19 +229,6 @@ function detectBlockType(block: PartialBlock, trimmed: string): void {
     if (alignMatch) {
       block.align = alignMatch[1] as Alignment;
       block.content = alignMatch[2]?.trim() ?? '';
-    } else {
-      block.align = 'left';
-    }
-    return;
-  }
-
-  // Legacy: text block with div alignment wrapper (backward compatibility)
-  if (trimmed.startsWith('<div style="text-align:') || trimmed.startsWith('<div style="text-align :')) {
-    block.type = 'text';
-    const styleMatch = trimmed.match(/<div style="([^"]*)">([\s\S]*?)<\/div>/);
-    if (styleMatch) {
-      block.align = parseTextAlignmentFromStyle(styleMatch[1]);
-      block.content = styleMatch[2]?.trim() ?? '';
     } else {
       block.align = 'left';
     }

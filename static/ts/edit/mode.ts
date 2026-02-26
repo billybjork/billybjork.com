@@ -20,12 +20,28 @@ import {
   fetchJSON,
 } from '../core/utils';
 import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
+import { escapeHtmlAttr } from '../core/text';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
+import {
+  applyBlockUpdates as applyBlockFieldUpdates,
+  createBlockWithProps as createBlockWithPropsFromFactory,
+  updateBlockFieldsInContext as computeUpdatedBlockFieldsInContext,
+  updateBlockInContext as computeUpdatedBlockInContext,
+  updateTopLevelBlock as computeUpdatedTopLevelBlock,
+  type BlockContext,
+} from './block-updates';
+import {
+  addCleanupCandidateUrl,
+  isTrackableAssetUrl,
+  trackPosterCleanupCandidatesFromBlock,
+} from './asset-cleanup';
 import EditSlash from './slash';
 import EditMedia, { type VideoUploadProgressUpdate, uploadPosterForVideo, capturePosterFromVideo } from './media';
 import EditUndo from './undo';
 import { persistScrollForNavigation } from './scroll-restore';
+import { ScrollAnchorManager } from './scroll-anchors';
 import { slugify, uniqueSlug } from './slugify';
+import { INLINE_MAX_DEPTH, findNextInlineMatch, renderInlineMarkdown, sanitizeUrl } from './inline-markdown';
 
 // ========== ICONS ==========
 
@@ -64,28 +80,6 @@ interface UpdateBlockOptions {
   markDirty?: boolean;
 }
 
-type RowColumnSide = 'left' | 'right';
-
-interface BlockContext {
-  index: number;
-  rowSide?: RowColumnSide;
-}
-
-interface RenderScrollAnchor {
-  blockId: string | null;
-  blockIndex: number;
-  blockTop: number;
-}
-
-interface ContainerScrollAnchor {
-  offsetWithinContainer: number;
-}
-
-interface ModeSwitchBlockAnchor {
-  blockIndex: number;
-  blockTop: number;
-}
-
 type SaveAction =
   | { type: 'edit' }
   | { type: 'save_start' }
@@ -115,12 +109,11 @@ let abortController: AbortController | null = null;
 const AUTO_SAVE_DELAY = 2000;
 const RETRY_DELAY = 5000;
 const SAVED_FADE_DELAY = 3000;
-const SCROLL_RESTORE_PASSES = 3;
-const SCROLL_RESTORE_MEDIA_PASSES = 2;
 
 // Revision tracking for conflict detection
 let currentRevision: string | null = null;
 let cleanupCandidateUrls = new Set<string>();
+let cleanupFlushErrorLogged = false;
 
 // Drag & Drop state
 const dragState: DragState = {
@@ -132,270 +125,7 @@ const dragState: DragState = {
 // Hero thumbnail controls element (injected when edit mode activates for a project with hero video)
 let heroThumbnailControls: HTMLElement | null = null;
 
-let renderScrollRestoreToken = 0;
-let containerScrollRestoreToken = 0;
-let modeSwitchScrollRestoreToken = 0;
-
-function trackCleanupCandidateUrl(url: string | null | undefined): void {
-  const cleanUrl = (url ?? '').trim();
-  if (!cleanUrl) return;
-  cleanupCandidateUrls.add(cleanUrl);
-}
-
-function isTrackableAssetUrl(url: string): boolean {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    return /\.(webp|png|jpe?g|gif|avif)$/i.test(parsed.pathname);
-  } catch {
-    return false;
-  }
-}
-
-function trackPosterCleanupCandidatesFromBlock(block: Block | null | undefined): void {
-  if (!block) return;
-  if (block.type === 'video') {
-    trackCleanupCandidateUrl(block.poster);
-    return;
-  }
-  if (block.type === 'row') {
-    trackPosterCleanupCandidatesFromBlock(block.left);
-    trackPosterCleanupCandidatesFromBlock(block.right);
-  }
-}
-
-function withInstantScroll(action: () => void): void {
-  const html = document.documentElement;
-  const previousInlineScrollBehavior = html.style.scrollBehavior;
-  html.style.scrollBehavior = 'auto';
-
-  action();
-
-  requestAnimationFrame(() => {
-    if (previousInlineScrollBehavior) {
-      html.style.scrollBehavior = previousInlineScrollBehavior;
-    } else {
-      html.style.removeProperty('scroll-behavior');
-    }
-  });
-}
-
-function clampScrollTop(top: number): number {
-  const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-  return Math.max(0, Math.min(top, maxScrollTop));
-}
-
-function captureRenderScrollAnchor(): RenderScrollAnchor | null {
-  if (!container) return null;
-
-  const wrappers = Array.from(container.querySelectorAll<HTMLElement>('.block-wrapper[data-block-id]'));
-  if (wrappers.length === 0) return null;
-
-  const anchor =
-    wrappers.find((wrapper) => wrapper.getBoundingClientRect().bottom >= 0) ??
-    wrappers[wrappers.length - 1] ??
-    null;
-  if (!anchor) return null;
-
-  const blockId = anchor.dataset.blockId ?? null;
-  const parsedIndex = Number.parseInt(anchor.dataset.blockIndex ?? '', 10);
-  const blockIndex = Number.isNaN(parsedIndex) ? 0 : parsedIndex;
-
-  return {
-    blockId,
-    blockIndex,
-    blockTop: anchor.getBoundingClientRect().top,
-  };
-}
-
-function scheduleScrollRestorePasses(
-  token: number,
-  getCurrentToken: () => number,
-  restoreOnce: () => void,
-  passCount: number
-): void {
-  if (passCount <= 0) return;
-
-  let remainingPasses = passCount;
-  const runPass = (): void => {
-    if (token !== getCurrentToken()) return;
-    restoreOnce();
-    remainingPasses -= 1;
-    if (remainingPasses > 0) {
-      requestAnimationFrame(runPass);
-    }
-  };
-
-  requestAnimationFrame(runPass);
-}
-
-function bindMediaShiftReanchors(
-  root: ParentNode,
-  onMediaShift: () => void
-): void {
-  root.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
-    if (img.complete) return;
-    img.addEventListener('load', onMediaShift, { once: true });
-    img.addEventListener('error', onMediaShift, { once: true });
-  });
-
-  root.querySelectorAll<HTMLVideoElement>('video').forEach((video) => {
-    if (video.readyState >= 1) return;
-    video.addEventListener('loadedmetadata', onMediaShift, { once: true });
-    video.addEventListener('error', onMediaShift, { once: true });
-  });
-}
-
-function restoreRenderScrollAnchor(anchor: RenderScrollAnchor | null): void {
-  if (!anchor || !container || blocks.length === 0) return;
-
-  const token = ++renderScrollRestoreToken;
-  const restoreOnce = (): void => {
-    if (!container || blocks.length === 0) return;
-
-    let target: HTMLElement | null = null;
-    if (anchor.blockId) {
-      target = container.querySelector<HTMLElement>(`.block-wrapper[data-block-id="${anchor.blockId}"]`);
-    }
-    if (!target) {
-      const fallbackIndex = Math.max(0, Math.min(anchor.blockIndex, blocks.length - 1));
-      target = container.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${fallbackIndex}"]`);
-    }
-    if (!target) return;
-
-    const delta = target.getBoundingClientRect().top - anchor.blockTop;
-    if (Math.abs(delta) < 1) return;
-
-    withInstantScroll(() => {
-      window.scrollTo({
-        top: clampScrollTop(window.scrollY + delta),
-        left: 0,
-        behavior: 'auto',
-      });
-    });
-  };
-
-  scheduleScrollRestorePasses(
-    token,
-    () => renderScrollRestoreToken,
-    restoreOnce,
-    SCROLL_RESTORE_PASSES
-  );
-
-  bindMediaShiftReanchors(container, () => {
-    scheduleScrollRestorePasses(
-      token,
-      () => renderScrollRestoreToken,
-      restoreOnce,
-      SCROLL_RESTORE_MEDIA_PASSES
-    );
-  });
-}
-
-function captureContainerScrollAnchor(contentContainer: HTMLElement): ContainerScrollAnchor {
-  const contentTop = window.scrollY + contentContainer.getBoundingClientRect().top;
-  return {
-    offsetWithinContainer: window.scrollY - contentTop,
-  };
-}
-
-function captureContentBlockAnchor(contentContainer: HTMLElement): ModeSwitchBlockAnchor | null {
-  const blocks = Array.from(contentContainer.querySelectorAll<HTMLElement>('.content-block'));
-  if (blocks.length === 0) return null;
-
-  const anchor =
-    blocks.find((block) => block.getBoundingClientRect().bottom >= 0) ??
-    blocks[blocks.length - 1] ??
-    null;
-  if (!anchor) return null;
-
-  const blockIndex = blocks.indexOf(anchor);
-  if (blockIndex < 0) return null;
-
-  return {
-    blockIndex,
-    blockTop: anchor.getBoundingClientRect().top,
-  };
-}
-
-function restoreModeSwitchBlockAnchor(
-  anchor: ModeSwitchBlockAnchor | null,
-  stabilityRoot: ParentNode = container ?? document.body
-): void {
-  if (!anchor || !container || blocks.length === 0) return;
-
-  const token = ++modeSwitchScrollRestoreToken;
-  const restoreOnce = (): void => {
-    if (!container || blocks.length === 0) return;
-
-    const clampedIndex = Math.max(0, Math.min(anchor.blockIndex, blocks.length - 1));
-    const target = container.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${clampedIndex}"]`);
-    if (!target) return;
-
-    const delta = target.getBoundingClientRect().top - anchor.blockTop;
-    if (Math.abs(delta) < 1) return;
-
-    withInstantScroll(() => {
-      window.scrollTo({
-        top: clampScrollTop(window.scrollY + delta),
-        left: 0,
-        behavior: 'auto',
-      });
-    });
-  };
-
-  scheduleScrollRestorePasses(
-    token,
-    () => modeSwitchScrollRestoreToken,
-    restoreOnce,
-    SCROLL_RESTORE_PASSES
-  );
-
-  bindMediaShiftReanchors(stabilityRoot, () => {
-    scheduleScrollRestorePasses(
-      token,
-      () => modeSwitchScrollRestoreToken,
-      restoreOnce,
-      SCROLL_RESTORE_MEDIA_PASSES
-    );
-  });
-}
-
-function restoreContainerScrollAnchor(
-  contentContainer: HTMLElement,
-  anchor: ContainerScrollAnchor,
-  stabilityRoot: ParentNode = contentContainer
-): void {
-  const token = ++containerScrollRestoreToken;
-  const restoreOnce = (): void => {
-    const contentTop = window.scrollY + contentContainer.getBoundingClientRect().top;
-    const nextScrollTop = contentTop + anchor.offsetWithinContainer;
-    withInstantScroll(() => {
-      window.scrollTo({
-        top: clampScrollTop(nextScrollTop),
-        left: 0,
-        behavior: 'auto',
-      });
-    });
-  };
-
-  scheduleScrollRestorePasses(
-    token,
-    () => containerScrollRestoreToken,
-    restoreOnce,
-    SCROLL_RESTORE_PASSES
-  );
-
-  bindMediaShiftReanchors(stabilityRoot, () => {
-    scheduleScrollRestorePasses(
-      token,
-      () => containerScrollRestoreToken,
-      restoreOnce,
-      SCROLL_RESTORE_MEDIA_PASSES
-    );
-  });
-}
+const scrollAnchors = new ScrollAnchorManager();
 
 // ========== INITIALIZATION ==========
 
@@ -495,9 +225,9 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Parse markdown into blocks
   const markdown = 'markdown' in data ? data.markdown : '';
   blocks = EditBlocks.parseIntoBlocks(markdown || '');
-  cleanupCandidateUrls = new Set();
-  const initialScrollAnchor = captureContainerScrollAnchor(contentContainer);
-  const initialContentBlockAnchor = captureContentBlockAnchor(contentContainer);
+  cleanupCandidateUrls.clear();
+  const initialScrollAnchor = scrollAnchors.captureContainerScrollAnchor(contentContainer);
+  const initialContentBlockAnchor = scrollAnchors.captureContentBlockAnchor(contentContainer);
 
   // Create editor wrapper
   const editorWrapper = document.createElement('div');
@@ -580,9 +310,18 @@ function setupEditor(data: ProjectData | AboutData): void {
     ? (contentContainer.closest('.project-item') ?? contentContainer)
     : contentContainer;
   if (initialContentBlockAnchor) {
-    restoreModeSwitchBlockAnchor(initialContentBlockAnchor, stabilityRoot);
+    scrollAnchors.restoreModeSwitchBlockAnchor({
+      anchor: initialContentBlockAnchor,
+      container,
+      blockCount: blocks.length,
+      stabilityRoot,
+    });
   } else {
-    restoreContainerScrollAnchor(contentContainer, initialScrollAnchor, stabilityRoot);
+    scrollAnchors.restoreContainerScrollAnchor({
+      contentContainer,
+      anchor: initialScrollAnchor,
+      stabilityRoot,
+    });
   }
 
   // Warn before leaving with unsaved changes
@@ -685,7 +424,8 @@ function showConflictBanner(): void {
         dispatchSaveAction({ type: 'save_error' });
         showNotification('Force save failed', 'error');
       }
-    } catch {
+    } catch (error) {
+      console.error('Force save failed:', error);
       dispatchSaveAction({ type: 'save_error' });
       showNotification('Force save failed', 'error');
     }
@@ -876,14 +616,18 @@ function dispatchSaveAction(action: SaveAction): void {
 
 function applyBlocksUpdate(nextBlocks: Block[], options: UpdateBlockOptions = {}): void {
   const { render = true, markDirty: shouldMarkDirty = true } = options;
-  const renderScrollAnchor = render ? captureRenderScrollAnchor() : null;
+  const renderScrollAnchor = render ? scrollAnchors.captureRenderScrollAnchor(container) : null;
   blocks = nextBlocks;
   if (shouldMarkDirty) {
     markDirty();
   }
   if (render) {
     renderBlocks();
-    restoreRenderScrollAnchor(renderScrollAnchor);
+    scrollAnchors.restoreRenderScrollAnchor({
+      anchor: renderScrollAnchor,
+      container,
+      blockCount: blocks.length,
+    });
   }
 }
 
@@ -892,37 +636,10 @@ function updateTopLevelBlock(
   updater: (block: Block) => Block,
   options: UpdateBlockOptions = {}
 ): boolean {
-  const currentBlock = blocks[index];
-  if (!currentBlock) return false;
-
-  const updatedBlock = updater(currentBlock);
-  if (updatedBlock === currentBlock) return false;
-  const nextBlocks = blocks.slice();
-  nextBlocks[index] = updatedBlock;
-  applyBlocksUpdate(nextBlocks, options);
+  const result = computeUpdatedTopLevelBlock(blocks, index, updater);
+  if (!result.changed) return false;
+  applyBlocksUpdate(result.nextBlocks, options);
   return true;
-}
-
-function applyBlockUpdates(block: Block, updates: Partial<Block>): Block {
-  switch (block.type) {
-    case 'text':
-      return { ...block, ...(updates as Partial<TextBlock>) };
-    case 'image':
-      return { ...block, ...(updates as Partial<ImageBlock>) };
-    case 'video':
-      return { ...block, ...(updates as Partial<VideoBlock>) };
-    case 'code':
-      return { ...block, ...(updates as Partial<CodeBlock>) };
-    case 'html':
-      return { ...block, ...(updates as Partial<HtmlBlock>) };
-    case 'callout':
-      return { ...block, ...(updates as Partial<CalloutBlock>) };
-    case 'row':
-      return { ...block, ...(updates as Partial<RowBlock>) };
-    case 'divider':
-    default:
-      return { ...block };
-  }
 }
 
 function updateBlockInContext(
@@ -930,24 +647,10 @@ function updateBlockInContext(
   updater: (block: Block) => Block,
   options: UpdateBlockOptions = {}
 ): boolean {
-  const rowSide = context.rowSide;
-  if (rowSide) {
-    return updateTopLevelBlock(
-      context.index,
-      (parentBlock) => {
-        if (parentBlock.type !== 'row') return parentBlock;
-        const currentChild = parentBlock[rowSide];
-        const updatedChild = updater(currentChild);
-        if (updatedChild === currentChild) return parentBlock;
-        return rowSide === 'left'
-          ? { ...parentBlock, left: updatedChild }
-          : { ...parentBlock, right: updatedChild };
-      },
-      options,
-    );
-  }
-
-  return updateTopLevelBlock(context.index, updater, options);
+  const result = computeUpdatedBlockInContext(blocks, context, updater);
+  if (!result.changed) return false;
+  applyBlocksUpdate(result.nextBlocks, options);
+  return true;
 }
 
 function updateBlockFieldsInContext(
@@ -955,11 +658,17 @@ function updateBlockFieldsInContext(
   updates: Partial<Block>,
   options: UpdateBlockOptions = {}
 ): void {
-  updateBlockInContext(context, (block) => applyBlockUpdates(block, updates), options);
+  const result = computeUpdatedBlockFieldsInContext(blocks, context, updates);
+  if (!result.changed) return;
+  applyBlocksUpdate(result.nextBlocks, options);
 }
 
 function createBlockWithProps(type: BlockType, props: Partial<Block> = {}): Block {
-  return createBlock(type as never, props as never) as Block;
+  return createBlockWithPropsFromFactory(
+    (nextType, nextProps) => createBlock(nextType as never, nextProps as never) as Block,
+    type,
+    props
+  );
 }
 
 /**
@@ -1804,233 +1513,6 @@ function renderLinePreview(lineText: string, headingSlugState: Set<string>): Lin
   return { node: span, type: 'paragraph' };
 }
 
-/**
- * Render inline markdown into a fragment
- */
-function renderInlineMarkdown(text: string): DocumentFragment {
-  const fragment = document.createDocumentFragment();
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-  let lastIndex = 0;
-  let match;
-
-  while ((match = linkRegex.exec(text)) !== null) {
-    const offset = match.index;
-
-    if (offset > lastIndex) {
-      appendInlineFormatted(fragment, text.slice(lastIndex, offset));
-    }
-
-    const safeUrl = sanitizeUrl(match[2] ?? '');
-    if (safeUrl) {
-      const link = document.createElement('a');
-      link.href = safeUrl;
-      const isInternalLink = safeUrl.startsWith('#')
-        || safeUrl.startsWith('/')
-        || safeUrl.startsWith('./')
-        || safeUrl.startsWith('../');
-      if (!isInternalLink) {
-        link.rel = 'noopener';
-        link.target = '_blank';
-      }
-      appendInlineFormatted(link, match[1] ?? '');
-      fragment.appendChild(link);
-    } else {
-      fragment.appendChild(document.createTextNode(match[0]));
-    }
-
-    lastIndex = offset + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    appendInlineFormatted(fragment, text.slice(lastIndex));
-  }
-
-  return fragment;
-}
-
-/**
- * Append formatted inline content into a container
- */
-function appendInlineFormatted(container: Node, text: string): void {
-  container.appendChild(parseInlineTokens(text));
-}
-
-/**
- * Parse inline markdown tokens
- */
-function parseInlineTokens(text: string): DocumentFragment {
-  return parseInlineTokensRecursive(text, 0);
-}
-
-interface InlineMatch {
-  index: number;
-  length: number;
-  tagName: 'strong' | 'em' | 'u' | 'code' | 's';
-  content: string;
-}
-
-const INLINE_MAX_DEPTH = 8;
-
-/**
- * Recursive inline parser for a safe subset of markdown/html inline styles.
- */
-function parseInlineTokensRecursive(text: string, depth: number): DocumentFragment {
-  const fragment = document.createDocumentFragment();
-  if (!text) return fragment;
-  if (depth >= INLINE_MAX_DEPTH) {
-    fragment.appendChild(document.createTextNode(text));
-    return fragment;
-  }
-
-  let cursor = 0;
-  while (cursor < text.length) {
-    const remaining = text.slice(cursor);
-    const match = findNextInlineMatch(remaining);
-    if (!match) {
-      fragment.appendChild(document.createTextNode(remaining));
-      break;
-    }
-
-    if (match.index > 0) {
-      fragment.appendChild(document.createTextNode(remaining.slice(0, match.index)));
-    }
-
-    const el = document.createElement(match.tagName);
-    if (match.tagName === 'code') {
-      el.textContent = match.content;
-    } else {
-      el.appendChild(parseInlineTokensRecursive(match.content, depth + 1));
-    }
-    fragment.appendChild(el);
-
-    cursor += match.index + match.length;
-  }
-
-  return fragment;
-}
-
-function findNextInlineMatch(text: string): InlineMatch | null {
-  const matchers: Array<(input: string) => InlineMatch | null> = [
-    matchInlineCodeBackticks,
-    matchHtmlUnderline,
-    matchHtmlStrong,
-    matchHtmlEmphasis,
-    matchHtmlCode,
-    matchMarkdownStrongAsterisk,
-    matchMarkdownStrongUnderscore,
-    matchMarkdownStrikethrough,
-    matchMarkdownEmphasisAsterisk,
-    matchMarkdownEmphasisUnderscore,
-  ];
-
-  let best: InlineMatch | null = null;
-
-  matchers.forEach((matcher) => {
-    const current = matcher(text);
-    if (!current) return;
-
-    if (!best || current.index < best.index) {
-      best = current;
-    }
-  });
-
-  return best;
-}
-
-function toInlineMatch(match: RegExpMatchArray | null, tagName: InlineMatch['tagName'], contentIndex = 1): InlineMatch | null {
-  if (!match || typeof match.index !== 'number') return null;
-  const content = match[contentIndex];
-  if (!content) return null;
-  return {
-    index: match.index,
-    length: match[0].length,
-    tagName,
-    content,
-  };
-}
-
-function matchInlineCodeBackticks(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/`([^`\n]+?)`/), 'code');
-}
-
-function matchHtmlUnderline(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/<u>([\s\S]+?)<\/u>/i), 'u');
-}
-
-function matchHtmlStrong(input: string): InlineMatch | null {
-  const match = input.match(/<(strong|b)>([\s\S]+?)<\/(strong|b)>/i);
-  if (!match || typeof match.index !== 'number') return null;
-  const open = (match[1] || '').toLowerCase();
-  const close = (match[3] || '').toLowerCase();
-  if (!open || open !== close) return null;
-  return {
-    index: match.index,
-    length: match[0].length,
-    tagName: 'strong',
-    content: match[2] ?? '',
-  };
-}
-
-function matchHtmlEmphasis(input: string): InlineMatch | null {
-  const match = input.match(/<(em|i)>([\s\S]+?)<\/(em|i)>/i);
-  if (!match || typeof match.index !== 'number') return null;
-  const open = (match[1] || '').toLowerCase();
-  const close = (match[3] || '').toLowerCase();
-  if (!open || open !== close) return null;
-  return {
-    index: match.index,
-    length: match[0].length,
-    tagName: 'em',
-    content: match[2] ?? '',
-  };
-}
-
-function matchHtmlCode(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/<code>([\s\S]+?)<\/code>/i), 'code');
-}
-
-function matchMarkdownStrongAsterisk(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/\*\*([^*\n][\s\S]*?)\*\*/), 'strong');
-}
-
-function matchMarkdownStrongUnderscore(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/__([^_\n][\s\S]*?)__/), 'strong');
-}
-
-function matchMarkdownStrikethrough(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/~~([^~\n][\s\S]*?)~~/), 's');
-}
-
-function matchMarkdownEmphasisAsterisk(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/\*([^*\n][^*\n]*?)\*/), 'em');
-}
-
-function matchMarkdownEmphasisUnderscore(input: string): InlineMatch | null {
-  return toInlineMatch(input.match(/_([^_\n][^_\n]*?)_/), 'em');
-}
-
-/**
- * Basic URL sanitizer for preview links
- */
-function sanitizeUrl(url: string): string | null {
-  const trimmed = (url || '').trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('#') || trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
-    return trimmed;
-  }
-
-  try {
-    const parsed = new URL(trimmed, window.location.origin);
-    if (['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol)) {
-      return parsed.href;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 function createMediaCaptionInput(caption: string | undefined, context: BlockContext): HTMLInputElement {
   const input = document.createElement('input');
   input.type = 'text';
@@ -2172,7 +1654,7 @@ function renderVideoBlock(block: VideoBlock, context: BlockContext): HTMLElement
     const syncPosterToBlock = (poster: string): void => {
       const cleanPoster = poster.trim();
       if (currentPoster && currentPoster !== cleanPoster && isTrackableAssetUrl(currentPoster)) {
-        trackCleanupCandidateUrl(currentPoster);
+        addCleanupCandidateUrl(cleanupCandidateUrls, currentPoster);
       }
       currentPoster = cleanPoster;
       applyVideoPoster(video, cleanPoster);
@@ -2836,7 +2318,7 @@ export function insertBlockAfter(blockId: string, type: BlockType, props: Partia
 export function deleteBlock(index: number): void {
   const removedBlock = blocks[index];
   if (removedBlock) {
-    trackPosterCleanupCandidatesFromBlock(removedBlock);
+    trackPosterCleanupCandidatesFromBlock(cleanupCandidateUrls, removedBlock);
   }
 
   if (blocks.length <= 1) {
@@ -2872,7 +2354,7 @@ function handleSlashCommand(
     const execData = data as SlashExecuteData;
     if (execData.replaceBlockIndex !== null) {
       const focusIndex = execData.replaceBlockIndex;
-      trackPosterCleanupCandidatesFromBlock(blocks[focusIndex]);
+      trackPosterCleanupCandidatesFromBlock(cleanupCandidateUrls, blocks[focusIndex]);
       updateTopLevelBlock(focusIndex, () => createBlock(execData.commandId) as Block);
       if (execData.commandId === 'text' || execData.commandId === 'callout') {
         setTimeout(() => {
@@ -2969,9 +2451,16 @@ async function flushCleanupCandidates(): Promise<void> {
     });
     if (response.ok) {
       cleanupCandidateUrls.clear();
+      cleanupFlushErrorLogged = false;
+    } else if (!cleanupFlushErrorLogged) {
+      cleanupFlushErrorLogged = true;
+      console.warn('Asset cleanup request failed:', response.status);
     }
-  } catch {
-    // Best effort cleanup only.
+  } catch (error) {
+    if (!cleanupFlushErrorLogged) {
+      cleanupFlushErrorLogged = true;
+      console.warn('Asset cleanup request failed:', error);
+    }
   }
 }
 
@@ -3101,12 +2590,12 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
       <span class="edit-hero-thumbnail-label">Thumbnail</span>
     </div>
     <div class="edit-hero-thumbnail-content">
-      <img class="edit-hero-thumbnail-preview" src="${escapeAttr(currentThumbnail)}"
+      <img class="edit-hero-thumbnail-preview" src="${escapeHtmlAttr(currentThumbnail)}"
            alt="Thumbnail" style="${currentThumbnail ? '' : 'display:none'}">
       <div class="edit-hero-thumbnail-actions">
         <input type="url" class="edit-hero-thumbnail-input"
                placeholder="Thumbnail image URL..."
-               value="${escapeAttr(currentThumbnail)}">
+               value="${escapeHtmlAttr(currentThumbnail)}">
         <div class="edit-hero-thumbnail-buttons">
           <button type="button" class="edit-btn-small" data-action="upload">Upload</button>
           <button type="button" class="edit-btn-small" data-action="capture">Use current frame</button>
@@ -3131,7 +2620,7 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
       // Track old thumbnail URL for orphan cleanup
       const oldThumbnail = projectData.video.thumbnail;
       if (oldThumbnail && oldThumbnail !== url) {
-        trackCleanupCandidateUrl(oldThumbnail);
+        addCleanupCandidateUrl(cleanupCandidateUrls, oldThumbnail);
       }
       projectData.video.thumbnail = url || undefined;
       markDirty();
@@ -3223,13 +2712,6 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   });
 
   return controls;
-}
-
-/**
- * Escape HTML attribute value
- */
-function escapeAttr(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ========== PUBLIC API ==========

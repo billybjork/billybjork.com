@@ -33,7 +33,8 @@ type SlashCommandCallback = (
 // ========== CONFIGURATION ==========
 
 const CONFIG = {
-  MENU_WIDTH: 240
+  MENU_WIDTH: 240,
+  MOBILE_BREAKPOINT: 768,
 };
 
 // SVG icons for slash commands (consistent with codebase icon style)
@@ -94,8 +95,21 @@ function positionMenu(anchorRect: DOMRect): void {
   if (!menuElement) return;
 
   menuElement.style.display = 'block';
+
+  const isMobileLayout = window.matchMedia(`(max-width: ${CONFIG.MOBILE_BREAKPOINT}px)`).matches;
+  if (isMobileLayout) {
+    menuElement.style.width = 'auto';
+    menuElement.style.left = '10px';
+    menuElement.style.right = '10px';
+    menuElement.style.top = 'auto';
+    menuElement.style.bottom = '10px';
+    menuElement.style.maxHeight = '50vh';
+    return;
+  }
+
   menuElement.style.width = `${CONFIG.MENU_WIDTH}px`;
   menuElement.style.left = `${Math.min(anchorRect.left, window.innerWidth - CONFIG.MENU_WIDTH - 20)}px`;
+  menuElement.style.right = 'auto';
 
   const menuHeight = menuElement.offsetHeight || 200;
   const spaceBelow = window.innerHeight - anchorRect.bottom - 10;
