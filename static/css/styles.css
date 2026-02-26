@@ -340,7 +340,8 @@ footer {
 }
 
 .project-item.fade-out {
-    animation: fadeOut 0.15s
+    animation: fadeOut 0.15s forwards;
+    pointer-events: none;
 }
 
 /* =========================

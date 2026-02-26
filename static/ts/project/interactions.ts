@@ -1030,6 +1030,22 @@ function handleProjectLoaded(event: CustomEvent<ProjectEventDetail>): void {
   }
 }
 
+function buildIsolationHomeUrl(): URL {
+  const url = new URL('/', window.location.origin);
+  const params = new URLSearchParams(window.location.search);
+  const hasShowDrafts = params.get('show_drafts') === 'true'
+    || sessionStorage.getItem('bb_show_drafts') === 'true';
+  if (hasShowDrafts) {
+    url.searchParams.set('show_drafts', 'true');
+  }
+  return url;
+}
+
+function navigateHomeFromIsolation(): void {
+  sessionStorage.setItem('bb_skip_fouc_once', 'true');
+  window.location.href = buildIsolationHomeUrl().toString();
+}
+
 /**
  * Closes a specific project item smoothly.
  */
@@ -1040,19 +1056,18 @@ function closeProject(button: HTMLElement): void {
   const isIsolationMode = document.body.dataset.isolationMode === 'true';
 
   if (isIsolationMode) {
+    if (projectItem.dataset.closing === 'true') {
+      return;
+    }
+    projectItem.dataset.closing = 'true';
     projectItem.classList.add('fade-out');
 
-    projectItem.addEventListener('animationend', function handler() {
-      projectItem.removeEventListener('animationend', handler);
-      const url = new URL('/', window.location.origin);
-      const params = new URLSearchParams(window.location.search);
-      const hasShowDrafts = params.get('show_drafts') === 'true'
-        || sessionStorage.getItem('bb_show_drafts') === 'true';
-      if (hasShowDrafts) {
-        url.searchParams.set('show_drafts', 'true');
+    projectItem.addEventListener('animationend', function handler(event: AnimationEvent) {
+      if (event.target !== projectItem || event.animationName !== 'fadeOut') {
+        return;
       }
-      window.location.href = url.toString();
-    });
+      navigateHomeFromIsolation();
+    }, { once: true });
   } else {
     projectItem.classList.remove('active');
 
@@ -1113,6 +1128,25 @@ function initializeEventListeners(): void {
         closeProject(target);
       }
     }
+  });
+
+  // Site title click should use smooth isolation close behavior instead of hard navigation.
+  document.body.addEventListener('click', function(event) {
+    const siteTitle = (event.target as HTMLElement).closest<HTMLAnchorElement>('a.site-title');
+    if (!siteTitle) return;
+
+    const isIsolationMode = document.body.dataset.isolationMode === 'true';
+    if (!isIsolationMode) return;
+
+    event.preventDefault();
+    const activeProject = document.querySelector<HTMLElement>('.project-item.active');
+    const closeBtn = activeProject?.querySelector<HTMLElement>('.close-project');
+    if (closeBtn) {
+      closeProject(closeBtn);
+      return;
+    }
+
+    navigateHomeFromIsolation();
   });
 
   // Media lightbox (images and eligible content videos)

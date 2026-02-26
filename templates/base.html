@@ -20,7 +20,21 @@
 
     <!-- Prevent FOUT: hide page until font is ready -->
     <style>.no-fouc body{opacity:0}.fouc-ready body{opacity:1;transition:opacity .1s}</style>
-    <script>document.documentElement.classList.add('no-fouc')</script>
+    <script>
+        (function () {
+            const skipKey = 'bb_skip_fouc_once';
+            try {
+                if (sessionStorage.getItem(skipKey) === 'true') {
+                    sessionStorage.removeItem(skipKey);
+                    document.documentElement.classList.add('fouc-ready');
+                    return;
+                }
+            } catch (_err) {
+                // Fall through to default no-fouc behavior if sessionStorage is unavailable.
+            }
+            document.documentElement.classList.add('no-fouc');
+        })();
+    </script>
 
     <!-- Preconnect to required origins (must precede preloads) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
