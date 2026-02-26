@@ -16,7 +16,7 @@
         <meta property="og:description" content="{{ page_meta_description if page_meta_description else 'big idea guy' }}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="{{ request.url }}">
-        <meta property="og:image" content="{{ projects[0].sprite_sheet_link if projects else 'default_image_url' }}">
+        <meta property="og:image" content="{{ og_image_link if og_image_link else '' }}">
 
     <!-- Prevent FOUT: hide page until font is ready -->
     <style>.no-fouc body{opacity:0}.fouc-ready body{opacity:1;transition:opacity .1s}</style>

@@ -555,10 +555,18 @@ class ProjectInfo:
     fps: Optional[int] = None
     youtube_link: Optional[str] = None
     formatted_date: str = field(default="", init=False)
+    og_image_link: Optional[str] = field(default=None, init=False)
 
     def __post_init__(self):
         self.id = hash(self.slug)
         self.formatted_date = format_date(self.creation_date)
+        # Compute og_image_link with fallback chain: thumbnail → spriteSheet
+        og_image = self.thumbnail_link or self.sprite_sheet_link
+        if og_image and not og_image.startswith(('http://', 'https://')):
+            # Resolve relative URL to absolute
+            from utils.s3 import CLOUDFRONT_DOMAIN
+            og_image = f"https://{CLOUDFRONT_DOMAIN}/{og_image.lstrip('/')}"
+        self.og_image_link = og_image
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProjectInfo":

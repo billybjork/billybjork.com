@@ -104,6 +104,12 @@ async def read_root(
                 },
             )
 
+        # Compute og_image_link for homepage (use first project's og_image if available)
+        og_image_link = None
+        if projects:
+            first_project = ProjectInfo.from_dict(projects[0])
+            og_image_link = first_project.og_image_link
+
         return templates.TemplateResponse(
             "index.html",
             {
@@ -116,6 +122,7 @@ async def read_root(
                 "has_more": has_more,
                 "limit": limit,
                 "show_drafts": show_drafts_only,
+                "og_image_link": og_image_link,
             },
         )
     except Exception as e:
@@ -226,6 +233,7 @@ async def read_project(
                 "page_meta_description": meta_description,
                 "analytics": analytics,
                 "show_drafts": show_drafts_only,
+                "og_image_link": project.og_image_link,
             },
         )
     except HTTPException:
