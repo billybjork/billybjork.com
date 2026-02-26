@@ -66,7 +66,7 @@ So Claude and I whipped up a simple web UI to look at the splats in all their 3D
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -918,7 +918,7 @@ document.getElementById('info').textContent=String(err&&err.message?err.message:
 
 <!-- block -->
 
-I almost forgot. The goal's not to build the next Unreal Engine, it's to make a fun edit from the trip. I needed a way to turn these splats into video clips I can pull into a timeline.
+I almost forgot. The goal wasn't to build the next Unreal Engine, it was to make a fun edit from the trip. I needed a way to turn these splats into video clips I can pull into a timeline.
 
 Through After Effects, I got familiar with the idea of a “virtual camera.” Figured I could do something similar here, with a coding agent and some Python libraries. I was right.
 
@@ -954,7 +954,7 @@ I chose five preset camera movements (pan left, pan right, push in, pull out, or
 
 <!-- block -->
 
-Gives the energy of a 3D Ken Burns effect, right? The “Ken Burns” effect is slow pan-and-zoom you often see applied to pictures in documentaries. Makes the photos feel slightly more alive, plus it’s easy to systematize. But still, usually less exciting than a video of the same scene.
+Gives the energy of a 3D Ken Burns effect, right? The “Ken Burns” effect is the slow pan-and-zoom effect you often see applied to pictures in documentaries. Makes the photos feel slightly more alive, plus it’s easy to systematize. But still, usually less exciting than a video of the same scene.
 
 <!-- block -->
 
@@ -971,7 +971,7 @@ Against my best interest, I didn’t exit the rabbit hole just yet.
 <!-- col -->
 I've been seeing this "point cloud" effect in music videos and Vimeo [experiments](https://vimeo.com/407635582), where it looks like the camera flying through digital debris.
 
-Surely, I can do the same with these splats files? Maybe I’ll even stitch a bunch of scenes together into a kind of "hallway” effect? Seemed doable…
+Surely, I could do the same with these splats files? Maybe I’d even stitch a bunch of scenes together into a kind of "hallway” effect? Seemed doable…
 
 This is where things got out of hand.
 <!-- /row -->
@@ -1035,7 +1035,7 @@ Instead, just render each scene at multiple depth settings, then pick the one th
 
 <!-- block -->
 
-With that sorted, I could render camera moves that don’t miss the important parts of each scene.
+With that sorted, I could render camera moves that didn't miss the important parts of each scene.
 
 <!-- block -->
 
@@ -1077,13 +1077,13 @@ This turned out to be simpler, more predictable, and actually worked.
 
 <!-- block -->
 
-This gave that "flying through the scene" effect without all the complexity of rendering multiple 3D scenes together. It also added a layer separation effect that ranged from “beautiful surprise” to “slightly disturbing” depending on the photo.
+This gave that "flying through the scene" effect without all the complexity of rendering multiple 3D scenes together. It also added a layer separation effect that ranged from “delightful surprise” to “slightly disturbing” depending on the photo.
 
 Exhausted and ready to be done, I committed to this approach for the final video.
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
@@ -1100,7 +1100,7 @@ So. Was this worth it?
 
 I would’ve saved myself a dozen or two hours editing the photos the old fashioned way, with good old Ken Burns. Instead I called in Claude to help me navigate an area I didn’t yet understand.
 
-In the end, using AI (through both models and coding agents) saved me negative time. But where it got me would have been impossible to access with my toolset up until a couple years ago. I wouldn’t have written a gaussian splat renderer from scratch. To be fair, I wouldn't have learned Blender or Unity either.“Too technical” for my taste. Ironic…
+In the end, the time I saved by using AI was approximately... negative. But where it got me would have been impossible to access with my toolset up until a couple years ago. I wouldn’t have written a gaussian splat renderer from scratch. To be fair, I wouldn't have learned Blender or Unity either. “Too technical” for my taste. Ironic…
 
 <!-- block -->
 
