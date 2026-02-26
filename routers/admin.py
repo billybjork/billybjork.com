@@ -106,6 +106,8 @@ async def get_project(slug: str):
             "frame_width": project_data.get("frame_width"),
             "frame_height": project_data.get("frame_height"),
             "fps": project_data.get("fps"),
+            "video_width": project_data.get("video_width"),
+            "video_height": project_data.get("video_height"),
         },
         "markdown": project_data.get("markdown_content", ""),
         "html": project_data.get("html_content", ""),
@@ -428,6 +430,8 @@ async def video_thumbnails(request: Request):
         # Get video duration first (fast operation)
         info = await asyncio.to_thread(get_video_info, temp_path)
         duration = info["duration"]
+        video_width = int(info.get("width") or 0)
+        video_height = int(info.get("height") or 0)
 
         # Extract a small initial frame set for immediate timeline feedback
         first_frames, _ = await asyncio.to_thread(
@@ -446,6 +450,8 @@ async def video_thumbnails(request: Request):
             frames=first_frames,  # Will be extended with more frames
             frames_complete=False,
             is_remote=False,
+            video_width=video_width if video_width > 0 else None,
+            video_height=video_height if video_height > 0 else None,
         )
 
         if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
@@ -550,6 +556,8 @@ async def video_thumbnails_existing(request: Request):
     try:
         info = await asyncio.to_thread(get_video_info, hls_url)
         duration = info["duration"]
+        video_width = int(info.get("width") or 0)
+        video_height = int(info.get("height") or 0)
         first_frames, _ = await asyncio.to_thread(
             extract_thumbnail_frames,
             hls_url,
@@ -565,6 +573,8 @@ async def video_thumbnails_existing(request: Request):
             frames=first_frames,
             frames_complete=False,
             is_remote=True,
+            video_width=video_width if video_width > 0 else None,
+            video_height=video_height if video_height > 0 else None,
         )
 
         if TIMELINE_TOTAL_FRAME_COUNT > TIMELINE_INITIAL_FRAME_COUNT:
@@ -723,6 +733,12 @@ async def generate_sprite_sheet_endpoint(request: Request):
                     continue
                 if isinstance(value, (int, float)) and value > 0:
                     video_payload[key] = int(value)
+        for key in ("video_width", "video_height"):
+            value = temp_info.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)) and value > 0:
+                video_payload[key] = int(value)
 
         response = {
             "success": True,

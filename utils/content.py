@@ -465,6 +465,8 @@ def load_project(
         project['frame_width'] = video.get('frame_width')
         project['frame_height'] = video.get('frame_height')
         project['fps'] = video.get('fps')
+        project['video_width'] = video.get('video_width')
+        project['video_height'] = video.get('video_height')
     else:
         project['video_link'] = None
         project['thumbnail_link'] = None
@@ -475,6 +477,8 @@ def load_project(
         project['frame_width'] = None
         project['frame_height'] = None
         project['fps'] = None
+        project['video_width'] = None
+        project['video_height'] = None
 
     return project
 
@@ -756,6 +760,8 @@ class ProjectInfo:
     frame_width: Optional[int] = None
     frame_height: Optional[int] = None
     fps: Optional[int] = None
+    video_width: Optional[int] = None
+    video_height: Optional[int] = None
     youtube_link: Optional[str] = None
     formatted_date: str = field(default="", init=False)
     og_image_link: Optional[str] = field(default=None, init=False)
@@ -790,5 +796,7 @@ class ProjectInfo:
             frame_width=data.get("frame_width"),
             frame_height=data.get("frame_height"),
             fps=data.get("fps"),
+            video_width=data.get("video_width"),
+            video_height=data.get("video_height"),
             youtube_link=data.get("youtube_link"),
         )

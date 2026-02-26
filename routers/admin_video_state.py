@@ -15,6 +15,8 @@ class TempVideoState:
     frames: list[str]
     frames_complete: bool = False
     is_remote: bool = False
+    video_width: Optional[int] = None
+    video_height: Optional[int] = None
     timestamp: datetime = field(default_factory=datetime.now)
 
 

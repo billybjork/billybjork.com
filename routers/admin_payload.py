@@ -44,7 +44,7 @@ def build_project_frontmatter(
         if isinstance(value, str) and value.strip():
             normalized_video[key] = value.strip()
 
-    for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps"):
+    for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps", "video_width", "video_height"):
         value = video.get(key)
         if isinstance(value, bool):
             continue
