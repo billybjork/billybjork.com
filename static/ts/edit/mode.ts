@@ -1547,6 +1547,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
   if (!lines.length) lines = [''];
 
   let activeLineIndex: number | null = null;
+  let suppressNextLineActivationClick = false;
   const slashEnabled = !context.rowSide;
 
   const headingIdForLine = (lineText: string, targetLineIndex: number): string | null => {
@@ -1746,6 +1747,81 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     return boundaries[boundaryIndex] ?? textarea.value.length;
   };
 
+  const getPreviewTextOffsetFromBoundary = (
+    preview: HTMLElement,
+    container: Node,
+    offset: number
+  ): number | null => {
+    if (container !== preview && !preview.contains(container)) return null;
+
+    const range = preview.ownerDocument.createRange();
+    range.selectNodeContents(preview);
+    try {
+      range.setEnd(container, offset);
+    } catch {
+      return null;
+    }
+    return range.toString().length;
+  };
+
+  const getSelectedRawRangeForPreview = (row: HTMLElement): { start: number; end: number } | null => {
+    const textarea = row.querySelector<HTMLTextAreaElement>('.text-line-input');
+    const preview = row.querySelector<HTMLElement>('.text-block-line-preview');
+    if (!textarea || !preview) return null;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+
+    let startRendered: number | null = null;
+    let endRendered: number | null = null;
+    for (let i = 0; i < selection.rangeCount; i += 1) {
+      const range = selection.getRangeAt(i);
+      try {
+        if (!range.intersectsNode(preview)) continue;
+      } catch {
+        continue;
+      }
+
+      const start = getPreviewTextOffsetFromBoundary(preview, range.startContainer, range.startOffset);
+      const end = getPreviewTextOffsetFromBoundary(preview, range.endContainer, range.endOffset);
+      if (start === null || end === null) continue;
+
+      startRendered = Math.min(start, end);
+      endRendered = Math.max(start, end);
+      break;
+    }
+
+    if (startRendered === null || endRendered === null || startRendered === endRendered) return null;
+
+    const boundaries = mapRenderedToRawBoundaries(textarea.value, row.dataset.lineType);
+    if (!boundaries.length) return null;
+
+    const rawStart = boundaries[clamp(startRendered, 0, boundaries.length - 1)] ?? textarea.value.length;
+    const rawEnd = boundaries[clamp(endRendered, 0, boundaries.length - 1)] ?? textarea.value.length;
+    if (rawStart === rawEnd) return null;
+
+    return {
+      start: Math.min(rawStart, rawEnd),
+      end: Math.max(rawStart, rawEnd),
+    };
+  };
+
+  const hasExpandedSelectionInNode = (node: Node): boolean => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+
+    for (let i = 0; i < selection.rangeCount; i += 1) {
+      const range = selection.getRangeAt(i);
+      try {
+        if (range.intersectsNode(node)) return true;
+      } catch {
+        // Ignore transient ranges while the browser is updating selection state.
+      }
+    }
+
+    return false;
+  };
+
   const updateBlockContent = (): void => {
     const nextContent = lines.join('\n');
     updateBlockInContext(
@@ -1814,13 +1890,39 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     textarea.rows = 1;
     textarea.placeholder = 'Type something... (type / for commands)';
 
+    preview.addEventListener('mouseup', (e) => {
+      if (row.classList.contains('is-editing')) return;
+      const selectionRange = getSelectedRawRangeForPreview(row);
+      if (!selectionRange) return;
+      suppressNextLineActivationClick = true;
+      e.stopPropagation();
+      activateLine(row, selectionRange);
+    });
+
     preview.addEventListener('click', (e) => {
+      if (suppressNextLineActivationClick) {
+        suppressNextLineActivationClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (hasExpandedSelectionInNode(preview)) {
+        e.stopPropagation();
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       activateLine(row, getClickedCaretForPreview(row, e));
     });
 
     row.addEventListener('click', (e) => {
+      if (suppressNextLineActivationClick) {
+        suppressNextLineActivationClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (hasExpandedSelectionInNode(row)) return;
       if (!row.classList.contains('is-editing')) {
         e.preventDefault();
         e.stopPropagation();
