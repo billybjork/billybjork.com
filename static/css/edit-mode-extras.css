@@ -104,15 +104,48 @@
 
 @media (max-width: 768px) {
     .edit-mode-toolbar {
-        flex-direction: column;
-        gap: 12px;
-        top: 0;
+        gap: 8px;
+        padding: 8px 10px;
     }
 
-    .edit-toolbar-left,
+    .edit-toolbar-left {
+        min-width: 0;
+    }
+
     .edit-toolbar-right {
-        width: 100%;
-        justify-content: center;
+        gap: 6px;
+    }
+
+    .edit-project-name {
+        max-width: 44vw;
+        font-size: 13px;
+    }
+
+    .edit-status {
+        font-size: 12px;
+    }
+
+    .edit-btn {
+        padding: 7px 10px;
+        font-size: 13px;
+    }
+
+    .edit-btn-icon {
+        width: 30px;
+        min-width: 30px;
+        height: 30px;
+        padding: 0;
+    }
+
+    .inline-format-toolbar {
+        max-width: calc(100vw - 16px);
+        overflow-x: auto;
+    }
+
+    .inline-format-btn {
+        min-width: 30px;
+        height: 30px;
+        font-size: 11px;
     }
 
     .slash-command-menu {

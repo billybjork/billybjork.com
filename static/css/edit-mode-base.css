@@ -22,6 +22,7 @@
     --edit-line-space: 0.45rem;
     --edit-line-space-tight: 0.2rem;
     --edit-line-space-heading: 0.9rem;
+    padding-top: 70px;
 }
 
 body.editing {
@@ -41,13 +42,22 @@ body.modal-open {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     padding: 10px 14px;
     background: #1a1a1a;
-    border-radius: 6px;
-    margin-bottom: 12px;
-    position: sticky;
-    top: 60px;
-    z-index: 100;
+    border: 1px solid #2f2f2f;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    margin-bottom: 0;
+    z-index: 1200;
+}
+
+.edit-mode-toolbar-fixed {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(940px, calc(100vw - 16px));
 }
 
 .edit-toolbar-left {
@@ -59,6 +69,10 @@ body.modal-open {
 .edit-project-name {
     font-weight: 500;
     color: #fff;
+    max-width: min(56vw, 560px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .edit-status {
@@ -69,6 +83,7 @@ body.modal-open {
 .edit-toolbar-right {
     display: flex;
     gap: 8px;
+    margin-left: auto;
 }
 
 .edit-btn {
@@ -79,6 +94,38 @@ body.modal-open {
     cursor: pointer;
     transition: all 0.2s ease;
     border: none;
+}
+
+.edit-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.edit-btn-icon {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #242424;
+    color: #d1d5db;
+    border: 1px solid #3a3a3a;
+}
+
+.edit-btn-icon svg {
+    width: 14px;
+    height: 14px;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.edit-btn-icon:hover:not(:disabled) {
+    background: #2f2f2f;
+    border-color: #4a4a4a;
 }
 
 .edit-btn-primary {
@@ -120,6 +167,99 @@ body.modal-open {
 
 .edit-btn-secondary:hover {
     background: #444;
+}
+
+.edit-controls-hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+.inline-format-toolbar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    background: #101010;
+    border: 1px solid #2f2f2f;
+    border-radius: 10px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    z-index: 1500;
+}
+
+.inline-format-toolbar.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.inline-format-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    background: #1e1e1e;
+    border: 1px solid #323232;
+    border-radius: 6px;
+    color: #d1d5db;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.inline-format-btn-bold {
+    font-weight: 700;
+}
+
+.inline-format-btn-italic {
+    font-style: italic;
+}
+
+.inline-format-btn-underline {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.inline-format-btn-link {
+    padding: 0;
+}
+
+.inline-format-btn-link svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    stroke-width: 2.1;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    display: block;
+    margin: 0 auto;
+}
+
+.inline-format-btn-heading-1,
+.inline-format-btn-heading-2,
+.inline-format-btn-heading-3,
+.inline-format-btn-heading-4 {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    font-weight: 650;
+}
+
+.inline-format-btn:hover {
+    background: #2b2b2b;
+    border-color: #424242;
+}
+
+.inline-format-btn.is-active {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+    color: #fff;
 }
 
 /* ========================================
@@ -1207,4 +1347,3 @@ body.modal-open {
     white-space: nowrap;
     transition: color 0.2s ease;
 }
-

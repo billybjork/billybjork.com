@@ -15,6 +15,7 @@ interface UndoCallbacks {
   getBlocks: () => Block[];
   setBlocks: (blocks: Block[]) => void;
   renderBlocks: () => void;
+  restoreBlocks?: (blocks: Block[]) => void;
   markDirty: () => void;
 }
 
@@ -27,6 +28,11 @@ let isUndoing = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 const DEBOUNCE_MS = 500;
 
+function areStatesEqual(a: UndoState | undefined, b: UndoState | undefined): boolean {
+  if (!a || !b) return false;
+  return JSON.stringify(a.blocks) === JSON.stringify(b.blocks);
+}
+
 /**
  * Initialize undo system with callbacks
  */
@@ -34,6 +40,11 @@ export function init(cb: UndoCallbacks): void {
   callbacks = cb;
   history = [];
   currentIndex = -1;
+  isUndoing = false;
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 }
 
 /**
@@ -42,6 +53,11 @@ export function init(cb: UndoCallbacks): void {
 export function reset(): void {
   history = [];
   currentIndex = -1;
+  isUndoing = false;
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 }
 
 /**
@@ -68,6 +84,12 @@ function doSaveState(): void {
     history = history.slice(0, currentIndex + 1);
   }
 
+  const previous = history[history.length - 1];
+  if (areStatesEqual(previous, state)) {
+    currentIndex = history.length - 1;
+    return;
+  }
+
   // Add new state
   history.push(state);
   currentIndex = history.length - 1;
@@ -90,8 +112,16 @@ export function saveState(): void {
     clearTimeout(debounceTimer);
   }
   debounceTimer = setTimeout(() => {
+    debounceTimer = null;
     doSaveState();
   }, DEBOUNCE_MS);
+}
+
+function flushPendingState(): void {
+  if (debounceTimer === null) return;
+  clearTimeout(debounceTimer);
+  debounceTimer = null;
+  doSaveState();
 }
 
 /**
@@ -101,8 +131,13 @@ function restoreState(state: UndoState | undefined): void {
   if (!state || !callbacks) return;
 
   isUndoing = true;
-  callbacks.setBlocks(deepClone(state.blocks));
-  callbacks.renderBlocks();
+  const nextBlocks = deepClone(state.blocks);
+  if (callbacks.restoreBlocks) {
+    callbacks.restoreBlocks(nextBlocks);
+  } else {
+    callbacks.setBlocks(nextBlocks);
+    callbacks.renderBlocks();
+  }
   callbacks.markDirty();
   isUndoing = false;
 }
@@ -111,14 +146,11 @@ function restoreState(state: UndoState | undefined): void {
  * Undo last action
  */
 export function undo(): void {
+  flushPendingState();
+
   if (currentIndex <= 0) {
     showNotification('Nothing to undo', 'info');
     return;
-  }
-
-  // Save current state if not already saved
-  if (currentIndex === history.length - 1) {
-    doSaveState();
   }
 
   currentIndex--;
@@ -130,6 +162,8 @@ export function undo(): void {
  * Redo last undone action
  */
 export function redo(): void {
+  flushPendingState();
+
   if (currentIndex >= history.length - 1) {
     showNotification('Nothing to redo', 'info');
     return;
@@ -146,6 +180,10 @@ export function redo(): void {
 export function clear(): void {
   history = [];
   currentIndex = -1;
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
 }
 
 /**

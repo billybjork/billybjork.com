@@ -13,6 +13,8 @@ import {
   createVideoElement,
   applyVideoPlaybackSettings,
   insertTextWithUndo,
+  toggleFormat,
+  findLinkAtCursor,
   handleFormattingShortcuts,
   handleListShortcuts,
   insertLink,
@@ -54,7 +56,32 @@ const ICONS = {
   split: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/></svg>',
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 8 16 13"/><line x1="21" y1="8" x2="3" y2="8"/><polyline points="8 21 3 16 8 11"/><line x1="3" y1="16" x2="21" y2="16"/></svg>',
   divider: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h8a8 8 0 0 1 8 8v3"/></svg>',
+  redo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9h-8a8 8 0 0 0-8 8v3"/></svg>',
 };
+
+const INLINE_TOOLBAR_ACTIONS: Array<{
+  action: InlineAction;
+  title: string;
+  ariaLabel: string;
+  content: string;
+  isHtml?: boolean;
+}> = [
+  { action: 'bold', content: 'B', ariaLabel: 'Bold', title: 'Bold (Cmd/Ctrl+B)' },
+  { action: 'italic', content: 'I', ariaLabel: 'Italic', title: 'Italic (Cmd/Ctrl+I)' },
+  { action: 'underline', content: 'U', ariaLabel: 'Underline', title: 'Underline (Cmd/Ctrl+U)' },
+  {
+    action: 'link',
+    ariaLabel: 'Insert/Edit link',
+    title: 'Insert/Edit link (Cmd/Ctrl+K)',
+    isHtml: true,
+    content: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 17H7a5 5 0 0 1 0-10h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/></svg>',
+  },
+  { action: 'heading-1', content: 'H1', ariaLabel: 'Heading 1', title: 'Heading 1' },
+  { action: 'heading-2', content: 'H2', ariaLabel: 'Heading 2', title: 'Heading 2' },
+  { action: 'heading-3', content: 'H3', ariaLabel: 'Heading 3', title: 'Heading 3' },
+  { action: 'heading-4', content: 'H4', ariaLabel: 'Heading 4', title: 'Heading 4' },
+];
 
 // ========== TYPES ==========
 
@@ -89,6 +116,14 @@ type SaveAction =
   | { type: 'fade' }
   | { type: 'reset' };
 
+type InlineAction = 'bold' | 'italic' | 'underline' | 'link' | 'heading-1' | 'heading-2' | 'heading-3' | 'heading-4';
+
+interface InlineToolbarContext {
+  textarea: HTMLTextAreaElement;
+  row: HTMLElement;
+  onEdit: () => void;
+}
+
 // ========== STATE ==========
 
 let blocks: Block[] = [];
@@ -99,6 +134,7 @@ let isActive = false;
 let container: HTMLElement | null = null;
 let toolbar: HTMLElement | null = null;
 let editMode: EditModeType = null;
+let hiddenProjectControls: HTMLElement | null = null;
 
 // Auto-save state
 let saveState: SaveState = SaveState.UNCHANGED;
@@ -124,6 +160,10 @@ const dragState: DragState = {
 
 // Hero thumbnail controls element (injected when edit mode activates for a project with hero video)
 let heroThumbnailControls: HTMLElement | null = null;
+let inlineToolbar: HTMLElement | null = null;
+let inlineToolbarContext: InlineToolbarContext | null = null;
+let inlineToolbarEventsBound = false;
+let inlineToolbarUpdateRaf: number | null = null;
 
 const scrollAnchors = new ScrollAnchorManager();
 
@@ -207,20 +247,16 @@ function setupEditor(data: ProjectData | AboutData): void {
       });
     }
 
-    // Replace the Edit/Settings buttons with Save/Cancel buttons
+    // Hide project controls while edit mode is active.
     const editButtons = projectItem?.querySelector<HTMLElement>('.edit-buttons');
     if (editButtons) {
-      editButtons.dataset.originalHtml = editButtons.innerHTML;
-      editButtons.innerHTML = `
-        <span class="edit-status"></span>
-        <button class="edit-btn-action edit-btn-cancel" data-action="cancel">Cancel</button>
-        <button class="edit-btn-action edit-btn-save" data-action="save">Save</button>
-      `;
-      toolbar = editButtons;
-      toolbar.querySelector('[data-action="cancel"]')?.addEventListener('click', handleCancel);
-      toolbar.querySelector('[data-action="save"]')?.addEventListener('click', handleSave);
+      hiddenProjectControls = editButtons;
+      editButtons.classList.add('edit-controls-hidden');
     }
   }
+
+  toolbar = createFixedToolbar(data);
+  updateToolbarStatus();
 
   // Parse markdown into blocks
   const markdown = 'markdown' in data ? data.markdown : '';
@@ -233,29 +269,9 @@ function setupEditor(data: ProjectData | AboutData): void {
   const editorWrapper = document.createElement('div');
   editorWrapper.className = 'edit-mode-container';
 
-  // For about page, include a toolbar since there's no edit-buttons container
-  if (editMode === 'about') {
-    editorWrapper.innerHTML = `
-      <div class="edit-mode-toolbar">
-        <div class="edit-toolbar-left">
-          <span class="edit-project-name">About Page</span>
-          <span class="edit-status"></span>
-        </div>
-        <div class="edit-toolbar-right">
-          <button class="edit-btn edit-btn-secondary" data-action="cancel">Cancel</button>
-          <button class="edit-btn edit-btn-primary" data-action="save">Save</button>
-        </div>
-      </div>
-      <div class="edit-blocks-container"></div>
-    `;
-    toolbar = editorWrapper.querySelector<HTMLElement>('.edit-mode-toolbar');
-    toolbar?.querySelector('[data-action="cancel"]')?.addEventListener('click', handleCancel);
-    toolbar?.querySelector('[data-action="save"]')?.addEventListener('click', handleSave);
-  } else {
-    editorWrapper.innerHTML = `
-      <div class="edit-blocks-container"></div>
-    `;
-  }
+  editorWrapper.innerHTML = `
+    <div class="edit-blocks-container"></div>
+  `;
 
   // Replace content with editor
   contentContainer.innerHTML = '';
@@ -284,6 +300,7 @@ function setupEditor(data: ProjectData | AboutData): void {
     getBlocks: () => blocks,
     setBlocks: (newBlocks) => { blocks = newBlocks; },
     renderBlocks,
+    restoreBlocks: restoreBlocksFromHistory,
     markDirty,
   });
   EditUndo.saveState();
@@ -293,6 +310,7 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   // Mark edit state before block rendering so video elements never autoplay in the editor.
   document.body.classList.add('editing');
+  initInlineToolbar();
 
   // Inject hero thumbnail controls for project mode with hero video
   if (editMode === 'project' && 'video' in data && data.video?.hls) {
@@ -477,6 +495,7 @@ export function cleanup(): void {
   window.removeEventListener('beforeunload', handleBeforeUnload);
   EditSlash.cleanup();
   EditMedia.deselect();
+  teardownInlineToolbar();
   document.body.classList.remove('editing');
 
   // Remove edit-mode-active class from the appropriate container
@@ -487,10 +506,15 @@ export function cleanup(): void {
     contentContainer.classList.remove('edit-mode-active');
   }
 
-  // Restore original Edit/Settings buttons (project mode only)
-  if (editMode === 'project' && toolbar && toolbar.dataset.originalHtml) {
-    toolbar.innerHTML = toolbar.dataset.originalHtml;
-    delete toolbar.dataset.originalHtml;
+  if (toolbar) {
+    toolbar.remove();
+    toolbar = null;
+  }
+
+  // Restore hidden project controls
+  if (hiddenProjectControls) {
+    hiddenProjectControls.classList.remove('edit-controls-hidden');
+    hiddenProjectControls = null;
   }
 
   // Remove hero thumbnail controls
@@ -520,21 +544,421 @@ function handleBeforeUnload(e: BeforeUnloadEvent): void {
 
 // ========== TOOLBAR ==========
 
+function createFixedToolbar(data: ProjectData | AboutData): HTMLElement {
+  const title = editMode === 'about'
+    ? 'About Page'
+    : ('name' in data ? data.name : 'Project');
+
+  const bar = document.createElement('div');
+  bar.className = 'edit-mode-toolbar edit-mode-toolbar-fixed';
+  bar.innerHTML = `
+    <div class="edit-toolbar-left">
+      <span class="edit-project-name">Editing: ${escapeHtmlAttr(title)}</span>
+      <span class="edit-status" aria-live="polite"></span>
+    </div>
+    <div class="edit-toolbar-right">
+      <button class="edit-btn edit-btn-icon" data-action="undo" aria-label="Undo" title="Undo (Cmd/Ctrl+Z)">${ICONS.undo}</button>
+      <button class="edit-btn edit-btn-icon" data-action="redo" aria-label="Redo" title="Redo (Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y)">${ICONS.redo}</button>
+      <button class="edit-btn edit-btn-secondary" data-action="cancel">Discard</button>
+      <button class="edit-btn edit-btn-primary" data-action="save">Save</button>
+    </div>
+  `;
+  bar.querySelector('[data-action="undo"]')?.addEventListener('click', handleUndoAction);
+  bar.querySelector('[data-action="redo"]')?.addEventListener('click', handleRedoAction);
+  bar.querySelector('[data-action="undo"]')?.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+  });
+  bar.querySelector('[data-action="redo"]')?.addEventListener('mousedown', (event) => {
+    event.preventDefault();
+  });
+  bar.querySelector('[data-action="cancel"]')?.addEventListener('click', handleCancel);
+  bar.querySelector('[data-action="save"]')?.addEventListener('click', handleSave);
+  document.body.appendChild(bar);
+  return bar;
+}
+
+function initInlineToolbar(): void {
+  ensureInlineToolbar();
+  if (inlineToolbarEventsBound) return;
+
+  document.addEventListener('selectionchange', handleInlineToolbarSelectionChange);
+  window.addEventListener('resize', scheduleInlineToolbarUpdate);
+  window.addEventListener('scroll', scheduleInlineToolbarUpdate, true);
+  inlineToolbarEventsBound = true;
+}
+
+function teardownInlineToolbar(): void {
+  if (inlineToolbarUpdateRaf !== null) {
+    cancelAnimationFrame(inlineToolbarUpdateRaf);
+    inlineToolbarUpdateRaf = null;
+  }
+  if (inlineToolbarEventsBound) {
+    document.removeEventListener('selectionchange', handleInlineToolbarSelectionChange);
+    window.removeEventListener('resize', scheduleInlineToolbarUpdate);
+    window.removeEventListener('scroll', scheduleInlineToolbarUpdate, true);
+    inlineToolbarEventsBound = false;
+  }
+  inlineToolbarContext = null;
+  if (inlineToolbar) {
+    inlineToolbar.remove();
+    inlineToolbar = null;
+  }
+}
+
+function ensureInlineToolbar(): HTMLElement {
+  if (inlineToolbar) return inlineToolbar;
+
+  const toolbarEl = document.createElement('div');
+  toolbarEl.className = 'inline-format-toolbar';
+  INLINE_TOOLBAR_ACTIONS.forEach(({ action, content, title, ariaLabel, isHtml }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `inline-format-btn inline-format-btn-${action}`;
+    btn.dataset.action = action;
+    btn.setAttribute('aria-label', ariaLabel);
+    btn.title = title;
+    if (isHtml) {
+      btn.innerHTML = content;
+    } else {
+      btn.textContent = content;
+    }
+    btn.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+    });
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      applyInlineToolbarAction(action);
+    });
+    toolbarEl.appendChild(btn);
+  });
+  document.body.appendChild(toolbarEl);
+  inlineToolbar = toolbarEl;
+  return toolbarEl;
+}
+
+function setInlineToolbarContext(context: InlineToolbarContext | null): void {
+  inlineToolbarContext = context;
+  scheduleInlineToolbarUpdate();
+}
+
+function handleInlineToolbarSelectionChange(): void {
+  scheduleInlineToolbarUpdate();
+}
+
+function scheduleInlineToolbarUpdate(): void {
+  if (!isActive) return;
+  if (inlineToolbarUpdateRaf !== null) return;
+  inlineToolbarUpdateRaf = requestAnimationFrame(() => {
+    inlineToolbarUpdateRaf = null;
+    updateInlineToolbar();
+  });
+}
+
+function updateInlineToolbar(): void {
+  const toolbarEl = ensureInlineToolbar();
+  const context = inlineToolbarContext;
+
+  if (!context || !context.row.isConnected || !context.textarea.isConnected) {
+    toolbarEl.classList.remove('visible');
+    return;
+  }
+
+  const textarea = context.textarea;
+  const { selectionStart, selectionEnd } = textarea;
+  if (document.activeElement !== textarea || selectionStart === selectionEnd) {
+    toolbarEl.classList.remove('visible');
+    return;
+  }
+
+  const selectionRect = getTextareaSelectionRect(textarea);
+  if (!selectionRect) {
+    toolbarEl.classList.remove('visible');
+    return;
+  }
+
+  updateInlineToolbarButtonState(textarea);
+
+  toolbarEl.classList.add('visible');
+  const toolbarRect = toolbarEl.getBoundingClientRect();
+  const margin = 8;
+  let left = selectionRect.left + (selectionRect.width / 2) - (toolbarRect.width / 2);
+  left = Math.max(margin, Math.min(left, window.innerWidth - toolbarRect.width - margin));
+
+  let top = selectionRect.top - toolbarRect.height - 10;
+  if (top < margin) {
+    top = selectionRect.bottom + 10;
+  }
+  toolbarEl.style.left = `${Math.max(margin, left)}px`;
+  toolbarEl.style.top = `${Math.max(margin, top)}px`;
+}
+
+function updateInlineToolbarButtonState(textarea: HTMLTextAreaElement): void {
+  if (!inlineToolbar) return;
+
+  const { value, selectionStart, selectionEnd } = textarea;
+  const hasSelection = selectionStart < selectionEnd;
+  const lineHeadingLevel = getLineHeadingLevel(value);
+  const linkInfo = hasSelection ? findLinkAtCursor(textarea) : null;
+  const linkActive = !!linkInfo && selectionStart >= linkInfo.start && selectionEnd <= linkInfo.end;
+
+  inlineToolbar.querySelectorAll<HTMLButtonElement>('.inline-format-btn').forEach((btn) => {
+    const action = btn.dataset.action as InlineAction | undefined;
+    if (!action) return;
+
+    let active = false;
+    switch (action) {
+      case 'bold':
+        active = hasSelection && hasInlineFormat(value, selectionStart, selectionEnd, '**', '**', 'bold');
+        break;
+      case 'italic':
+        active = hasSelection && hasInlineFormat(value, selectionStart, selectionEnd, '*', '*', 'italic');
+        break;
+      case 'underline':
+        active = hasSelection && hasInlineFormat(value, selectionStart, selectionEnd, '<u>', '</u>');
+        break;
+      case 'link':
+        active = linkActive;
+        break;
+      case 'heading-1':
+      case 'heading-2':
+      case 'heading-3':
+      case 'heading-4':
+        active = lineHeadingLevel === Number.parseInt(action.slice(-1), 10);
+        break;
+      default:
+        active = false;
+    }
+
+    btn.classList.toggle('is-active', active);
+  });
+}
+
+function applyInlineToolbarAction(action: InlineAction): void {
+  if (!inlineToolbarContext) return;
+  const { textarea, onEdit } = inlineToolbarContext;
+
+  switch (action) {
+    case 'bold':
+      toggleFormat(textarea, '**', '**', onEdit);
+      break;
+    case 'italic':
+      toggleFormat(textarea, '*', '*', onEdit);
+      break;
+    case 'underline':
+      toggleFormat(textarea, '<u>', '</u>', onEdit);
+      break;
+    case 'link':
+      void insertLink(textarea, container, () => {
+        onEdit();
+        scheduleInlineToolbarUpdate();
+      });
+      return;
+    case 'heading-1':
+    case 'heading-2':
+    case 'heading-3':
+    case 'heading-4':
+      toggleLineHeading(textarea, Number.parseInt(action.slice(-1), 10));
+      onEdit();
+      break;
+    default:
+      return;
+  }
+
+  scheduleInlineToolbarUpdate();
+}
+
+function toggleLineHeading(textarea: HTMLTextAreaElement, level: number): void {
+  const clampedLevel = Math.max(1, Math.min(level, 6));
+  const value = textarea.value;
+  const selectionStart = textarea.selectionStart;
+  const selectionEnd = textarea.selectionEnd;
+
+  const headingMatch = value.match(/^(\s*)(#{1,6})\s+(.*)$/);
+  const indentMatch = value.match(/^(\s*)/);
+  const indent = headingMatch?.[1] ?? indentMatch?.[1] ?? '';
+  const hashes = '#'.repeat(clampedLevel);
+
+  let nextValue = value;
+  let oldPrefixLength = indent.length;
+  let nextPrefixLength = indent.length;
+
+  if (headingMatch) {
+    const currentLevel = headingMatch[2]?.length ?? 1;
+    const body = headingMatch[3] ?? '';
+    oldPrefixLength = indent.length + currentLevel + 1;
+    if (currentLevel === clampedLevel) {
+      nextValue = `${indent}${body}`;
+      nextPrefixLength = indent.length;
+    } else {
+      nextValue = `${indent}${hashes} ${body}`;
+      nextPrefixLength = indent.length + hashes.length + 1;
+    }
+  } else {
+    const body = value.slice(indent.length).replace(/^\s+/, '');
+    nextValue = `${indent}${hashes} ${body}`;
+    oldPrefixLength = indent.length;
+    nextPrefixLength = indent.length + hashes.length + 1;
+  }
+
+  textarea.focus({ preventScroll: true });
+  textarea.setSelectionRange(0, textarea.value.length);
+  insertTextWithUndo(textarea, nextValue);
+
+  const delta = nextPrefixLength - oldPrefixLength;
+  const nextStart = Math.max(0, Math.min(nextValue.length, selectionStart + delta));
+  const nextEnd = Math.max(0, Math.min(nextValue.length, selectionEnd + delta));
+  textarea.selectionStart = nextStart;
+  textarea.selectionEnd = nextEnd;
+}
+
+function getLineHeadingLevel(text: string): number | null {
+  const match = text.match(/^(\s*)(#{1,6})\s+/);
+  if (!match) return null;
+  return match[2]?.length ?? null;
+}
+
+function hasInlineFormat(
+  value: string,
+  selectionStart: number,
+  selectionEnd: number,
+  before: string,
+  after: string,
+  kind: 'default' | 'bold' | 'italic' = 'default'
+): boolean {
+  const formatInfo = findInlineFormatAroundSelection(value, selectionStart, selectionEnd, before, after, kind);
+  return !!formatInfo;
+}
+
+function findInlineFormatAroundSelection(
+  value: string,
+  selectionStart: number,
+  selectionEnd: number,
+  before: string,
+  after: string,
+  kind: 'default' | 'bold' | 'italic' = 'default'
+): { innerStart: number; innerEnd: number } | null {
+  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+  const lineEnd = value.indexOf('\n', selectionEnd);
+  const effectiveLineEnd = lineEnd === -1 ? value.length : lineEnd;
+
+  let openPos = -1;
+  for (let i = selectionStart; i >= lineStart; i -= 1) {
+    if (value.slice(i, i + before.length) !== before) continue;
+    const charBefore = i > 0 ? value[i - 1] : '';
+    const charAfter = i + before.length < value.length ? value[i + before.length] : '';
+    if (kind === 'bold' && (charBefore === '*' || charAfter === '*')) continue;
+    if (kind === 'italic' && (charBefore === '*' || charAfter === '*')) continue;
+    openPos = i;
+    break;
+  }
+  if (openPos === -1) return null;
+
+  let closePos = -1;
+  const searchStart = Math.max(openPos + before.length, selectionEnd);
+  for (let i = searchStart; i <= effectiveLineEnd - after.length; i += 1) {
+    if (value.slice(i, i + after.length) !== after) continue;
+    const charBefore = i > 0 ? value[i - 1] : '';
+    const charAfter = i + after.length < value.length ? value[i + after.length] : '';
+    if (kind === 'bold' && (charBefore === '*' || charAfter === '*')) continue;
+    if (kind === 'italic' && (charBefore === '*' || charAfter === '*')) continue;
+    closePos = i;
+    break;
+  }
+  if (closePos === -1) return null;
+
+  const innerStart = openPos + before.length;
+  const innerEnd = closePos;
+  if (selectionStart < innerStart || selectionEnd > innerEnd) return null;
+  return { innerStart, innerEnd };
+}
+
+function getTextareaSelectionRect(textarea: HTMLTextAreaElement): DOMRect | null {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  if (start === end) return null;
+
+  const style = window.getComputedStyle(textarea);
+  const mirror = document.createElement('div');
+  const properties = [
+    'box-sizing',
+    'width',
+    'font-family',
+    'font-size',
+    'font-weight',
+    'font-style',
+    'line-height',
+    'letter-spacing',
+    'text-transform',
+    'text-align',
+    'white-space',
+    'word-break',
+    'overflow-wrap',
+    'padding-top',
+    'padding-right',
+    'padding-bottom',
+    'padding-left',
+    'border-top-width',
+    'border-right-width',
+    'border-bottom-width',
+    'border-left-width',
+  ];
+
+  properties.forEach((property) => {
+    mirror.style.setProperty(property, style.getPropertyValue(property));
+  });
+
+  mirror.style.position = 'fixed';
+  mirror.style.left = '-9999px';
+  mirror.style.top = '0';
+  mirror.style.visibility = 'hidden';
+  mirror.style.pointerEvents = 'none';
+  mirror.style.height = 'auto';
+  mirror.style.minHeight = '0';
+  mirror.style.maxHeight = 'none';
+  mirror.style.overflow = 'hidden';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.wordWrap = 'break-word';
+  mirror.style.width = `${textarea.offsetWidth}px`;
+
+  const before = document.createTextNode(textarea.value.slice(0, start));
+  const highlight = document.createElement('span');
+  highlight.textContent = textarea.value.slice(start, end) || ' ';
+  mirror.appendChild(before);
+  mirror.appendChild(highlight);
+  document.body.appendChild(mirror);
+
+  const highlightRect = highlight.getBoundingClientRect();
+  const mirrorRect = mirror.getBoundingClientRect();
+  const textareaRect = textarea.getBoundingClientRect();
+
+  const left = textareaRect.left + (highlightRect.left - mirrorRect.left) - textarea.scrollLeft;
+  const top = textareaRect.top + (highlightRect.top - mirrorRect.top) - textarea.scrollTop;
+  const width = Math.max(1, highlightRect.width);
+  const height = Math.max(1, highlightRect.height);
+
+  mirror.remove();
+  return new DOMRect(left, top, width, height);
+}
+
 /**
  * Update toolbar status indicator based on save state
  */
 function updateToolbarStatus(): void {
   if (!toolbar) return;
   const status = toolbar.querySelector<HTMLElement>('.edit-status');
-  const saveBtn = toolbar.querySelector<HTMLElement>('[data-action="save"]');
+  const saveBtn = toolbar.querySelector<HTMLButtonElement>('[data-action="save"]');
 
   // Remove all state classes
   saveBtn?.classList.remove('has-changes', 'is-saving', 'has-error');
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+  }
 
   if (status) {
     switch (saveState) {
       case SaveState.UNCHANGED:
-        status.textContent = '';
+        status.textContent = 'No unsaved changes';
         status.style.color = '';
         break;
       case SaveState.PENDING:
@@ -546,9 +970,13 @@ function updateToolbarStatus(): void {
         status.textContent = 'Saving...';
         status.style.color = '#3b82f6';
         saveBtn?.classList.add('is-saving');
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Saving...';
+        }
         break;
       case SaveState.SAVED:
-        status.textContent = 'Saved';
+        status.textContent = 'All changes saved';
         status.style.color = '#22c55e';
         break;
       case SaveState.ERROR:
@@ -562,6 +990,15 @@ function updateToolbarStatus(): void {
         saveBtn?.classList.add('has-error');
         break;
     }
+  }
+
+  const undoBtn = toolbar.querySelector<HTMLButtonElement>('[data-action="undo"]');
+  const redoBtn = toolbar.querySelector<HTMLButtonElement>('[data-action="redo"]');
+  if (undoBtn) {
+    undoBtn.disabled = false;
+  }
+  if (redoBtn) {
+    redoBtn.disabled = false;
   }
 }
 
@@ -772,6 +1209,161 @@ async function performAutoSave(): Promise<void> {
 
 // ========== BLOCK RENDERING ==========
 
+interface FocusSnapshot {
+  blockIndex: number;
+  lineIndex: number | null;
+  inputClass: string;
+  selectionStart: number;
+  selectionEnd: number;
+}
+
+function getBlockStructureSignature(block: Block): string {
+  if (block.type === 'row') {
+    return `row:${block.id}:${block.left.type}:${block.left.id}:${block.right.type}:${block.right.id}`;
+  }
+  return `${block.type}:${block.id}`;
+}
+
+function getBlocksStructureSignature(list: Block[]): string {
+  return list.map(getBlockStructureSignature).join('|');
+}
+
+function captureFocusSnapshot(): FocusSnapshot | null {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement)) return null;
+
+  const wrapper = active.closest<HTMLElement>('.block-wrapper');
+  if (!wrapper) return null;
+
+  const blockIndex = Number.parseInt(wrapper.dataset.blockIndex ?? '', 10);
+  if (Number.isNaN(blockIndex)) return null;
+
+  const lineRow = active.closest<HTMLElement>('.text-block-line');
+  const lineIndexRaw = lineRow ? Number.parseInt(lineRow.dataset.lineIndex ?? '', 10) : Number.NaN;
+  const lineIndex = Number.isNaN(lineIndexRaw) ? null : lineIndexRaw;
+
+  return {
+    blockIndex,
+    lineIndex,
+    inputClass: active.className || '',
+    selectionStart: active.selectionStart ?? 0,
+    selectionEnd: active.selectionEnd ?? 0,
+  };
+}
+
+function restoreFocusSnapshot(snapshot: FocusSnapshot | null): void {
+  if (!snapshot || !container) return;
+
+  const wrapper = container.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${snapshot.blockIndex}"]`);
+  if (!wrapper) return;
+
+  if (snapshot.lineIndex !== null) {
+    const row = wrapper.querySelector<HTMLElement>(`.text-block-line[data-line-index="${snapshot.lineIndex}"]`);
+    if (row && !row.classList.contains('is-editing')) {
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    }
+  }
+
+  let input: HTMLTextAreaElement | HTMLInputElement | null = null;
+  if (snapshot.lineIndex !== null) {
+    input = wrapper.querySelector<HTMLTextAreaElement>(`.text-block-line[data-line-index="${snapshot.lineIndex}"] .text-line-input`);
+  }
+
+  if (!input && snapshot.inputClass.trim()) {
+    const classSelector = snapshot.inputClass
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((className) => `.${className}`)
+      .join('');
+    if (classSelector) {
+      input = wrapper.querySelector<HTMLTextAreaElement | HTMLInputElement>(classSelector);
+    }
+  }
+
+  if (!input) {
+    input = wrapper.querySelector<HTMLTextAreaElement | HTMLInputElement>('textarea, input[type="text"], input[type="url"]');
+  }
+  if (!input) return;
+
+  input.focus({ preventScroll: true });
+  const valueLength = input.value.length;
+  const start = Math.max(0, Math.min(valueLength, snapshot.selectionStart));
+  const end = Math.max(0, Math.min(valueLength, snapshot.selectionEnd));
+  input.selectionStart = start;
+  input.selectionEnd = end;
+}
+
+function restoreBlocksFromHistory(nextBlocks: Block[]): void {
+  const previousBlocks = blocks;
+  const focusSnapshot = captureFocusSnapshot();
+  EditMedia.deselect();
+
+  const previousSignature = getBlocksStructureSignature(previousBlocks);
+  const nextSignature = getBlocksStructureSignature(nextBlocks);
+
+  blocks = nextBlocks;
+
+  if (!container || previousSignature !== nextSignature) {
+    renderBlocks();
+    restoreFocusSnapshot(focusSnapshot);
+    return;
+  }
+
+  let requiresFullRender = false;
+
+  for (let index = 0; index < nextBlocks.length; index += 1) {
+    const prevBlock = previousBlocks[index];
+    const nextBlock = nextBlocks[index];
+    if (!prevBlock || !nextBlock) {
+      requiresFullRender = true;
+      break;
+    }
+
+    if (JSON.stringify(prevBlock) === JSON.stringify(nextBlock)) {
+      continue;
+    }
+
+    const wrapper = container.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${index}"]`);
+    if (!wrapper) {
+      requiresFullRender = true;
+      break;
+    }
+
+    const content = wrapper.querySelector<HTMLElement>(':scope > .block-content');
+    if (!content) {
+      requiresFullRender = true;
+      break;
+    }
+
+    wrapper.dataset.blockId = nextBlock.id;
+    wrapper.dataset.blockType = nextBlock.type;
+
+    content.innerHTML = '';
+    content.appendChild(renderBlockContent(nextBlock, { index }));
+
+    const hasAlignmentToolbar = nextBlock.type !== 'divider' && nextBlock.type !== 'code' && nextBlock.type !== 'row';
+    const currentAlignmentToolbar = wrapper.querySelector<HTMLElement>(':scope > .block-align-toolbar');
+    if (hasAlignmentToolbar) {
+      const nextAlignmentToolbar = createAlignmentToolbar(nextBlock, { index });
+      if (currentAlignmentToolbar) {
+        currentAlignmentToolbar.replaceWith(nextAlignmentToolbar);
+      } else {
+        wrapper.appendChild(nextAlignmentToolbar);
+      }
+    } else {
+      currentAlignmentToolbar?.remove();
+    }
+  }
+
+  if (requiresFullRender) {
+    renderBlocks();
+  } else {
+    setInlineToolbarContext(null);
+  }
+
+  restoreFocusSnapshot(focusSnapshot);
+}
+
 /**
  * Render all blocks to the container
  */
@@ -779,6 +1371,7 @@ export function renderBlocks(): void {
   if (!container) return;
 
   EditMedia.deselect();
+  setInlineToolbarContext(null);
 
   const cont = container; // Local reference for closure
   cont.innerHTML = '';
@@ -1162,7 +1755,19 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     );
   };
 
+  const syncLineFromTextarea = (row: HTMLElement, textarea: HTMLTextAreaElement): void => {
+    const currentLineIndex = Number.parseInt(row.dataset.lineIndex ?? '', 10);
+    if (Number.isNaN(currentLineIndex) || currentLineIndex < 0 || currentLineIndex >= lines.length) return;
+    lines[currentLineIndex] = textarea.value;
+    updateBlockContent();
+    syncLineHeight(row);
+    markDirty();
+  };
+
   const renderLines = (focusLineIndex: number | null = null, focusCaret: number | { start: number; end?: number } | null = null): void => {
+    if (inlineToolbarContext?.textarea && lineContainer.contains(inlineToolbarContext.textarea)) {
+      setInlineToolbarContext(null);
+    }
     lineContainer.innerHTML = '';
     const headingSlugState = new Set<string>();
     lines.forEach((lineText, lineIndex) => {
@@ -1238,9 +1843,12 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
         return;
       }
 
-      lines[lineIndex] = newValue;
+      const currentLineIndex = Number.parseInt(row.dataset.lineIndex ?? '', 10);
+      const targetLineIndex = Number.isNaN(currentLineIndex) ? lineIndex : currentLineIndex;
+      lines[targetLineIndex] = newValue;
       updateBlockContent();
       syncLineHeight(row);
+      scheduleInlineToolbarUpdate();
     });
 
     textarea.addEventListener('keydown', (e) => {
@@ -1251,23 +1859,25 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
       // Handle Cmd+K separately due to async dialog
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        insertLink(textarea, container, () => {
+        void insertLink(textarea, container, () => {
           const currentLineIndex = Number.parseInt(row.dataset.lineIndex ?? '', 10);
           const targetLineIndex = Number.isNaN(currentLineIndex) ? lineIndex : currentLineIndex;
 
           lines[targetLineIndex] = textarea.value;
           updateBlockContent();
-          // Rebuild rows so preview reflects the inserted/updated link immediately.
-          renderLines();
           markDirty();
+          scheduleInlineToolbarUpdate();
         });
         return;
       }
 
       if (handleFormattingShortcuts(e, textarea, markDirty, container)) {
-        lines[lineIndex] = textarea.value;
+        const currentLineIndex = Number.parseInt(row.dataset.lineIndex ?? '', 10);
+        const targetLineIndex = Number.isNaN(currentLineIndex) ? lineIndex : currentLineIndex;
+        lines[targetLineIndex] = textarea.value;
         updateBlockContent();
         syncLineHeight(row);
+        scheduleInlineToolbarUpdate();
         return;
       }
 
@@ -1316,6 +1926,10 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
       deactivateLine(row);
     });
 
+    textarea.addEventListener('select', scheduleInlineToolbarUpdate);
+    textarea.addEventListener('keyup', scheduleInlineToolbarUpdate);
+    textarea.addEventListener('mouseup', scheduleInlineToolbarUpdate);
+
     row.appendChild(preview);
     row.appendChild(textarea);
     return row;
@@ -1346,6 +1960,14 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
       textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
     }
 
+    setInlineToolbarContext({
+      textarea,
+      row,
+      onEdit: () => {
+        syncLineFromTextarea(row, textarea);
+      },
+    });
+    scheduleInlineToolbarUpdate();
     syncLineHeight(row);
   };
 
@@ -1389,6 +2011,9 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
       preview.appendChild(rendered.node);
     }
 
+    if (inlineToolbarContext?.textarea === textarea) {
+      setInlineToolbarContext(null);
+    }
     activeLineIndex = null;
     syncLineHeight(row);
   };
@@ -2394,16 +3019,16 @@ function handleGlobalKeydown(e: KeyboardEvent): void {
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'z') {
     e.preventDefault();
     if (e.shiftKey) {
-      EditUndo.redo();
+      handleRedoAction();
     } else {
-      EditUndo.undo();
+      handleUndoAction();
     }
     return;
   }
 
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'y') {
     e.preventDefault();
-    EditUndo.redo();
+    handleRedoAction();
     return;
   }
 
@@ -2417,6 +3042,49 @@ function handleGlobalKeydown(e: KeyboardEvent): void {
     e.stopPropagation();
     handleCancel();
   }
+}
+
+function handleUndoAction(): void {
+  if (tryNativeInputHistory('undo')) {
+    updateToolbarStatus();
+    return;
+  }
+  EditUndo.undo();
+  updateToolbarStatus();
+  scheduleInlineToolbarUpdate();
+}
+
+function handleRedoAction(): void {
+  if (tryNativeInputHistory('redo')) {
+    updateToolbarStatus();
+    return;
+  }
+  EditUndo.redo();
+  updateToolbarStatus();
+  scheduleInlineToolbarUpdate();
+}
+
+function tryNativeInputHistory(action: 'undo' | 'redo'): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement)) return false;
+  if (active.disabled || active.readOnly) return false;
+
+  if (active instanceof HTMLInputElement) {
+    const type = (active.type || 'text').toLowerCase();
+    const supportedInputTypes = new Set(['text', 'search', 'url', 'tel', 'email', 'password']);
+    if (!supportedInputTypes.has(type)) {
+      return false;
+    }
+  }
+
+  const command = action === 'undo' ? 'undo' : 'redo';
+  const handled = document.execCommand(command);
+  if (!handled) {
+    return false;
+  }
+
+  scheduleInlineToolbarUpdate();
+  return true;
 }
 
 // ========== SAVE/CANCEL ==========
