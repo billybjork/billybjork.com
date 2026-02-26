@@ -21,7 +21,7 @@ import {
 import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
 import EditSlash from './slash';
-import EditMedia, { type VideoUploadProgressUpdate } from './media';
+import EditMedia, { type VideoUploadProgressUpdate, uploadPosterForVideo, capturePosterFromVideo } from './media';
 import EditUndo from './undo';
 import { persistScrollForNavigation } from './scroll-restore';
 
@@ -126,6 +126,9 @@ const dragState: DragState = {
   currentDropIndex: null,
   isDragging: false,
 };
+
+// Hero thumbnail controls element (injected when edit mode activates for a project with hero video)
+let heroThumbnailControls: HTMLElement | null = null;
 
 let renderScrollRestoreToken = 0;
 let containerScrollRestoreToken = 0;
@@ -559,6 +562,16 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Mark edit state before block rendering so video elements never autoplay in the editor.
   document.body.classList.add('editing');
 
+  // Inject hero thumbnail controls for project mode with hero video
+  if (editMode === 'project' && 'video' in data && data.video?.hls) {
+    const projectItem = contentContainer.closest('.project-item');
+    const videoContainer = projectItem?.querySelector('.video-container');
+    if (videoContainer) {
+      heroThumbnailControls = createHeroThumbnailControls(data as ProjectData);
+      videoContainer.after(heroThumbnailControls);
+    }
+  }
+
   // Render blocks
   renderBlocks();
   const stabilityRoot = editMode === 'project'
@@ -736,6 +749,12 @@ export function cleanup(): void {
   if (editMode === 'project' && toolbar && toolbar.dataset.originalHtml) {
     toolbar.innerHTML = toolbar.dataset.originalHtml;
     delete toolbar.dataset.originalHtml;
+  }
+
+  // Remove hero thumbnail controls
+  if (heroThumbnailControls) {
+    heroThumbnailControls.remove();
+    heroThumbnailControls = null;
   }
 
   // Remove edit param from URL
@@ -2987,6 +3006,153 @@ export function updateBlock(
   options: UpdateBlockOptions = {}
 ): void {
   updateBlockFieldsInContext({ index }, updates, options);
+}
+
+// ========== HERO THUMBNAIL CONTROLS ==========
+
+/**
+ * Create hero thumbnail controls for customizing the hero video thumbnail.
+ */
+function createHeroThumbnailControls(data: ProjectData): HTMLElement {
+  const controls = document.createElement('div');
+  controls.className = 'edit-hero-thumbnail-controls';
+
+  const currentThumbnail = data.video?.thumbnail || '';
+
+  controls.innerHTML = `
+    <div class="edit-hero-thumbnail-header">
+      <span class="edit-hero-thumbnail-label">Thumbnail</span>
+    </div>
+    <div class="edit-hero-thumbnail-content">
+      <img class="edit-hero-thumbnail-preview" src="${escapeAttr(currentThumbnail)}"
+           alt="Thumbnail" style="${currentThumbnail ? '' : 'display:none'}">
+      <div class="edit-hero-thumbnail-actions">
+        <input type="url" class="edit-hero-thumbnail-input"
+               placeholder="Thumbnail image URL..."
+               value="${escapeAttr(currentThumbnail)}">
+        <div class="edit-hero-thumbnail-buttons">
+          <button type="button" class="edit-btn-small" data-action="upload">Upload</button>
+          <button type="button" class="edit-btn-small" data-action="capture">Use current frame</button>
+          <button type="button" class="edit-btn-small" data-action="clear" style="${currentThumbnail ? '' : 'display:none'}">Clear</button>
+        </div>
+        <input type="file" class="edit-hero-thumbnail-file" accept="image/*" style="display: none;">
+      </div>
+    </div>
+  `;
+
+  // Setup event listeners
+  const input = controls.querySelector('.edit-hero-thumbnail-input') as HTMLInputElement;
+  const preview = controls.querySelector('.edit-hero-thumbnail-preview') as HTMLImageElement;
+  const uploadBtn = controls.querySelector('[data-action="upload"]') as HTMLButtonElement;
+  const captureBtn = controls.querySelector('[data-action="capture"]') as HTMLButtonElement;
+  const clearBtn = controls.querySelector('[data-action="clear"]') as HTMLButtonElement;
+  const fileInput = controls.querySelector('.edit-hero-thumbnail-file') as HTMLInputElement;
+
+  // Helper to sync thumbnail URL
+  const syncThumbnail = (url: string | null): void => {
+    if (projectData && 'video' in projectData && projectData.video) {
+      // Track old thumbnail URL for orphan cleanup
+      const oldThumbnail = projectData.video.thumbnail;
+      if (oldThumbnail && oldThumbnail !== url) {
+        trackCleanupCandidateUrl(oldThumbnail);
+      }
+      projectData.video.thumbnail = url || undefined;
+      markDirty();
+    }
+    if (input) input.value = url || '';
+    if (preview) {
+      if (url) {
+        preview.src = url;
+        preview.style.display = '';
+      } else {
+        preview.style.display = 'none';
+      }
+    }
+    if (clearBtn) {
+      clearBtn.style.display = url ? '' : 'none';
+    }
+  };
+
+  // URL input change
+  input?.addEventListener('change', () => {
+    syncThumbnail(input.value.trim() || null);
+  });
+  input?.addEventListener('blur', () => {
+    syncThumbnail(input.value.trim() || null);
+  });
+
+  // Upload button
+  uploadBtn?.addEventListener('click', () => fileInput?.click());
+
+  fileInput?.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showNotification('Please select an image file', 'error');
+      return;
+    }
+
+    try {
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Uploading...';
+      showNotification('Uploading thumbnail...', 'info');
+      const url = await uploadPosterForVideo(file);
+      syncThumbnail(url);
+      showNotification('Thumbnail uploaded!', 'success');
+    } catch (error) {
+      showNotification(`Upload failed: ${(error as Error).message}`, 'error');
+    } finally {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = 'Upload';
+      fileInput.value = '';
+    }
+  });
+
+  // Capture current frame button
+  captureBtn?.addEventListener('click', async () => {
+    // Find the hero video element on the page
+    const projectItem = controls.closest('.project-item');
+    const video = projectItem?.querySelector('.video-container video') as HTMLVideoElement | null;
+
+    if (!video) {
+      showNotification('No video element found', 'error');
+      return;
+    }
+
+    if (video.readyState < 2) {
+      showNotification('Video not ready yet. Please wait for it to load.', 'info');
+      return;
+    }
+
+    try {
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'Capturing...';
+      const url = await capturePosterFromVideo(video);
+      syncThumbnail(url);
+      showNotification('Thumbnail captured!', 'success');
+    } catch (error) {
+      showNotification(`Capture failed: ${(error as Error).message}`, 'error');
+    } finally {
+      captureBtn.disabled = false;
+      captureBtn.textContent = 'Use current frame';
+    }
+  });
+
+  // Clear button
+  clearBtn?.addEventListener('click', () => {
+    syncThumbnail(null);
+    showNotification('Thumbnail cleared', 'info');
+  });
+
+  return controls;
+}
+
+/**
+ * Escape HTML attribute value
+ */
+function escapeAttr(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ========== PUBLIC API ==========
