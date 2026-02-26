@@ -186,26 +186,49 @@ function getVideoContainer(videoElement: HTMLVideoElement): HTMLElement | null {
   return videoElement.closest<HTMLElement>('.video-container');
 }
 
+function parsePositiveNumber(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function resolveVideoAspectRatio(videoElement: HTMLVideoElement): number | null {
+  const metadataWidth = parsePositiveNumber(videoElement.dataset.videoWidth);
+  const metadataHeight = parsePositiveNumber(videoElement.dataset.videoHeight);
+  if (metadataWidth && metadataHeight) {
+    return metadataWidth / metadataHeight;
+  }
+
+  const nativeWidth = videoElement.videoWidth;
+  const nativeHeight = videoElement.videoHeight;
+  if (nativeWidth > 0 && nativeHeight > 0) {
+    return nativeWidth / nativeHeight;
+  }
+
+  const posterAspectRatio = parsePositiveNumber(videoElement.dataset.posterAspectRatio);
+  if (posterAspectRatio) {
+    return posterAspectRatio;
+  }
+
+  return null;
+}
+
 function updateVideoContainerLayout(videoElement: HTMLVideoElement): void {
   const container = getVideoContainer(videoElement);
   if (!container) return;
 
-  const nativeWidth = videoElement.videoWidth;
-  const nativeHeight = videoElement.videoHeight;
-  if (!nativeWidth || !nativeHeight) return;
-  const aspectRatio = nativeWidth / nativeHeight;
+  const aspectRatio = resolveVideoAspectRatio(videoElement);
+  if (aspectRatio) {
+    container.style.setProperty('--video-aspect-ratio', aspectRatio.toString());
+  }
 
   const viewportPadding = window.innerWidth <= MOBILE_BREAKPOINT
     ? VIDEO_VIEWPORT_PADDING_MOBILE
     : VIDEO_VIEWPORT_PADDING_DESKTOP;
-  const containerRect = container.getBoundingClientRect();
-  const topOffset = Math.max(containerRect.top, viewportPadding);
-  const availableHeight = window.innerHeight - topOffset - viewportPadding;
+  const availableHeight = window.innerHeight - (viewportPadding * 2);
   const maxHeight = Math.max(VIDEO_MIN_RENDER_HEIGHT, Math.floor(availableHeight));
 
-  container.style.setProperty('--video-aspect-ratio', aspectRatio.toString());
   container.style.setProperty('--video-max-height', `${maxHeight}px`);
-  container.classList.add('video-dimensions-ready');
 }
 
 function bindVideoLayout(videoElement: HTMLVideoElement): void {
@@ -214,37 +237,51 @@ function bindVideoLayout(videoElement: HTMLVideoElement): void {
   }
 
   const refreshLayout = () => updateVideoContainerLayout(videoElement);
-  let scrollRafId: number | null = null;
-  const handleScroll = () => {
-    if (scrollRafId !== null) return;
-    scrollRafId = window.requestAnimationFrame(() => {
-      scrollRafId = null;
-      refreshLayout();
-    });
-  };
+  const posterUrl = videoElement.getAttribute('poster');
+  const needsPosterProbe = !!posterUrl && !resolveVideoAspectRatio(videoElement);
+  let posterProbe: HTMLImageElement | null = null;
+  let posterProbeActive = false;
+
+  if (needsPosterProbe && posterUrl) {
+    posterProbeActive = true;
+    posterProbe = new Image();
+    posterProbe.onload = () => {
+      if (!posterProbeActive || !posterProbe) return;
+      const { naturalWidth, naturalHeight } = posterProbe;
+      if (naturalWidth > 0 && naturalHeight > 0) {
+        videoElement.dataset.posterAspectRatio = (naturalWidth / naturalHeight).toString();
+        refreshLayout();
+      }
+      posterProbeActive = false;
+      posterProbe = null;
+    };
+    posterProbe.onerror = () => {
+      posterProbeActive = false;
+      posterProbe = null;
+    };
+    posterProbe.src = posterUrl;
+  }
 
   videoElement.addEventListener('loadedmetadata', refreshLayout);
-  videoElement.addEventListener('resize', refreshLayout);
   window.addEventListener('resize', refreshLayout);
-  window.addEventListener('scroll', handleScroll, { passive: true });
   refreshLayout();
 
   videoElement.videoLayoutCleanup = () => {
     videoElement.removeEventListener('loadedmetadata', refreshLayout);
-    videoElement.removeEventListener('resize', refreshLayout);
     window.removeEventListener('resize', refreshLayout);
-    window.removeEventListener('scroll', handleScroll);
-    if (scrollRafId !== null) {
-      window.cancelAnimationFrame(scrollRafId);
-      scrollRafId = null;
+    posterProbeActive = false;
+    if (posterProbe) {
+      posterProbe.onload = null;
+      posterProbe.onerror = null;
+      posterProbe.src = '';
+      posterProbe = null;
     }
 
     const container = getVideoContainer(videoElement);
     if (!container) return;
 
-    container.classList.remove('video-dimensions-ready');
-    container.style.removeProperty('--video-aspect-ratio');
     container.style.removeProperty('--video-max-height');
+    delete videoElement.dataset.posterAspectRatio;
   };
 }
 

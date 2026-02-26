@@ -12,6 +12,8 @@ export interface VideoData {
   frame_width?: number;
   frame_height?: number;
   fps?: number;
+  video_width?: number;
+  video_height?: number;
 }
 
 export interface ProjectData {

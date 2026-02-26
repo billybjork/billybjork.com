@@ -1,6 +1,11 @@
 {% if is_open %}
     {% if project.video_link %}
-    <section class="video-container" id="hero">
+    <section
+        class="video-container"
+        id="hero"
+        {% if project.video_width and project.video_height %}
+        style="--video-aspect-ratio: {{ (project.video_width / project.video_height) | round(8) }};"
+        {% endif %}>
         <video id="video-player-{{ project.id }}"
                class="lazy-video"
                controls
@@ -8,8 +13,13 @@
                autoplay
                preload="auto"
                fetchpriority="high"
+               {% if project.video_width and project.video_height %}width="{{ project.video_width }}" height="{{ project.video_height }}"{% endif %}
                {% if project.thumbnail_link %}poster="{{ project.thumbnail_link }}"{% endif %}
-               data-hls-url="{{ project.video_link }}">
+               data-hls-url="{{ project.video_link }}"
+               {% if project.video_width and project.video_height %}
+               data-video-width="{{ project.video_width }}"
+               data-video-height="{{ project.video_height }}"
+               {% endif %}>
                
         </video>
     </section>

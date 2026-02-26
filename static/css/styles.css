@@ -667,7 +667,8 @@ footer {
         calc(var(--video-max-height) * var(--video-aspect-ratio))
     );
     max-width: calc(100vw - (var(--video-inline-padding) * 2));
-    min-height: 200px; /* Provide minimum height while loading */
+    aspect-ratio: var(--video-aspect-ratio);
+    max-height: var(--video-max-height);
     margin: 0 auto;
     display: flex;
     justify-content: center;
@@ -676,16 +677,12 @@ footer {
     overflow: hidden;
 }
 
-.video-container.video-dimensions-ready {
-    min-height: 0;
-}
-
 .video-container video {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
     max-width: 100%;
-    max-height: var(--video-max-height);
+    max-height: 100%;
     object-fit: contain;
 }
 
