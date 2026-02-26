@@ -1,24 +1,38 @@
+import asyncio
 import io
 import logging
 import os
 import tempfile
 import threading
-from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from dependencies import require_edit_mode
+from routers.admin_payload import (
+    build_project_frontmatter,
+    collect_asset_refs,
+    collect_cleanup_candidates,
+    extract_s3_keys,
+    validate_save_project_input,
+)
+from routers.admin_video_state import (
+    TIMELINE_FRAME_HEIGHT,
+    TIMELINE_FRAME_WIDTH,
+    TIMELINE_INITIAL_FRAME_COUNT,
+    TIMELINE_TOTAL_FRAME_COUNT,
+    hls_sessions as _hls_sessions,
+    is_remote_video_source as _is_remote_video_source,
+    temp_video_files as _temp_video_files,
+)
 from utils.assets import (
     cleanup_old_hls_versions,
     cleanup_orphans,
     compute_hash,
     delete_video_prefix,
-    extract_cloudfront_urls,
-    extract_s3_key,
     find_by_hash,
     register_asset,
 )
@@ -37,216 +51,6 @@ from utils.content import (
 from utils.s3 import CLOUDFRONT_DOMAIN
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class TempVideoState:
-    path: str
-    frames: list[str]
-    frames_complete: bool = False
-    is_remote: bool = False
-    timestamp: datetime = field(default_factory=datetime.now)
-
-
-@dataclass
-class HlsSessionState:
-    status: str = "processing"
-    stage: str = "Starting HLS encoding..."
-    progress: float = 0
-    hls_url: Optional[str] = None
-    temp_id: Optional[str] = None
-    slug: str = ""
-    error: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.now)
-
-
-class TempVideoStore:
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._items: dict[str, TempVideoState] = {}
-
-    def create(self, temp_id: str, **kwargs: Any) -> None:
-        with self._lock:
-            self._items[temp_id] = TempVideoState(**kwargs)
-
-    def update(self, temp_id: str, **kwargs: Any) -> bool:
-        with self._lock:
-            state = self._items.get(temp_id)
-            if not state:
-                return False
-            for key, value in kwargs.items():
-                setattr(state, key, value)
-            return True
-
-    def get(self, temp_id: str) -> Optional[dict[str, Any]]:
-        with self._lock:
-            state = self._items.get(temp_id)
-            return asdict(state) if state else None
-
-    def pop(self, temp_id: str) -> Optional[dict[str, Any]]:
-        with self._lock:
-            state = self._items.pop(temp_id, None)
-            return asdict(state) if state else None
-
-    def delete(self, temp_id: str) -> bool:
-        with self._lock:
-            return self._items.pop(temp_id, None) is not None
-
-    def exists(self, temp_id: str) -> bool:
-        with self._lock:
-            return temp_id in self._items
-
-    def snapshot(self) -> list[tuple[str, dict[str, Any]]]:
-        with self._lock:
-            return [(temp_id, asdict(state)) for temp_id, state in self._items.items()]
-
-
-class HlsSessionStore:
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._items: dict[str, HlsSessionState] = {}
-
-    def create(self, session_id: str, **kwargs: Any) -> None:
-        with self._lock:
-            self._items[session_id] = HlsSessionState(**kwargs)
-
-    def update(self, session_id: str, **kwargs: Any) -> bool:
-        with self._lock:
-            state = self._items.get(session_id)
-            if not state:
-                return False
-            for key, value in kwargs.items():
-                setattr(state, key, value)
-            return True
-
-    def get(self, session_id: str) -> Optional[dict[str, Any]]:
-        with self._lock:
-            state = self._items.get(session_id)
-            return asdict(state) if state else None
-
-    def delete(self, session_id: str) -> bool:
-        with self._lock:
-            return self._items.pop(session_id, None) is not None
-
-    def snapshot(self) -> list[tuple[str, dict[str, Any]]]:
-        with self._lock:
-            return [(session_id, asdict(state)) for session_id, state in self._items.items()]
-
-
-# Thread-safe process state stores
-_temp_video_files = TempVideoStore()
-_hls_sessions = HlsSessionStore()
-
-TIMELINE_INITIAL_FRAME_COUNT = 6
-TIMELINE_TOTAL_FRAME_COUNT = 20
-TIMELINE_FRAME_WIDTH = 96
-TIMELINE_FRAME_HEIGHT = 54
-
-
-def _is_remote_video_source(path: str) -> bool:
-    return isinstance(path, str) and (
-        path.startswith("http://") or path.startswith("https://")
-    )
-
-
-def _validate_save_project_input(data: dict[str, Any]) -> tuple[str, str]:
-    """Pure input validation for project save payload."""
-    slug_raw = data.get("slug")
-    original_slug_raw = data.get("original_slug") or slug_raw
-
-    if not isinstance(slug_raw, str) or not slug_raw:
-        raise HTTPException(status_code=400, detail="Slug is required")
-    if not isinstance(original_slug_raw, str) or not original_slug_raw:
-        raise HTTPException(status_code=400, detail="Original slug is required")
-
-    slug = slug_raw.strip()
-    original_slug = original_slug_raw.strip()
-    if not validate_slug(slug):
-        raise HTTPException(status_code=400, detail="Invalid slug format")
-    if not validate_slug(original_slug):
-        raise HTTPException(status_code=400, detail="Invalid original slug format")
-
-    return slug, original_slug
-
-
-def _build_project_frontmatter(
-    data: dict[str, Any], slug: str
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Pure transformation from request data to frontmatter + normalized video payload."""
-    frontmatter: dict[str, Any] = {
-        "name": data.get("name", slug),
-        "slug": slug,
-        "date": data.get("date"),
-        "pinned": data.get("pinned", False),
-        "draft": data.get("draft", False),
-    }
-
-    raw_video = data.get("video", {})
-    video = raw_video if isinstance(raw_video, dict) else {}
-    normalized_video: dict[str, Any] = {}
-    for key in ("hls", "thumbnail", "spriteSheet"):
-        value = video.get(key)
-        if isinstance(value, str) and value.strip():
-            normalized_video[key] = value.strip()
-
-    for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps"):
-        value = video.get(key)
-        if isinstance(value, bool):
-            continue
-        if isinstance(value, (int, float)) and value > 0:
-            normalized_video[key] = int(value)
-            continue
-        if isinstance(value, str):
-            try:
-                parsed = int(float(value.strip()))
-            except ValueError:
-                continue
-            if parsed > 0:
-                normalized_video[key] = parsed
-
-    if normalized_video:
-        frontmatter["video"] = normalized_video
-
-    youtube = data.get("youtube")
-    if youtube:
-        frontmatter["youtube"] = youtube
-
-    return frontmatter, normalized_video
-
-
-def _collect_asset_refs(markdown_content: str, video: Optional[dict[str, Any]] = None) -> set[str]:
-    """Pure extraction of referenced asset URLs from markdown and video metadata."""
-    refs = extract_cloudfront_urls(markdown_content or "")
-    if isinstance(video, dict):
-        for key in ("hls", "thumbnail", "spriteSheet"):
-            value = video.get(key)
-            if isinstance(value, str) and value:
-                refs.add(value)
-    return refs
-
-
-def _collect_cleanup_candidates(data: dict[str, Any], limit: int = 200) -> set[str]:
-    """Extract optional client-provided URLs that should be checked for orphan cleanup."""
-    raw_candidates = data.get("cleanup_candidates")
-    if not isinstance(raw_candidates, list):
-        return set()
-
-    candidates: set[str] = set()
-    for item in raw_candidates[:limit]:
-        if isinstance(item, str):
-            value = item.strip()
-            if value:
-                candidates.add(value)
-    return candidates
-
-
-def _extract_s3_keys(urls: set[str]) -> set[str]:
-    """Pure conversion from URL set to S3 key set."""
-    keys = set()
-    for url in urls:
-        key = extract_s3_key(url)
-        if key:
-            keys.add(key)
-    return keys
 
 
 def _start_background_thumbnail_extraction(source_path: str, temp_id: str):
@@ -281,7 +85,7 @@ router = APIRouter(
 @router.get("/project/{slug}")
 async def get_project(slug: str):
     """Get project data for editing."""
-    project_data = load_project(slug)
+    project_data = await asyncio.to_thread(load_project, slug)
     if not project_data:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -316,10 +120,10 @@ async def save_project_endpoint(request: Request):
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail="Invalid request body")
 
-    slug, original_slug = _validate_save_project_input(data)
+    slug, original_slug = validate_save_project_input(data)
     base_revision = data.get("base_revision")
 
-    if original_slug != slug and load_project(slug):
+    if original_slug != slug and await asyncio.to_thread(load_project, slug):
         raise HTTPException(
             status_code=400,
             detail="Project with this slug already exists",
@@ -328,9 +132,9 @@ async def save_project_endpoint(request: Request):
     # Conflict check: if client sent a base_revision, verify it still matches
     if base_revision and not data.get("force"):
         filepath = PROJECTS_DIR / f"{original_slug}.md"
-        current_revision = content_revision(filepath)
+        current_revision = await asyncio.to_thread(content_revision, filepath)
         if current_revision and base_revision != current_revision:
-            current_project = load_project(original_slug)
+            current_project = await asyncio.to_thread(load_project, original_slug)
             return JSONResponse(
                 status_code=409,
                 content={
@@ -343,7 +147,7 @@ async def save_project_endpoint(request: Request):
             )
 
     # Load old project to track removed references
-    old_project = load_project(original_slug)
+    old_project = await asyncio.to_thread(load_project, original_slug)
     if not old_project:
         raise HTTPException(
             status_code=404,
@@ -355,28 +159,28 @@ async def save_project_endpoint(request: Request):
         "thumbnail": old_project.get("thumbnail_link"),
         "spriteSheet": old_project.get("sprite_sheet_link"),
     }
-    old_refs = _collect_asset_refs(old_project.get("markdown_content", ""), old_video)
+    old_refs = collect_asset_refs(old_project.get("markdown_content", ""), old_video)
 
-    frontmatter, video = _build_project_frontmatter(data, slug)
+    frontmatter, video = build_project_frontmatter(data, slug)
 
     markdown_content = data.get("markdown", "")
     if not isinstance(markdown_content, str):
         raise HTTPException(status_code=400, detail="Markdown must be a string")
 
-    save_project(slug, frontmatter, markdown_content)
+    await asyncio.to_thread(save_project, slug, frontmatter, markdown_content)
 
     # If slug changed, remove the previous file after successful write.
     if original_slug != slug:
-        delete_project(original_slug)
+        await asyncio.to_thread(delete_project, original_slug)
 
     # Cleanup orphaned assets
-    new_refs = _collect_asset_refs(markdown_content, video)
+    new_refs = collect_asset_refs(markdown_content, video)
     removed_urls = old_refs - new_refs
-    cleanup_candidates = _collect_cleanup_candidates(data) - new_refs
+    cleanup_candidates = collect_cleanup_candidates(data) - new_refs
     cleanup_urls = removed_urls | cleanup_candidates
-    keys_to_check = _extract_s3_keys(cleanup_urls)
+    keys_to_check = extract_s3_keys(cleanup_urls)
     if keys_to_check:
-        cleanup_orphans(keys_to_check)
+        await asyncio.to_thread(cleanup_orphans, keys_to_check)
 
     # Clean up old HLS versions (keeps only the current version).
     # On slug rename, clean up under the original slug namespace.
@@ -386,11 +190,11 @@ async def save_project_endpoint(request: Request):
         cleanup_slug = original_slug
         if not isinstance(cleanup_hls, str) or f"/videos/{original_slug}/" not in cleanup_hls:
             cleanup_hls = None
-    cleanup_old_hls_versions(cleanup_slug, cleanup_hls)
+    await asyncio.to_thread(cleanup_old_hls_versions, cleanup_slug, cleanup_hls)
 
     # Return new revision for the client to use in subsequent saves
     filepath = PROJECTS_DIR / f"{slug}.md"
-    new_revision = content_revision(filepath)
+    new_revision = await asyncio.to_thread(content_revision, filepath)
     return {"success": True, "slug": slug, "revision": new_revision}
 
 
@@ -406,7 +210,7 @@ async def create_project(request: Request):
     if not validate_slug(slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
 
-    if load_project(slug):
+    if await asyncio.to_thread(load_project, slug):
         raise HTTPException(status_code=400, detail="Project with this slug already exists")
 
     frontmatter = {
@@ -418,7 +222,7 @@ async def create_project(request: Request):
     }
 
     markdown_content = data.get("markdown", "")
-    save_project(slug, frontmatter, markdown_content)
+    await asyncio.to_thread(save_project, slug, frontmatter, markdown_content)
 
     return {"success": True, "slug": slug}
 
@@ -426,7 +230,7 @@ async def create_project(request: Request):
 @router.delete("/project/{slug}")
 async def delete_project_endpoint(slug: str):
     """Delete a project and cleanup orphaned assets."""
-    project = load_project(slug)
+    project = await asyncio.to_thread(load_project, slug)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -435,18 +239,18 @@ async def delete_project_endpoint(slug: str):
         "thumbnail": project.get("thumbnail_link"),
         "spriteSheet": project.get("sprite_sheet_link"),
     }
-    project_refs = _collect_asset_refs(project.get("markdown_content", ""), project_video)
+    project_refs = collect_asset_refs(project.get("markdown_content", ""), project_video)
 
     # Delete the project file first
-    delete_project(slug)
+    await asyncio.to_thread(delete_project, slug)
 
     # Cleanup orphaned assets (assets not referenced elsewhere)
-    keys_to_check = _extract_s3_keys(project_refs)
+    keys_to_check = extract_s3_keys(project_refs)
     if keys_to_check:
-        cleanup_orphans(keys_to_check)
+        await asyncio.to_thread(cleanup_orphans, keys_to_check)
 
     # Delete hero video prefix (HLS files, etc.)
-    delete_video_prefix(slug)
+    await asyncio.to_thread(delete_video_prefix, slug)
 
     return {"success": True}
 
@@ -454,7 +258,7 @@ async def delete_project_endpoint(slug: str):
 @router.get("/about")
 async def get_about():
     """Get about page content for editing."""
-    html_content, markdown_content, revision = load_about()
+    html_content, markdown_content, revision = await asyncio.to_thread(load_about)
     return {"html": html_content, "markdown": markdown_content, "revision": revision}
 
 
@@ -472,9 +276,9 @@ async def save_about_endpoint(request: Request):
 
     # Conflict check
     if base_revision and not data.get("force"):
-        current_revision = content_revision(ABOUT_FILE)
+        current_revision = await asyncio.to_thread(content_revision, ABOUT_FILE)
         if current_revision and base_revision != current_revision:
-            _, current_markdown, _ = load_about()
+            _, current_markdown, _ = await asyncio.to_thread(load_about)
             return JSONResponse(
                 status_code=409,
                 content={
@@ -487,19 +291,19 @@ async def save_about_endpoint(request: Request):
             )
 
     # Load old about content to track removed references
-    _, old_markdown, _ = load_about()
-    old_refs = _collect_asset_refs(old_markdown)
+    _, old_markdown, _ = await asyncio.to_thread(load_about)
+    old_refs = collect_asset_refs(old_markdown)
 
-    save_about(markdown_content)
+    await asyncio.to_thread(save_about, markdown_content)
 
     # Cleanup orphaned assets
-    new_refs = _collect_asset_refs(markdown_content)
+    new_refs = collect_asset_refs(markdown_content)
     removed_urls = old_refs - new_refs
-    keys_to_check = _extract_s3_keys(removed_urls)
+    keys_to_check = extract_s3_keys(removed_urls)
     if keys_to_check:
-        cleanup_orphans(keys_to_check)
+        await asyncio.to_thread(cleanup_orphans, keys_to_check)
 
-    new_revision = content_revision(ABOUT_FILE)
+    new_revision = await asyncio.to_thread(content_revision, ABOUT_FILE)
     return {"success": True, "revision": new_revision}
 
 
@@ -510,10 +314,10 @@ async def cleanup_assets_endpoint(request: Request):
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail="Invalid request body")
 
-    candidates = _collect_cleanup_candidates({"cleanup_candidates": data.get("urls")})
-    keys_to_check = _extract_s3_keys(candidates)
+    candidates = collect_cleanup_candidates({"cleanup_candidates": data.get("urls")})
+    keys_to_check = extract_s3_keys(candidates)
     if keys_to_check:
-        cleanup_orphans(keys_to_check)
+        await asyncio.to_thread(cleanup_orphans, keys_to_check)
 
     return {"success": True, "checked": len(keys_to_check)}
 
@@ -546,14 +350,14 @@ async def upload_media(request: Request):
         file_content = await file.read()
         file_like = io.BytesIO(file_content)
 
-        processed_data, content_type = process_image(file_like)
+        processed_data, content_type = await asyncio.to_thread(process_image, file_like)
 
         # Get processed bytes for hashing
         processed_bytes = processed_data.getvalue()
         content_hash = compute_hash(processed_bytes)
 
         # Check for existing asset with same content
-        existing_key = find_by_hash(content_hash)
+        existing_key = await asyncio.to_thread(find_by_hash, content_hash)
         if existing_key:
             # Return existing URL (deduplication)
             url = f"https://{CLOUDFRONT_DOMAIN}/{existing_key}"
@@ -569,10 +373,10 @@ async def upload_media(request: Request):
 
         # Reset buffer position for upload
         processed_data.seek(0)
-        url = upload_file(processed_data, key, content_type)
+        url = await asyncio.to_thread(upload_file, processed_data, key, content_type)
 
         # Register in asset registry
-        register_asset(key, content_hash, len(processed_bytes))
+        await asyncio.to_thread(register_asset, key, content_hash, len(processed_bytes))
 
         return {"success": True, "url": url, "deduplicated": False}
     except ValueError as e:
@@ -622,11 +426,12 @@ async def video_thumbnails(request: Request):
 
     try:
         # Get video duration first (fast operation)
-        info = get_video_info(temp_path)
+        info = await asyncio.to_thread(get_video_info, temp_path)
         duration = info["duration"]
 
         # Extract a small initial frame set for immediate timeline feedback
-        first_frames, _ = extract_thumbnail_frames(
+        first_frames, _ = await asyncio.to_thread(
+            extract_thumbnail_frames,
             temp_path,
             num_frames=TIMELINE_INITIAL_FRAME_COUNT,
             width=TIMELINE_FRAME_WIDTH,
@@ -734,7 +539,7 @@ async def video_thumbnails_existing(request: Request):
     if not validate_slug(project_slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
 
-    project = load_project(project_slug)
+    project = await asyncio.to_thread(load_project, project_slug)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -743,9 +548,10 @@ async def video_thumbnails_existing(request: Request):
         raise HTTPException(status_code=400, detail="Project has no hero HLS video")
 
     try:
-        info = get_video_info(hls_url)
+        info = await asyncio.to_thread(get_video_info, hls_url)
         duration = info["duration"]
-        first_frames, _ = extract_thumbnail_frames(
+        first_frames, _ = await asyncio.to_thread(
+            extract_thumbnail_frames,
             hls_url,
             num_frames=TIMELINE_INITIAL_FRAME_COUNT,
             width=TIMELINE_FRAME_WIDTH,
@@ -834,8 +640,6 @@ async def generate_sprite_sheet_endpoint(request: Request):
     If HLS is still processing, this endpoint waits for it to complete
     before returning the combined result.
     """
-    import time
-
     form = await request.form()
     temp_id = form.get("temp_id")
     hls_session_id = form.get("hls_session_id")
@@ -864,7 +668,8 @@ async def generate_sprite_sheet_endpoint(request: Request):
         from utils.video import generate_sprite_and_thumbnail
 
         # Generate sprite sheet and thumbnail
-        result = generate_sprite_and_thumbnail(
+        result = await asyncio.to_thread(
+            generate_sprite_and_thumbnail,
             temp_path,
             project_slug,
             sprite_start=sprite_start,
@@ -889,14 +694,14 @@ async def generate_sprite_sheet_endpoint(request: Request):
                         status_code=500,
                         detail=f"HLS encoding failed: {session.get('error', 'Unknown error')}"
                     )
-                time.sleep(1)
+                await asyncio.sleep(1)
                 waited += 1
 
             if waited >= max_wait:
                 raise HTTPException(status_code=500, detail="HLS encoding timed out")
 
         if not hls_url:
-            project = load_project(project_slug)
+            project = await asyncio.to_thread(load_project, project_slug)
             hls_url = project.get("video_link") if project else None
         if not hls_url:
             raise HTTPException(
@@ -941,7 +746,7 @@ async def generate_sprite_sheet_endpoint(request: Request):
                 try:
                     os.unlink(removed_path)
                 except Exception:
-                    pass
+                    logger.warning("Failed to delete temp file during sprite cleanup: %s", removed_path, exc_info=True)
         if hls_session_id:
             _hls_sessions.delete(hls_session_id)
 
@@ -970,7 +775,7 @@ async def process_content_video(request: Request):
             temp_path = temp_file.name
 
         try:
-            url = process_video(temp_path)
+            url = await asyncio.to_thread(process_video, temp_path)
             return {"success": True, "url": url}
         finally:
             if os.path.exists(temp_path):
@@ -1014,21 +819,23 @@ async def extract_content_video_poster(request: Request):
         from utils.s3 import upload_file
         from utils.video import generate_thumbnail
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            poster_path = os.path.join(temp_dir, "poster.webp")
-            generate_thumbnail(
-                source_url,
-                poster_path,
-                time=frame_time,
-                width=1600,
-                height=1600,
-            )
+        def extract_poster_bytes() -> bytes:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                poster_path = os.path.join(temp_dir, "poster.webp")
+                generate_thumbnail(
+                    source_url,
+                    poster_path,
+                    time=frame_time,
+                    width=1600,
+                    height=1600,
+                )
+                with open(poster_path, "rb") as poster_file:
+                    return poster_file.read()
 
-            with open(poster_path, "rb") as poster_file:
-                poster_bytes = poster_file.read()
+        poster_bytes = await asyncio.to_thread(extract_poster_bytes)
 
         content_hash = compute_hash(poster_bytes)
-        existing_key = find_by_hash(content_hash)
+        existing_key = await asyncio.to_thread(find_by_hash, content_hash)
         if existing_key:
             return {
                 "success": True,
@@ -1038,8 +845,8 @@ async def extract_content_video_poster(request: Request):
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         key = content_image_key(f"{timestamp}.webp")
-        url = upload_file(io.BytesIO(poster_bytes), key, "image/webp")
-        register_asset(key, content_hash, len(poster_bytes))
+        url = await asyncio.to_thread(upload_file, io.BytesIO(poster_bytes), key, "image/webp")
+        await asyncio.to_thread(register_asset, key, content_hash, len(poster_bytes))
 
         return {"success": True, "url": url, "deduplicated": False}
     except HTTPException:

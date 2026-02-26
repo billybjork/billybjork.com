@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+from contextlib import suppress
 
 from dotenv import load_dotenv
 from fastapi import Request
@@ -18,6 +20,9 @@ from routers import admin, auth, feed, pages, test, valentine
 from utils.analytics import init_db
 
 logger = logging.getLogger(__name__)
+TEMP_VIDEO_CLEANUP_INTERVAL_SECONDS = int(
+    os.environ.get("TEMP_VIDEO_CLEANUP_INTERVAL_SECONDS", "900")
+)
 
 load_dotenv()
 
@@ -32,6 +37,10 @@ if os.environ.get("EDIT_TOKEN"):
         if policy in {"off", "disabled", "none"}:
             logger.info("Startup: content sync from S3 disabled by CONTENT_STARTUP_SYNC_POLICY=%s", policy)
         else:
+            if policy == "legacy":
+                logger.warning(
+                    "CONTENT_STARTUP_SYNC_POLICY=legacy is deprecated; use 'always' or 'guarded'."
+                )
             require_marker = policy not in {"always", "legacy"}
             count = sync_from_s3(require_marker=require_marker)
             if count:
@@ -57,6 +66,26 @@ app.include_router(feed.router)
 app.include_router(test.router)
 app.include_router(valentine.router)
 app.include_router(pages.router)
+
+
+@app.on_event("startup")
+async def start_background_cleanup_loop() -> None:
+    async def cleanup_loop() -> None:
+        while True:
+            await asyncio.to_thread(admin.cleanup_old_temp_videos)
+            await asyncio.sleep(TEMP_VIDEO_CLEANUP_INTERVAL_SECONDS)
+
+    app.state.temp_cleanup_task = asyncio.create_task(cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def stop_background_cleanup_loop() -> None:
+    cleanup_task = getattr(app.state, "temp_cleanup_task", None)
+    if cleanup_task is None:
+        return
+    cleanup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await cleanup_task
 
 
 @app.exception_handler(StarletteHTTPException)

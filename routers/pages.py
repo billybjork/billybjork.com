@@ -194,7 +194,7 @@ async def read_project(
                 ref = request.headers.get("referer")
                 background_tasks.add_task(record_view, project_slug, client_ip, ua, ref)
             except Exception:
-                pass
+                logger.warning("Failed to enqueue analytics page view for %s", project_slug, exc_info=True)
 
         # Fetch stats only on localhost
         analytics = None
@@ -202,7 +202,7 @@ async def read_project(
             try:
                 analytics = await asyncio.to_thread(get_project_stats, project_slug)
             except Exception:
-                pass
+                logger.warning("Failed to load local analytics for %s", project_slug, exc_info=True)
 
         if is_partial:
             return templates.TemplateResponse(
