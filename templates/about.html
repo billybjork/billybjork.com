@@ -12,10 +12,14 @@
     <figure class="about-photo-container">
         <img src="{{ about_photo_link }}" 
             alt="Billy Bjork" 
-            class="about-photo" 
+            class="about-photo"
+            {% if about_photo_srcset %}srcset="{{ about_photo_srcset }}"{% endif %}
+            {% if about_photo_sizes %}sizes="{{ about_photo_sizes }}"{% endif %}
             width="8050"
             height="5367"
-            loading="lazy">
+            loading="eager"
+            decoding="async"
+            fetchpriority="high">
     </figure>
     {% endif %}
     {% if about_content %}
