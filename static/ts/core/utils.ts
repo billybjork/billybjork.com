@@ -5,6 +5,7 @@
 
 import type { Alignment, ImageBlock, VideoBlock } from '../types/blocks';
 import type { FetchJSONOptions } from '../types/api';
+import { showLinkDialog } from '../edit/link-dialog';
 
 type NotificationType = 'info' | 'success' | 'error' | 'warning';
 const EDIT_NOTIFICATION_STACK_ID = 'edit-notification-stack';
@@ -473,7 +474,8 @@ export function toggleFormat(
 export function handleFormattingShortcuts(
   e: KeyboardEvent,
   textarea: HTMLTextAreaElement,
-  onUpdate?: () => void
+  onUpdate?: () => void,
+  container?: HTMLElement | null
 ): boolean {
   if (!(e.metaKey || e.ctrlKey)) return false;
 
@@ -492,7 +494,8 @@ export function handleFormattingShortcuts(
       return true;
     case 'k':
       e.preventDefault();
-      insertLink(textarea, onUpdate);
+      // Fire-and-forget async; onUpdate callback handles state sync
+      insertLink(textarea, container ?? null, onUpdate);
       return true;
   }
   return false;
@@ -540,44 +543,85 @@ export function findLinkAtCursor(textarea: HTMLTextAreaElement): LinkInfo | null
 }
 
 /**
+ * Normalize link input from the dialog.
+ * - Keeps anchors/relative paths/protocol URLs unchanged
+ * - Adds https:// for bare domains (e.g. example.com)
+ */
+function normalizeLinkUrl(input: string): string {
+  const trimmed = (input || '').trim();
+  if (!trimmed) return '';
+
+  if (
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../')
+  ) {
+    return trimmed;
+  }
+
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
+    return `mailto:${trimmed}`;
+  }
+
+  if (/^(?:www\.)?[\w-]+(?:\.[\w-]+)+(?::\d+)?(?:[/?#]|$)/.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+
+  return trimmed;
+}
+
+/**
  * Insert or edit markdown link at cursor
  * If cursor is inside existing link, edits the URL
+ * Uses a modal dialog with support for internal anchors
  */
 export async function insertLink(
   textarea: HTMLTextAreaElement,
+  container: HTMLElement | null,
   onUpdate?: () => void
 ): Promise<void> {
   const existingLink = findLinkAtCursor(textarea);
 
-  if (existingLink) {
-    const newUrl = prompt('Edit link URL (leave empty to remove link):', existingLink.url);
-    if (newUrl === null) return; // Cancelled
+  // Store selection info before dialog opens (in case focus changes)
+  const selectionStart = textarea.selectionStart;
+  const selectionEnd = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(selectionStart, selectionEnd) || 'link text';
 
-    if (newUrl === '') {
-      // Empty URL = remove link, keep text
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(existingLink.start, existingLink.end);
-      insertTextWithUndo(textarea, existingLink.text);
-    } else {
-      // Update URL
-      const newLink = `[${existingLink.text}](${newUrl})`;
+  // Show dialog with anchor discovery from container
+  const result = await showLinkDialog({
+    existingUrl: existingLink?.url,
+    container: container ?? document.body
+  });
+
+  if (result.action === 'cancel') return;
+
+  if (result.action === 'remove' && existingLink) {
+    // Remove link, keep text
+    textarea.focus({ preventScroll: true });
+    textarea.setSelectionRange(existingLink.start, existingLink.end);
+    insertTextWithUndo(textarea, existingLink.text);
+  } else if (result.action === 'insert' && result.url) {
+    const normalizedUrl = normalizeLinkUrl(result.url);
+    if (!normalizedUrl) return;
+
+    if (existingLink) {
+      // Update existing link URL
+      const newLink = `[${existingLink.text}](${normalizedUrl})`;
       textarea.focus({ preventScroll: true });
       textarea.setSelectionRange(existingLink.start, existingLink.end);
       insertTextWithUndo(textarea, newLink);
+    } else {
+      // Create new link
+      const linkText = `[${selectedText}](${normalizedUrl})`;
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(selectionStart, selectionEnd);
+      insertTextWithUndo(textarea, linkText);
     }
-  } else {
-    // Create new link
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end) || 'link text';
-
-    const url = prompt('Enter link URL:');
-    if (!url) return;
-
-    const linkText = `[${selectedText}](${url})`;
-    textarea.focus({ preventScroll: true });
-    textarea.setSelectionRange(start, end);
-    insertTextWithUndo(textarea, linkText);
   }
 
   if (onUpdate) onUpdate();

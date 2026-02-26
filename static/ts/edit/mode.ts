@@ -15,6 +15,7 @@ import {
   insertTextWithUndo,
   handleFormattingShortcuts,
   handleListShortcuts,
+  insertLink,
   showNotification,
   fetchJSON,
 } from '../core/utils';
@@ -24,6 +25,7 @@ import EditSlash from './slash';
 import EditMedia, { type VideoUploadProgressUpdate, uploadPosterForVideo, capturePosterFromVideo } from './media';
 import EditUndo from './undo';
 import { persistScrollForNavigation } from './scroll-restore';
+import { slugify, uniqueSlug } from './slugify';
 
 // ========== ICONS ==========
 
@@ -1245,6 +1247,27 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
   let activeLineIndex: number | null = null;
   const slashEnabled = !context.rowSide;
 
+  const headingIdForLine = (lineText: string, targetLineIndex: number): string | null => {
+    if (targetLineIndex < 0) return null;
+    const slugState = new Set<string>();
+    for (let i = 0; i <= targetLineIndex; i += 1) {
+      const text = i === targetLineIndex ? lineText : (lines[i] ?? '');
+      const headingMatch = text.match(/^(\s*)(#{1,6})\s+(.*)$/);
+      if (!headingMatch) continue;
+
+      const tmp = document.createElement('span');
+      tmp.appendChild(renderInlineMarkdown(headingMatch[3] ?? ''));
+      const baseSlug = slugify(tmp.textContent?.trim() ?? '');
+      if (!baseSlug) continue;
+
+      const unique = uniqueSlug(baseSlug, slugState);
+      if (i === targetLineIndex) {
+        return unique;
+      }
+    }
+    return null;
+  };
+
   type CaretPositionLike = {
     offsetNode: Node;
     offset: number;
@@ -1432,8 +1455,9 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
 
   const renderLines = (focusLineIndex: number | null = null, focusCaret: number | { start: number; end?: number } | null = null): void => {
     lineContainer.innerHTML = '';
+    const headingSlugState = new Set<string>();
     lines.forEach((lineText, lineIndex) => {
-      const row = buildLineRow(lineText, lineIndex);
+      const row = buildLineRow(lineText, lineIndex, headingSlugState);
       lineContainer.appendChild(row);
     });
 
@@ -1451,7 +1475,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
     }
   };
 
-  const buildLineRow = (lineText: string, lineIndex: number): HTMLElement => {
+  const buildLineRow = (lineText: string, lineIndex: number, headingSlugState: Set<string>): HTMLElement => {
     const row = document.createElement('div');
     row.className = 'text-block-line';
     row.dataset.lineIndex = String(lineIndex);
@@ -1465,7 +1489,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
       preview.classList.add('text-block-line-placeholder');
       preview.textContent = 'Type something... (type / for commands)';
     } else {
-      const rendered = renderLinePreview(lineText);
+      const rendered = renderLinePreview(lineText, headingSlugState);
       row.dataset.lineType = rendered.type;
       preview.appendChild(rendered.node);
     }
@@ -1515,7 +1539,23 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
         if (EditSlash.handleKeydown(e)) return;
       }
 
-      if (handleFormattingShortcuts(e, textarea, markDirty)) {
+      // Handle Cmd+K separately due to async dialog
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        insertLink(textarea, container, () => {
+          const currentLineIndex = Number.parseInt(row.dataset.lineIndex ?? '', 10);
+          const targetLineIndex = Number.isNaN(currentLineIndex) ? lineIndex : currentLineIndex;
+
+          lines[targetLineIndex] = textarea.value;
+          updateBlockContent();
+          // Rebuild rows so preview reflects the inserted/updated link immediately.
+          renderLines();
+          markDirty();
+        });
+        return;
+      }
+
+      if (handleFormattingShortcuts(e, textarea, markDirty, container)) {
         lines[lineIndex] = textarea.value;
         updateBlockContent();
         syncLineHeight(row);
@@ -1603,6 +1643,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
   const deactivateLine = (row: HTMLElement): void => {
     const textarea = row.querySelector<HTMLTextAreaElement>('.text-line-input');
     const preview = row.querySelector<HTMLElement>('.text-block-line-preview');
+    const lineIndex = Number.parseInt(row.dataset.lineIndex ?? '', 10);
 
     row.classList.remove('is-editing');
 
@@ -1616,7 +1657,25 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
       preview?.classList.add('text-block-line-placeholder');
       if (preview) preview.textContent = 'Type something... (type / for commands)';
     } else if (preview) {
-      const rendered = renderLinePreview(currentText);
+      const headingSlugState = new Set<string>();
+      if (!Number.isNaN(lineIndex)) {
+        for (let i = 0; i < lineIndex; i += 1) {
+          const priorText = lines[i] ?? '';
+          const priorHeadingMatch = priorText.match(/^(\s*)(#{1,6})\s+(.*)$/);
+          if (!priorHeadingMatch) continue;
+          const priorTmp = document.createElement('span');
+          priorTmp.appendChild(renderInlineMarkdown(priorHeadingMatch[3] ?? ''));
+          const priorBaseSlug = slugify(priorTmp.textContent?.trim() ?? '');
+          if (!priorBaseSlug) continue;
+          uniqueSlug(priorBaseSlug, headingSlugState);
+        }
+      }
+
+      const rendered = renderLinePreview(currentText, headingSlugState);
+      const headingId = Number.isNaN(lineIndex) ? null : headingIdForLine(currentText, lineIndex);
+      if (headingId && rendered.node instanceof HTMLElement && /^H[1-6]$/.test(rendered.node.tagName)) {
+        rendered.node.id = headingId;
+      }
       row.dataset.lineType = rendered.type;
       preview.appendChild(rendered.node);
     }
@@ -1699,7 +1758,7 @@ function createLineEditor(block: TextBlock, context: BlockContext): HTMLElement 
 /**
  * Render a single line of markdown into preview HTML
  */
-function renderLinePreview(lineText: string): LinePreviewResult {
+function renderLinePreview(lineText: string, headingSlugState: Set<string>): LinePreviewResult {
   const trimmed = lineText.trim();
 
   if (!trimmed) {
@@ -1719,6 +1778,11 @@ function renderLinePreview(lineText: string): LinePreviewResult {
     const level = headingMatch[2]?.length ?? 1;
     const heading = document.createElement(`h${level}`) as HTMLHeadingElement;
     heading.appendChild(renderInlineMarkdown(headingMatch[3] ?? ''));
+    // Generate heading ID from rendered text (matches markdown/toc behavior better than raw markdown).
+    const baseSlug = slugify(heading.textContent?.trim() ?? '');
+    if (baseSlug) {
+      heading.id = uniqueSlug(baseSlug, headingSlugState);
+    }
     return { node: heading, type: `heading-${level}` as LinePreviewType };
   }
 
@@ -1760,8 +1824,14 @@ function renderInlineMarkdown(text: string): DocumentFragment {
     if (safeUrl) {
       const link = document.createElement('a');
       link.href = safeUrl;
-      link.rel = 'noopener';
-      link.target = '_blank';
+      const isInternalLink = safeUrl.startsWith('#')
+        || safeUrl.startsWith('/')
+        || safeUrl.startsWith('./')
+        || safeUrl.startsWith('../');
+      if (!isInternalLink) {
+        link.rel = 'noopener';
+        link.target = '_blank';
+      }
       appendInlineFormatted(link, match[1] ?? '');
       fragment.appendChild(link);
     } else {
@@ -2877,6 +2947,13 @@ export function markDirty(): void {
   EditUndo.saveState();
   dispatchSaveAction({ type: 'edit' });
   scheduleAutoSave();
+}
+
+/**
+ * Get the edit container element (for anchor discovery in link dialogs)
+ */
+export function getEditContainer(): HTMLElement | null {
+  return container;
 }
 
 async function flushCleanupCandidates(): Promise<void> {

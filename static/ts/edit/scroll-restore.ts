@@ -162,6 +162,9 @@ export function restorePersistedScroll(): void {
   }
 
   const restoreOnce = (): void => {
+    // Never fight in-page anchor navigation.
+    if (window.location.hash) return;
+
     const { element: container } = findActiveContainer(parsed.containerSelector);
     let targetTop = parsed.scrollY;
 

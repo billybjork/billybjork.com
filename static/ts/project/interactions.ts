@@ -338,6 +338,7 @@ const MOBILE_BREAKPOINT = 768;
 const VIDEO_VIEWPORT_PADDING_MOBILE = 12;
 const VIDEO_VIEWPORT_PADDING_DESKTOP = 24;
 const VIDEO_MIN_RENDER_HEIGHT = 180;
+const SKIP_FOUC_ONCE_KEY = 'bb_skip_fouc_once';
 
 function getVideoContainer(videoElement: HTMLVideoElement): HTMLElement | null {
   return videoElement.closest<HTMLElement>('.video-container');
@@ -1041,8 +1042,16 @@ function buildIsolationHomeUrl(): URL {
   return url;
 }
 
+function markSkipFoucOnce(): void {
+  try {
+    sessionStorage.setItem(SKIP_FOUC_ONCE_KEY, 'true');
+  } catch {
+    // Ignore storage errors and continue with normal navigation.
+  }
+}
+
 function navigateHomeFromIsolation(): void {
-  sessionStorage.setItem('bb_skip_fouc_once', 'true');
+  markSkipFoucOnce();
   window.location.href = buildIsolationHomeUrl().toString();
 }
 
@@ -1135,8 +1144,42 @@ function initializeEventListeners(): void {
     const siteTitle = (event.target as HTMLElement).closest<HTMLAnchorElement>('a.site-title');
     if (!siteTitle) return;
 
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    if (siteTitle.target && siteTitle.target !== '_self') {
+      return;
+    }
+
+    let destination: URL;
+    try {
+      destination = new URL(siteTitle.href, window.location.origin);
+    } catch {
+      return;
+    }
+    if (destination.origin !== window.location.origin || destination.pathname !== '/') {
+      return;
+    }
+
     const isIsolationMode = document.body.dataset.isolationMode === 'true';
-    if (!isIsolationMode) return;
+    if (!isIsolationMode) {
+      if (window.location.pathname === '/me') {
+        try {
+          const referrer = document.referrer ? new URL(document.referrer) : null;
+          const cameFromHome = !!referrer
+            && referrer.origin === window.location.origin
+            && referrer.pathname === '/';
+          if (cameFromHome) {
+            event.preventDefault();
+            window.history.back();
+            return;
+          }
+        } catch {
+          // Fall through to default navigation.
+        }
+      }
+      return;
+    }
 
     event.preventDefault();
     const activeProject = document.querySelector<HTMLElement>('.project-item.active');
@@ -1147,6 +1190,31 @@ function initializeEventListeners(): void {
     }
 
     navigateHomeFromIsolation();
+  });
+
+  // Make /me navigation feel instant by skipping one-time FOUC on the destination page.
+  document.body.addEventListener('click', function(event) {
+    const meLink = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+    if (!meLink) return;
+
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    if (meLink.target && meLink.target !== '_self') {
+      return;
+    }
+
+    let destination: URL;
+    try {
+      destination = new URL(meLink.href, window.location.origin);
+    } catch {
+      return;
+    }
+    if (destination.origin !== window.location.origin || destination.pathname !== '/me') {
+      return;
+    }
+
+    markSkipFoucOnce();
   });
 
   // Media lightbox (images and eligible content videos)
@@ -1166,6 +1234,33 @@ function initializeEventListeners(): void {
 
     event.preventDefault();
     openVideoLightbox(video);
+  });
+
+  // Deterministic in-page anchor navigation for project content.
+  document.body.addEventListener('click', function(event) {
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('.project-content a[href^="#"]');
+    if (!anchor) return;
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    const href = anchor.getAttribute('href') || '';
+    const target = resolveHashTarget(href);
+    if (!target) return;
+
+    event.preventDefault();
+
+    const nextUrl = new URL(window.location.href);
+    nextUrl.hash = target.id;
+    history.pushState(history.state, '', nextUrl.toString());
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // A follow-up instant pass helps when late media/layout changes nudge the page.
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+    });
+    setTimeout(() => {
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 180);
   });
 
   // Escape key handler
@@ -1209,13 +1304,41 @@ function initializeEventListeners(): void {
 
 // ========== HASH SCROLLING ==========
 
-function scrollToHashTarget(): void {
-  if (window.location.hash) {
-    const target = document.getElementById(window.location.hash.slice(1));
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
-    }
+function resolveHashTarget(hash: string): HTMLElement | null {
+  const rawId = hash.startsWith('#') ? hash.slice(1) : hash;
+  if (!rawId) return null;
+
+  let decodedId = rawId;
+  try {
+    decodedId = decodeURIComponent(rawId);
+  } catch {
+    decodedId = rawId;
   }
+
+  const direct = document.getElementById(decodedId) || document.getElementById(rawId);
+  if (direct) return direct;
+
+  // Fallback for stale/legacy hashes like "heading_1" when only "heading" exists.
+  const baseDecoded = decodedId.replace(/_\d+$/, '');
+  if (baseDecoded && baseDecoded !== decodedId) {
+    const fallback = document.getElementById(baseDecoded);
+    if (fallback) return fallback;
+  }
+
+  const baseRaw = rawId.replace(/_\d+$/, '');
+  if (baseRaw && baseRaw !== rawId) {
+    const fallback = document.getElementById(baseRaw);
+    if (fallback) return fallback;
+  }
+
+  return null;
+}
+
+function scrollToHashTarget(behavior: ScrollBehavior = 'auto'): void {
+  const target = resolveHashTarget(window.location.hash);
+  if (!target) return;
+
+  target.scrollIntoView({ behavior, block: 'start' });
 }
 
 // ========== MAIN INITIALIZATION ==========
@@ -1232,8 +1355,7 @@ export function init(): void {
   initializeAll();
   initializeEventListeners();
 
-  window.addEventListener('load', scrollToHashTarget);
-  window.addEventListener('hashchange', scrollToHashTarget);
+  window.addEventListener('load', () => scrollToHashTarget('auto'));
 }
 
 // Export for module usage
