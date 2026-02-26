@@ -27,6 +27,8 @@ interface VideoData {
   frame_width?: number;
   frame_height?: number;
   fps?: number;
+  video_width?: number;
+  video_height?: number;
   duration?: number;
 }
 
@@ -1202,7 +1204,14 @@ const ProjectSettings: ProjectSettingsState & {
     if (!this.modal || !this.videoEl || !this.videoDuration) return;
     const playhead = this.modal.querySelector('.edit-hero-playhead') as HTMLElement | null;
     if (!playhead) return;
-    const pct = (this.videoEl.currentTime / this.videoDuration) * 100;
+
+    const measuredDuration = Number.isFinite(this.videoEl.duration) && this.videoEl.duration > 0
+      ? this.videoEl.duration
+      : this.videoDuration;
+    if (!Number.isFinite(measuredDuration) || measuredDuration <= 0) return;
+
+    const boundedTime = Math.max(0, Math.min(this.videoEl.currentTime, measuredDuration));
+    const pct = Math.max(0, Math.min(100, (boundedTime / measuredDuration) * 100));
     playhead.style.left = `${pct}%`;
   },
 

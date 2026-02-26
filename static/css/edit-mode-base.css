@@ -1270,7 +1270,7 @@ body.modal-open {
 /* Edit and Settings button styling */
 .edit-btn-action {
     padding: 6px 12px;
-    background: rgba(59, 130, 246, 0.9);
+    background: rgba(100, 100, 100, 0.8);
     color: white;
     border: none;
     border-radius: 6px;
@@ -1282,7 +1282,7 @@ body.modal-open {
 }
 
 .edit-btn-action:hover {
-    background: #2563eb;
+    background: rgba(120, 120, 120, 0.9);
 }
 
 .edit-btn-settings {
