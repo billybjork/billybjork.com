@@ -50,10 +50,10 @@ I got curious and looked into how it worked. Turns out the feature is based on a
 <!-- block -->
 
 <!-- row -->
+I downloaded the model and got it running on my laptop (no cloud was harmed) then fed it some photos. Out came “splat” files, which I now think of as ‘3D reconstructions’ of one or more input images.
+<!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_160227_005472.mp4" autoplay loop muted playsinline style="display: block; width: 384px"></video>
 <p class="media-caption">New file format unlocked</p>
-<!-- col -->
-I downloaded the model and got it running on my laptop (no cloud was harmed) then fed it some photos. Out came “splat” files, which I now think of as ‘3D reconstructions’ of one or more input images.
 <!-- /row -->
 
 <!-- block -->
@@ -64,7 +64,7 @@ So Claude and I whipped up a simple web UI to look at the splats in all their 3D
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
 <div style="text-align: center">
 <div style="text-align: center">
 <div style="text-align: center">
@@ -940,9 +940,11 @@ The hard part is describing the exact camera you want, especially when each iter
 <!-- block -->
 
 <!-- row -->
-<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_164736_643819.mp4" autoplay loop muted playsinline style="display: block; width: 525px"></video>
+<video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_164736_643819.mp4" autoplay loop muted playsinline style="display: block; width: 270px"></video>
 <!-- col -->
-I chose five preset camera movements (pan left, pan right, push in, pull out, orbit) and rendered each preset with each photo. 60 photos in, 300 videos out. I picked the best ones, cut them together, done. The result is the video you see at the top of this page.
+I chose five preset camera movements (pan left, pan right, push in, pull out, orbit) and rendered each preset with each photo.
+
+60 photos in, 300 videos out. I picked the best ones, cut them together, done. The result is the video you see at the [top of this page](#hero).
 <!-- /row -->
 
 <!-- block -->
@@ -1085,7 +1087,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
