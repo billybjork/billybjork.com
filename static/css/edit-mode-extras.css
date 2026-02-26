@@ -1,0 +1,228 @@
+/* ========================================
+   HTML Block
+   ======================================== */
+
+.html-block-wrapper {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.html-block-preview-container {
+    width: 100%;
+    position: relative;
+}
+
+.html-block-wrapper .html-block-sandbox {
+    width: 100%;
+    min-height: 60px;
+    border: 1px solid #222;
+    border-radius: 6px;
+    background: #0d0d0d;
+}
+
+.html-block-select-overlay {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.html-block-select-overlay:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+.html-block-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.html-block-empty {
+    color: #666;
+    font-style: italic;
+    padding: 16px;
+    margin: 0;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 6px;
+}
+
+.html-toggle-btn {
+    width: fit-content;
+    padding: 6px 12px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.html-toggle-btn:hover {
+    background: #252525;
+    border-color: #3b82f6;
+}
+
+.html-toggle-btn.is-active {
+    background: #0f2b46;
+    border-color: #3b82f6;
+    color: #dbeafe;
+}
+
+.html-textarea {
+    width: 100%;
+    min-height: 200px;
+    max-height: 60vh;
+    padding: 12px;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    overflow-y: auto;
+    tab-size: 4;
+}
+
+.html-textarea:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+
+/* ========================================
+   Responsive
+   ======================================== */
+
+@media (max-width: 768px) {
+    .edit-mode-toolbar {
+        flex-direction: column;
+        gap: 12px;
+        top: 0;
+    }
+
+    .edit-toolbar-left,
+    .edit-toolbar-right {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .slash-command-menu {
+        position: fixed;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        top: auto;
+        width: auto;
+        min-width: auto;
+        max-height: 50vh;
+    }
+}
+
+/* ========================================
+   Link Dialog
+   ======================================== */
+
+.link-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+}
+
+.link-dialog-backdrop.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.link-dialog {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 1.25rem;
+    width: 90%;
+    max-width: 400px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.link-dialog-header {
+    font-weight: 600;
+    font-size: 16px;
+    color: #fff;
+    margin-bottom: 1rem;
+}
+
+.link-dialog-url {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: #111;
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+.link-dialog-url:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.link-dialog-url::placeholder {
+    color: #666;
+}
+
+.link-dialog-divider {
+    margin: 1rem 0;
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+}
+
+.link-dialog-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.link-dialog-section {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    background: #222;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #ccc;
+    font-size: 14px;
+    transition: background 0.15s;
+}
+
+.link-dialog-section:hover {
+    background: #2a2a2a;
+    color: #fff;
+}
+
+.link-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #333;
+}

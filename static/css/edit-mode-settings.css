@@ -1,0 +1,541 @@
+/* ========================================
+   Create/Settings Modal Base
+   ======================================== */
+
+.edit-create-modal,
+.edit-settings-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.edit-create-overlay,
+.edit-settings-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+}
+
+.edit-create-content,
+.edit-settings-content {
+    position: relative;
+    width: 90%;
+    max-width: 480px;
+    max-height: 90vh;
+    background: #1a1a1a;
+    border-radius: 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.edit-create-header,
+.edit-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #333;
+}
+
+.edit-create-header h2,
+.edit-settings-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.edit-create-close,
+.edit-settings-close {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+
+.edit-create-close:hover,
+.edit-settings-close:hover {
+    color: #fff;
+}
+
+/* ========================================
+   Form Styles
+   ======================================== */
+
+.edit-create-form,
+.edit-settings-form {
+    padding: 20px;
+}
+
+.edit-form-group {
+    margin-bottom: 16px;
+}
+
+.edit-form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #ccc;
+}
+
+.edit-form-group input[type="text"],
+.edit-form-group input[type="url"],
+.edit-form-group input[type="date"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.edit-form-group input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.edit-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #666;
+}
+
+.edit-form-row {
+    display: flex;
+    gap: 20px;
+}
+
+.edit-form-checkbox {
+    margin-bottom: 0;
+}
+
+.edit-form-checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.edit-form-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
+}
+
+.edit-form-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+.edit-form-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.edit-video-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #111;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #888;
+}
+
+.edit-video-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.edit-btn-small {
+    padding: 6px 12px;
+    background: #333;
+    border: none;
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.edit-btn-small:hover {
+    background: #444;
+}
+
+/* ========================================
+   Hero Video View (inside Settings Modal)
+   ======================================== */
+
+/* Wider modal when showing video view */
+.edit-settings-content.edit-settings-content--video {
+    max-width: 720px;
+    transition: max-width 0.3s ease;
+}
+
+/* Video preview */
+.edit-hero-video-preview {
+    padding: 0 20px;
+    margin-top: 16px;
+}
+
+.edit-hero-video-player {
+    width: 100%;
+    max-height: 360px;
+    border-radius: 8px;
+    background: #000;
+    display: block;
+}
+
+.edit-hero-no-preview {
+    padding: 32px 20px;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+    background: #111;
+    border-radius: 8px;
+}
+
+/* File info bar */
+.edit-hero-file-info {
+    padding: 0 20px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #888;
+}
+
+.edit-hero-preview-status {
+    padding: 0 20px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.edit-hero-preview-status.is-warning {
+    color: #f59e0b;
+}
+
+.edit-hero-preview-status.is-error {
+    color: #ef4444;
+}
+
+.edit-hero-preview-status.is-success {
+    color: #10b981;
+}
+
+/* Timeline */
+.edit-hero-timeline {
+    padding: 0 20px;
+    margin-top: 16px;
+}
+
+.edit-hero-timeline-loading {
+    padding: 6px 20px 0;
+    font-size: 11px;
+    color: #6b7280;
+}
+
+.edit-hero-timeline-track {
+    position: relative;
+    height: 48px;
+    background: #222;
+    border-radius: 6px;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+/* Thumbnail filmstrip canvas */
+.edit-hero-timeline-thumbs {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    border-radius: 6px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.edit-hero-timeline-thumbs.loaded {
+    opacity: 1;
+}
+
+.edit-hero-sprite-range {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(59, 130, 246, 0.15);
+    border: 2px solid #3b82f6;
+    border-radius: 4px;
+    cursor: grab;
+    z-index: 2;
+    overflow: visible;
+    will-change: left, width;
+}
+
+/* Smooth transitions only when not actively dragging */
+.edit-hero-sprite-range:not(.is-dragging) {
+    transition: left 0.05s ease, width 0.05s ease;
+}
+
+.edit-hero-sprite-range:active {
+    cursor: grabbing;
+}
+
+/* Sprite range resize handles */
+.edit-hero-sprite-handle {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 28px;
+    background: #3b82f6;
+    border-radius: 4px;
+    cursor: ew-resize;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+}
+
+.edit-hero-sprite-range:not(.is-dragging) .edit-hero-sprite-handle:hover {
+    background: #2563eb;
+    transform: translate(-50%, -50%) scale(1.1);
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.edit-hero-sprite-handle--start {
+    left: 0;
+}
+
+.edit-hero-sprite-handle--end {
+    left: 100%;
+}
+
+.edit-hero-sprite-handle-grip {
+    width: 2px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 1px;
+}
+
+/* Dimmed regions outside sprite range */
+.edit-hero-timeline-dim-left,
+.edit-hero-timeline-dim-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1;
+    pointer-events: none;
+    will-change: left, width;
+}
+
+.edit-hero-timeline-dim-left {
+    left: 0;
+    border-radius: 6px 0 0 6px;
+}
+
+.edit-hero-timeline-dim-right {
+    right: 0;
+    border-radius: 0 6px 6px 0;
+}
+
+.edit-hero-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #fff;
+    z-index: 3;
+    pointer-events: none;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    transition: left 0.1s linear;
+}
+
+/* Time display */
+.edit-hero-time-display {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 20px 0;
+    font-size: 12px;
+    color: #888;
+}
+
+.edit-hero-sprite-info {
+    color: #3b82f6;
+    font-weight: 500;
+}
+
+.edit-hero-sprite-info.looping::before {
+    content: '\21BB  ';
+}
+
+/* Progress bar */
+.edit-hero-progress {
+    padding: 0 20px;
+    margin-top: 16px;
+}
+
+.edit-hero-progress-bar {
+    height: 6px;
+    background: #222;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.edit-hero-progress-fill {
+    height: 100%;
+    background: #3b82f6;
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.edit-hero-progress-text {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #888;
+    text-align: center;
+}
+
+/* Action buttons */
+.edit-hero-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px 20px;
+}
+
+/* ========================================
+   Hero Thumbnail Controls (on project page)
+   ======================================== */
+
+.edit-hero-thumbnail-controls {
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+}
+
+.edit-hero-thumbnail-header {
+    margin-bottom: 10px;
+}
+
+.edit-hero-thumbnail-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #9ca3af;
+}
+
+.edit-hero-thumbnail-content {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.edit-hero-thumbnail-preview {
+    width: 120px;
+    height: auto;
+    border-radius: 4px;
+    background: #151515;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.edit-hero-thumbnail-actions {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.edit-hero-thumbnail-input {
+    width: 100%;
+    padding: 8px 12px;
+    background: #151515;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #cfcfcf;
+    font-size: 13px;
+}
+
+.edit-hero-thumbnail-input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.edit-hero-thumbnail-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.edit-hero-thumbnail-buttons button[disabled] {
+    opacity: 0.6;
+    cursor: default;
+}
+
+@media (max-width: 480px) {
+    .edit-hero-thumbnail-content {
+        flex-direction: column;
+    }
+
+    .edit-hero-thumbnail-preview {
+        width: 100%;
+        max-width: 200px;
+    }
+}
+
+/* ========================================
+   Modal Actions
+   ======================================== */
+
+.edit-create-actions,
+.edit-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #333;
+}
+
+.edit-settings-actions {
+    justify-content: space-between;
+}
+
+.edit-settings-actions-right {
+    display: flex;
+    gap: 12px;
+}
+
+.edit-btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.edit-btn-danger:hover {
+    background: #b91c1c;
+}
+

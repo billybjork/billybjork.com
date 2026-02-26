@@ -707,6 +707,7 @@ footer {
     background: none;
     border: none;
     color: var(--primary-color);
+    font-weight: bold;
     font-size: var(--font-size-large);
     cursor: pointer;
     padding: 0;
@@ -719,24 +720,6 @@ footer {
 .project-links a:hover,
 .project-links button:hover {
     color: var(--highlight-color);
-    transition:
-    color 0.3s ease;
-}
-
-/* Override .copy-text-link styles */
-.project-links a,
-.project-links button {
-    color: var(--primary-color) !important;
-    font-weight: bold !important;
-    text-decoration: none !important;
-    background: none !important;
-    padding: 0 !important;
-    border: none !important;
-}
-
-.project-links a:hover,
-.project-links button:hover {
-    color: var(--highlight-color) !important;
     transition: color 0.3s ease;
 }
 
