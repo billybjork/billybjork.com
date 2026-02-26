@@ -2,11 +2,9 @@
 name: How I built this website
 slug: how-i-built-this
 date: '2024-10-15'
-pinned: true
+pinned: false
 draft: false
 video:
-  hls: null
-  thumbnail: null
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/billy-bjork_site-scroll-grid_sprite_sheet.jpg
 ---
 

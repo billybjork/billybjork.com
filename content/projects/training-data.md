@@ -2,7 +2,7 @@
 name: Training Data
 slug: training-data
 date: '2024-10-17'
-pinned: true
+pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/Reel-2024_Training-Data/master.m3u8
