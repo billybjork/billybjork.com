@@ -25,6 +25,30 @@
         padding: 0 1rem;
     }
 
+    .page-container .spacer,
+    .page-container .pc-project {
+        transition: opacity 0.42s ease;
+    }
+
+    .page-container.pc-single-project-mode .spacer,
+    .page-container.pc-single-project-mode .pc-project:not(.pc-open) {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .page-container.pc-single-project-mode .pc-project.pc-open {
+        opacity: 1;
+    }
+
+    .page-container.pc-single-project-compact .spacer,
+    .page-container.pc-single-project-compact .pc-project:not(.pc-open) {
+        display: none;
+    }
+
+    .page-container.pc-single-project-compact .pc-project.pc-open {
+        margin-bottom: 0;
+    }
+
     .spacer {
         height: 100vh;
         display: flex;
@@ -345,7 +369,12 @@
 
 {% block content %}
 <canvas id="shared-depth-canvas" aria-hidden="true"></canvas>
-<div class="page-container">
+<div
+    class="page-container"
+    id="pc-list-scene"
+    data-initial-project-slug="{{ initial_project_slug or '' }}"
+    data-initial-project-direct-entry="{{ 'true' if initial_project_direct_entry else 'false' }}"
+    data-test-base-path="{{ test_base_path }}">
     <div class="spacer top">↓ Scroll down to see point cloud depth thumbnails ↓</div>
 
     {% if projects %}
@@ -798,6 +827,7 @@
     const SPRITE_REQUEST_VERSION = Date.now().toString(36);
     const prefersReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
     let prefersReducedMotion = prefersReducedMotionMedia.matches;
+    const TRANSITION_DEBUG_ENABLED = true;
 
     // =============================================
     // Global State
@@ -854,6 +884,57 @@
             target.removeEventListener(type, handler, options);
         });
         managedListeners.length = 0;
+    }
+
+    function getCurrentScrollY() {
+        return window.pageYOffset || document.documentElement.scrollTop || 0;
+    }
+
+    function roundDebug(value) {
+        if (!Number.isFinite(value)) return null;
+        return Math.round(value * 100) / 100;
+    }
+
+    function getScrollElement() {
+        return document.scrollingElement || document.documentElement;
+    }
+
+    function setScrollTopImmediate(targetTop) {
+        const el = getScrollElement();
+        if (!el) return;
+        const nextTop = Math.max(0, Number(targetTop) || 0);
+        const root = document.documentElement;
+        const body = document.body;
+        const prevRootBehavior = root?.style?.scrollBehavior ?? '';
+        const prevBodyBehavior = body?.style?.scrollBehavior ?? '';
+
+        if (root) root.style.scrollBehavior = 'auto';
+        if (body) body.style.scrollBehavior = 'auto';
+
+        el.scrollTop = nextTop;
+        // Keep both roots in sync for cross-browser quirks.
+        if (root) root.scrollTop = nextTop;
+        if (body) {
+            body.scrollTop = nextTop;
+        }
+
+        if (root) root.style.scrollBehavior = prevRootBehavior;
+        if (body) body.style.scrollBehavior = prevBodyBehavior;
+    }
+
+    function collectDebugSnapshot(extra = {}) {
+        return {
+            scrollY: roundDebug(getCurrentScrollY()),
+            viewportHeight: roundDebug(window.innerHeight || 0),
+            docHeight: roundDebug(document.documentElement?.scrollHeight || 0),
+            bodyHeight: roundDebug(document.body?.scrollHeight || 0),
+            ...extra,
+        };
+    }
+
+    function logTransitionDebug(label, extra = {}) {
+        if (!TRANSITION_DEBUG_ENABLED) return;
+        console.log(`[pc-transition] ${label}`, collectDebugSnapshot(extra));
     }
 
     function getGeometryCacheKey(frameWidth, frameHeight, density) {
@@ -1552,6 +1633,10 @@
             this.promotedStates = new Map();
             this.mainFlowCleanupBySlug = new Map();
             this.currentOpenSlug = null;
+            this.openSession = null;
+            this.singleProjectCompactTimer = null;
+            this.openScrollTraceCleanup = null;
+            this.scrollTweenRafId = null;
             this.transitionToken = 0;
             this.transitionInFlight = false;
             this.fetchController = null;
@@ -1562,6 +1647,10 @@
             this.manifestWarmupByUrl = new Map();
             this.preconnectedOrigins = new Set();
             this.hlsWarmupRequested = false;
+            this.listSceneEl = document.getElementById('pc-list-scene');
+            this.testBasePath = this.listSceneEl?.dataset.testBasePath || '/test';
+            this.initialProjectSlug = this.listSceneEl?.dataset.initialProjectSlug || '';
+            this.initialProjectDirectEntry = this.listSceneEl?.dataset.initialProjectDirectEntry === 'true';
             this.boundCaptureClick = this.handleCaptureClick.bind(this);
             this.boundKeyDown = this.handleKeyDown.bind(this);
             this.boundPrefetchIntent = this.handlePrefetchIntent.bind(this);
@@ -1579,6 +1668,7 @@
             document.querySelectorAll('.pc-project[data-hls-url]').forEach((item) => {
                 this.ensurePreconnectForUrl(item.dataset.hlsUrl || '');
             });
+            this.openInitialProjectIfNeeded();
         }
 
         destroy() {
@@ -1602,6 +1692,15 @@
             this.promotedStates.clear();
             this.contextBySlug.clear();
             this.currentOpenSlug = null;
+            this.openSession = null;
+            this.cancelSingleProjectCompactCommit();
+            this.stopOpenScrollTrace();
+            this.cancelManagedScrollTween();
+            if (this.listSceneEl) {
+                this.listSceneEl.classList.remove('pc-single-project-mode');
+                this.listSceneEl.classList.remove('pc-single-project-compact');
+                this.listSceneEl.removeAttribute('data-active-slug');
+            }
             this.transitionInFlight = false;
         }
 
@@ -1654,6 +1753,261 @@
             ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
         }
 
+        captureListSourceState(ctx) {
+            return {
+                sourceRect: ctx.container.getBoundingClientRect(),
+                sourceScrollY: window.pageYOffset || document.documentElement.scrollTop || 0,
+            };
+        }
+
+        setSingleProjectMode(slug, sourceState, options = {}) {
+            if (!this.listSceneEl) return;
+            const context = this.contextBySlug.get(slug);
+            if (!context) return;
+            this.cancelSingleProjectCompactCommit();
+            this.listSceneEl.classList.remove('pc-single-project-compact');
+            this.listSceneEl.classList.add('pc-single-project-mode');
+            this.listSceneEl.setAttribute('data-active-slug', slug);
+            logTransitionDebug('open:set-single-project-mode', {
+                slug,
+                origin: options.origin || 'list',
+                sourceScrollY: sourceState?.sourceScrollY ?? null,
+                itemTop: roundDebug(context.item.getBoundingClientRect().top),
+                listClasses: this.listSceneEl.className,
+            });
+
+            this.openSession = {
+                slug,
+                origin: options.origin || 'list',
+                sourceRect: sourceState?.sourceRect || null,
+                sourceScrollY: Number.isFinite(sourceState?.sourceScrollY) ? sourceState.sourceScrollY : null,
+            };
+        }
+
+        cancelSingleProjectCompactCommit() {
+            if (this.singleProjectCompactTimer === null) return;
+            clearTimeout(this.singleProjectCompactTimer);
+            this.singleProjectCompactTimer = null;
+        }
+
+        stopOpenScrollTrace() {
+            if (typeof this.openScrollTraceCleanup === 'function') {
+                this.openScrollTraceCleanup();
+            }
+            this.openScrollTraceCleanup = null;
+        }
+
+        cancelManagedScrollTween() {
+            if (this.scrollTweenRafId === null) return;
+            cancelAnimationFrame(this.scrollTweenRafId);
+            this.scrollTweenRafId = null;
+            logTransitionDebug('scroll-tween:cancelled');
+        }
+
+        startManagedScrollTween(targetTop, durationMs, token, label = 'open') {
+            this.cancelManagedScrollTween();
+
+            const startY = getCurrentScrollY();
+            const clampedTarget = Math.max(0, Number(targetTop) || 0);
+            const delta = clampedTarget - startY;
+            if (Math.abs(delta) < 0.5 || durationMs <= 0) {
+                setScrollTopImmediate(clampedTarget);
+                logTransitionDebug(`${label}:scroll-tween:instant`, {
+                    startY: roundDebug(startY),
+                    targetTop: roundDebug(clampedTarget),
+                });
+                return;
+            }
+
+            const startTime = performance.now();
+            logTransitionDebug(`${label}:scroll-tween:start`, {
+                startY: roundDebug(startY),
+                targetTop: roundDebug(clampedTarget),
+                delta: roundDebug(delta),
+                durationMs: roundDebug(durationMs),
+            });
+
+            const step = (now) => {
+                if (!this.isTokenActive(token)) {
+                    this.scrollTweenRafId = null;
+                    logTransitionDebug(`${label}:scroll-tween:stale-token`);
+                    return;
+                }
+
+                const t = Math.min(1, (now - startTime) / durationMs);
+                const eased = 1 - Math.pow(1 - t, 3);
+                setScrollTopImmediate(startY + delta * eased);
+
+                if (t < 1) {
+                    this.scrollTweenRafId = requestAnimationFrame(step);
+                    return;
+                }
+
+                this.scrollTweenRafId = null;
+                logTransitionDebug(`${label}:scroll-tween:end`, {
+                    finalScrollY: roundDebug(getCurrentScrollY()),
+                    targetTop: roundDebug(clampedTarget),
+                });
+            };
+
+            this.scrollTweenRafId = requestAnimationFrame(step);
+        }
+
+        startOpenScrollTrace(slug, phase = 'open', durationMs = 2200) {
+            this.stopOpenScrollTrace();
+            const startedAt = performance.now();
+            let lastLogAt = 0;
+            const onScroll = () => {
+                const now = performance.now();
+                if ((now - lastLogAt) < 80) return;
+                lastLogAt = now;
+                logTransitionDebug(`${phase}:scroll`, {
+                    slug,
+                    elapsedMs: roundDebug(now - startedAt),
+                    listClasses: this.listSceneEl?.className || '',
+                });
+            };
+
+            const timeoutId = window.setTimeout(() => {
+                window.removeEventListener('scroll', onScroll);
+                if (this.openScrollTraceCleanup === cleanup) {
+                    this.openScrollTraceCleanup = null;
+                }
+                logTransitionDebug(`${phase}:scroll-trace:end`, {
+                    slug,
+                    elapsedMs: roundDebug(performance.now() - startedAt),
+                });
+            }, durationMs);
+
+            const cleanup = () => {
+                clearTimeout(timeoutId);
+                window.removeEventListener('scroll', onScroll);
+            };
+
+            this.openScrollTraceCleanup = cleanup;
+            window.addEventListener('scroll', onScroll, { passive: true });
+            logTransitionDebug(`${phase}:scroll-trace:start`, {
+                slug,
+                durationMs,
+                listClasses: this.listSceneEl?.className || '',
+            });
+            onScroll();
+        }
+
+        scheduleSingleProjectCompact(slug, options = {}) {
+            if (!this.listSceneEl) return;
+            const context = this.contextBySlug.get(slug);
+            if (!context) return;
+            this.cancelSingleProjectCompactCommit();
+
+            const delayMs = Math.max(0, Number(options.delayMs) || 0);
+            const applyCompact = () => {
+                if (this.currentOpenSlug !== slug) return;
+                const shouldCompensate = options.compensate !== false && (options.origin || this.openSession?.origin) === 'list';
+                this.cancelManagedScrollTween();
+                logTransitionDebug('open:compact:before', {
+                    slug,
+                    shouldCompensate,
+                    delayMs,
+                    listClasses: this.listSceneEl.className,
+                    itemTop: roundDebug(context.item.getBoundingClientRect().top),
+                });
+                if (shouldCompensate) {
+                    // Cancel any in-flight smooth scroll before layout compaction.
+                    setScrollTopImmediate(getCurrentScrollY());
+                    const scrollYBefore = getCurrentScrollY();
+                    const removedAbove = this.measureCompactRemovedHeightAbove(context);
+                    logTransitionDebug('open:compact:pre-adjust', {
+                        slug,
+                        currentScrollY: roundDebug(scrollYBefore),
+                        removedAbove: roundDebug(removedAbove),
+                    });
+                    if (removedAbove > 0.5) {
+                        setScrollTopImmediate(scrollYBefore - removedAbove);
+                    }
+                }
+                const beforeTop = shouldCompensate ? context.item.getBoundingClientRect().top : 0;
+                this.listSceneEl.classList.add('pc-single-project-compact');
+                if (shouldCompensate) {
+                    const afterTop = context.item.getBoundingClientRect().top;
+                    const delta = afterTop - beforeTop;
+                    // Large deltas here are unstable with collapsed layout; keep only tiny corrective nudge.
+                    const clampedDelta = Math.abs(delta) <= 24 ? delta : 0;
+                    if (Math.abs(clampedDelta) > 0.5) {
+                        setScrollTopImmediate(getCurrentScrollY() + clampedDelta);
+                    }
+                    logTransitionDebug('open:compact:post-adjust', {
+                        slug,
+                        beforeTop: roundDebug(beforeTop),
+                        afterTop: roundDebug(afterTop),
+                        delta: roundDebug(delta),
+                        clampedDelta: roundDebug(clampedDelta),
+                        listClasses: this.listSceneEl.className,
+                    });
+                } else {
+                    logTransitionDebug('open:compact:applied', {
+                        slug,
+                        listClasses: this.listSceneEl.className,
+                        itemTop: roundDebug(context.item.getBoundingClientRect().top),
+                    });
+                }
+            };
+
+            if (delayMs === 0) {
+                applyCompact();
+                return;
+            }
+
+            this.singleProjectCompactTimer = window.setTimeout(() => {
+                this.singleProjectCompactTimer = null;
+                applyCompact();
+            }, delayMs);
+        }
+
+        measureCompactRemovedHeightAbove(context) {
+            if (!this.listSceneEl || !context?.item) return 0;
+            const children = Array.from(this.listSceneEl.children);
+            let removedHeight = 0;
+            for (const child of children) {
+                if (!(child instanceof HTMLElement)) continue;
+                if (child === context.item) break;
+
+                if (child.classList.contains('spacer') || child.classList.contains('pc-project')) {
+                    removedHeight += this.getElementOuterHeight(child);
+                }
+            }
+            return removedHeight;
+        }
+
+        getElementOuterHeight(element) {
+            if (!element) return 0;
+            const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            const marginTop = Number.parseFloat(style.marginTop || '0') || 0;
+            const marginBottom = Number.parseFloat(style.marginBottom || '0') || 0;
+            return rect.height + marginTop + marginBottom;
+        }
+
+        clearSingleProjectMode(options = {}) {
+            this.cancelSingleProjectCompactCommit();
+            if (this.listSceneEl) {
+                this.listSceneEl.classList.remove('pc-single-project-mode');
+                this.listSceneEl.classList.remove('pc-single-project-compact');
+                this.listSceneEl.removeAttribute('data-active-slug');
+            }
+            logTransitionDebug('project:clear-single-project-mode', {
+                keepSession: !!options.keepSession,
+                restoreScrollY: options.restoreScrollY ?? null,
+                listClasses: this.listSceneEl?.className || '',
+            });
+            if (Number.isFinite(options.restoreScrollY)) {
+                setScrollTopImmediate(options.restoreScrollY);
+            }
+            if (!options.keepSession) {
+                this.openSession = null;
+            }
+        }
+
         async toggleProject(slug) {
             if (!slug || this.transitionInFlight) return;
             this.transitionInFlight = true;
@@ -1665,18 +2019,33 @@
                 if (this.currentOpenSlug === slug) {
                     await this.closeProject(slug);
                 } else {
-                    await this.openProject(slug);
+                    await this.openProject(slug, { origin: 'list' });
                 }
             } finally {
                 this.transitionInFlight = false;
             }
         }
 
-        async openProject(slug) {
+        async openProject(slug, options = {}) {
             const ctx = this.contextBySlug.get(slug);
             if (!ctx) return;
             const token = this.beginTransition();
-            const prefersInstant = prefersReducedMotion;
+            const openOrigin = options.origin || 'list';
+            const sourceState = openOrigin === 'list' ? this.captureListSourceState(ctx) : null;
+            const prefersInstant = prefersReducedMotion || options.instant === true;
+            const shouldScrollToProject = options.skipScroll !== true;
+            this.startOpenScrollTrace(slug, 'open', 2200);
+            logTransitionDebug('open:start', {
+                slug,
+                token,
+                openOrigin,
+                prefersInstant,
+                shouldScrollToProject,
+                sourceScrollY: sourceState?.sourceScrollY ?? null,
+                itemTop: roundDebug(ctx.item.getBoundingClientRect().top),
+                containerTop: roundDebug(ctx.container.getBoundingClientRect().top),
+                listClasses: this.listSceneEl?.className || '',
+            });
             this.destroyVideosExcept(slug);
             this.destroyVideoInContext(ctx);
             const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
@@ -1713,8 +2082,31 @@
                 this.syncStageAspectRatioFromHero(ctx);
             }
 
-            const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
-            window.scrollTo({ top: projectTop, behavior: prefersInstant ? 'auto' : 'smooth' });
+            if (shouldScrollToProject) {
+                const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+                logTransitionDebug('open:scrollTo:before', {
+                    slug,
+                    projectTop: roundDebug(projectTop),
+                    behavior: prefersInstant ? 'auto' : 'managed-tween',
+                    itemTop: roundDebug(ctx.item.getBoundingClientRect().top),
+                });
+                if (prefersInstant) {
+                    setScrollTopImmediate(projectTop);
+                } else {
+                    this.startManagedScrollTween(projectTop, 620, token, 'open');
+                }
+                requestAnimationFrame(() => {
+                    logTransitionDebug('open:scrollTo:after-raf', {
+                        slug,
+                        itemTop: roundDebug(ctx.item.getBoundingClientRect().top),
+                        listClasses: this.listSceneEl?.className || '',
+                    });
+                });
+            }
+
+            this.setSingleProjectMode(slug, sourceState, {
+                origin: openOrigin,
+            });
 
             if (!hasHeroVideo) {
                 await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 320, token, { easing: 'inOut' });
@@ -1729,6 +2121,14 @@
                 ctx.thumbnail.resetTransitionState();
                 ctx.thumbnail.setRenderSuppressed(false);
                 this.setHeroSlotVisibility(ctx, false);
+                this.scheduleSingleProjectCompact(slug, {
+                    origin: openOrigin,
+                    delayMs: prefersInstant ? 0 : 360,
+                });
+                logTransitionDebug('open:complete:no-hero', {
+                    slug,
+                    listClasses: this.listSceneEl?.className || '',
+                });
                 return;
             }
 
@@ -1743,6 +2143,14 @@
                 ctx.closeButton.disabled = false;
                 this.currentOpenSlug = slug;
                 ctx.thumbnail.resetTransitionState();
+                this.scheduleSingleProjectCompact(slug, {
+                    origin: openOrigin,
+                    delayMs: 0,
+                });
+                logTransitionDebug('open:complete:instant-hero', {
+                    slug,
+                    listClasses: this.listSceneEl?.className || '',
+                });
 
                 if (heroVideo) {
                     this.prepareHeroVideoReady(heroVideo, ctx, token)
@@ -1803,11 +2211,27 @@
 
             ctx.closeButton.disabled = false;
             this.currentOpenSlug = slug;
+            this.scheduleSingleProjectCompact(slug, {
+                origin: openOrigin,
+                delayMs: prefersInstant ? 0 : 360,
+            });
+            logTransitionDebug('open:complete:hero', {
+                slug,
+                videoIsReady,
+                listClasses: this.listSceneEl?.className || '',
+            });
         }
 
         async closeProject(slug) {
             const ctx = this.contextBySlug.get(slug);
             if (!ctx) return;
+            const session = this.openSession && this.openSession.slug === slug
+                ? this.openSession
+                : null;
+            if (session?.origin === 'direct') {
+                this.navigateToListScene();
+                return;
+            }
 
             const token = this.beginTransition();
             const prefersInstant = prefersReducedMotion;
@@ -1817,8 +2241,12 @@
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
-            const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
-            window.scrollTo({ top: projectTop, behavior: prefersInstant ? 'auto' : 'smooth' });
+            if (session?.origin === 'list' && Number.isFinite(session.sourceScrollY)) {
+                window.scrollTo({ top: session.sourceScrollY, behavior: 'auto' });
+            } else {
+                const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+                window.scrollTo({ top: projectTop, behavior: prefersInstant ? 'auto' : 'smooth' });
+            }
 
             if (prefersInstant) {
                 this.restoreContainer(ctx, false);
@@ -1836,6 +2264,11 @@
                 ctx.closeButton.disabled = false;
                 this.currentOpenSlug = null;
                 this.destroyVideosExcept(null);
+                if (session?.origin === 'list') {
+                    this.clearSingleProjectMode({ restoreScrollY: session.sourceScrollY });
+                } else {
+                    this.clearSingleProjectMode();
+                }
                 return;
             }
 
@@ -1858,7 +2291,9 @@
             this.animateMainFlowShift(ctx, closeDuration, token, () => {
                 ctx.item.classList.remove('pc-hero-expanded');
             });
-            const targetRect = this.measureContainerOriginRect(ctx);
+            const targetRect = (session?.origin === 'list' && session.sourceRect)
+                ? session.sourceRect
+                : this.measureContainerOriginRect(ctx);
 
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, heroRect);
@@ -1871,6 +2306,13 @@
                 ctx.item.classList.remove('pc-closing');
                 ctx.closeButton.disabled = false;
                 return;
+            }
+
+            if (session?.origin === 'list') {
+                this.clearSingleProjectMode({
+                    keepSession: true,
+                    restoreScrollY: session.sourceScrollY,
+                });
             }
 
             this.restoreContainer(ctx, false);
@@ -1887,6 +2329,7 @@
             ctx.thumbnail.resetTransitionState();
             this.currentOpenSlug = null;
             this.destroyVideosExcept(null);
+            this.clearSingleProjectMode();
         }
 
         handleCaptureClick(event) {
@@ -1947,6 +2390,7 @@
         beginTransition() {
             this.transitionToken += 1;
             this.abortPendingFetch();
+            this.cancelManagedScrollTween();
             return this.transitionToken;
         }
 
@@ -1961,6 +2405,43 @@
                 url.searchParams.set('show_drafts', 'true');
             }
             return url.toString();
+        }
+
+        buildListURL() {
+            const url = new URL(this.testBasePath || '/test', window.location.origin);
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('show_drafts') === 'true' || sessionStorage.getItem('bb_show_drafts') === 'true') {
+                url.searchParams.set('show_drafts', 'true');
+            }
+            return url.toString();
+        }
+
+        navigateToListScene() {
+            window.location.assign(this.buildListURL());
+        }
+
+        openInitialProjectIfNeeded() {
+            const slug = (this.initialProjectSlug || '').trim();
+            if (!slug || this.transitionInFlight) return;
+
+            const context = this.contextBySlug.get(slug);
+            if (!context) {
+                console.warn(`Initial /test project slug not found: ${slug}`);
+                return;
+            }
+
+            this.transitionInFlight = true;
+            this.openProject(slug, {
+                origin: this.initialProjectDirectEntry ? 'direct' : 'list',
+                instant: true,
+                skipScroll: this.initialProjectDirectEntry,
+            })
+                .catch((err) => {
+                    console.error(`Failed to initialize /test project view for ${slug}:`, err);
+                })
+                .finally(() => {
+                    this.transitionInFlight = false;
+                });
         }
 
         async fetchProjectDetailsHTML(slug, token) {
