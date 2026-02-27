@@ -1,0 +1,20 @@
+{
+  "projects": [
+    {
+      "slug": "somewhere-in-space",
+      "sprite_id": "somewhere-in-space"
+    },
+    {
+      "slug": "secretmap-x-gravity",
+      "sprite_id": "gravity"
+    },
+    {
+      "slug": "lead-me-home",
+      "sprite_id": "lead-me-home"
+    },
+    {
+      "slug": "surf",
+      "sprite_id": "surf"
+    }
+  ]
+}

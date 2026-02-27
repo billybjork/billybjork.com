@@ -364,26 +364,12 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 3px;
+    width: 2px;
     background: #fff;
-    z-index: 4;
+    z-index: 3;
     pointer-events: none;
     box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
     transform: translateX(-50%);
-}
-
-.edit-hero-playhead::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #111;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 0 6px rgba(0, 0, 0, 0.6);
-    transform: translate(-50%, -50%);
 }
 
 /* Time display */
