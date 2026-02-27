@@ -58,8 +58,25 @@
     .pc-project-main {
         position: relative;
         z-index: 30;
-        margin-top: 0.9rem;
+        max-width: 640px;
+        margin: 0.9rem auto 0;
+        display: none;
+        opacity: 0;
         transform: translateY(0);
+        transition: opacity 0.28s ease;
+    }
+
+    .pc-project.pc-open .pc-project-main {
+        display: block;
+    }
+
+    .pc-project.pc-content-visible .pc-project-main {
+        opacity: 1;
+    }
+
+    .pc-project.pc-closing .pc-project-main {
+        opacity: 0;
+        transition: none;
     }
 
     .pc-header-main {
@@ -93,25 +110,6 @@
 
     .pc-project-main .pc-close-project {
         z-index: 35;
-    }
-
-    .pc-thumbnail-debug {
-        position: absolute;
-        bottom: 0.5rem;
-        left: 0.5rem;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 0.35rem 0.6rem;
-        border-radius: 4px;
-        font-family: monospace;
-        font-size: 0.7rem;
-        color: #888;
-        pointer-events: none;
-        z-index: 21;
-    }
-
-    .pc-thumbnail-debug .value {
-        color: #fff;
-        font-weight: bold;
     }
 
     .pc-project-title {
@@ -159,7 +157,7 @@
         width: 100%;
         max-width: 640px;
         aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
-        margin-top: 0;
+        margin: 0 auto;
     }
 
     .pc-project.pc-hero-expanded .pc-stage {
@@ -210,6 +208,10 @@
 
     .pc-hero-slot.video-visible > .video-container video {
         opacity: 1;
+    }
+
+    .pc-hero-slot.video-visible {
+        background: #040404;
     }
 
     .pc-project-details {
@@ -328,27 +330,6 @@
         margin-bottom: 0.5rem;
     }
 
-    .global-stats {
-        position: fixed;
-        bottom: 1rem;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.9);
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        font-family: monospace;
-        color: #fff;
-        z-index: 100;
-        font-size: 0.8rem;
-        display: flex;
-        gap: 2rem;
-    }
-
-    .global-stats .stat-label {
-        color: #666;
-        margin-right: 0.5rem;
-    }
-
     body.no-webgl #shared-depth-canvas {
         display: none;
     }
@@ -382,11 +363,6 @@
                     {% if project.thumbnail_link %}
                     style="--fallback-poster: url('{{ project.thumbnail_link }}');"
                     {% endif %}>
-                    <div class="pc-thumbnail-debug">
-                        Tilt: <span class="value tilt-angle">0°</span> |
-                        Frame: <span class="value frame-num">1</span>/<span class="value frame-total">0</span> |
-                        <span class="value coherence-val">0%</span>
-                    </div>
                 </div>
                 <section
                     class="pc-hero-slot"
@@ -537,12 +513,6 @@
             </label>
         </div>
     </div>
-</div>
-
-<div class="global-stats">
-    <div><span class="stat-label">Scroll Speed:</span><span id="global-speed">0.0</span></div>
-    <div><span class="stat-label">Rendered:</span><span id="render-count">0</span></div>
-    <div><span class="stat-label">Contexts:</span><span id="gl-context-count">1</span></div>
 </div>
 {% endblock %}
 
@@ -821,7 +791,6 @@
     const PAN_Y_LOOK_INFLUENCE = 0.15;
     const CLOUD_FILL_FACTOR = 0.96;
     const RENDER_MARGIN = 180;
-    const DEBUG_UI_UPDATE_MS = 100;
     const DENSITY_REBUILD_DEBOUNCE_MS = 120;
     const ACTIVE_SCROLL_RECT_REFRESH_MS = 140;
     const STARTUP_STABILIZE_MS = 900;
@@ -871,7 +840,6 @@
     let deviceX = 0;
     let deviceY = 0;
     let hasDeviceOrientation = false;
-    let lastGlobalStatsUpdateMs = 0;
     let densityRebuildTimer = null;
     let transitionRectRefreshUntilMs = 0;
     let projectTransitionManager = null;
@@ -1174,7 +1142,6 @@
             this.coherenceOverride = null;
             this.motionFrozen = false;
             this.renderSuppressed = false;
-            this.lastDebugUpdateMs = 0;
             this.geometryKey = null;
             this.cachedRect = null;
             this.isRenderable = false;
@@ -1185,14 +1152,6 @@
             this.lastLayoutTop = Number.NaN;
             this.lastLayoutCanvasWidth = -1;
             this.lastLayoutCanvasHeight = -1;
-
-            const debug = this.container.querySelector('.pc-thumbnail-debug');
-            this.debugElements = debug ? {
-                tiltAngle: debug.querySelector('.tilt-angle'),
-                frameNum: debug.querySelector('.frame-num'),
-                frameTotal: debug.querySelector('.frame-total'),
-                coherenceVal: debug.querySelector('.coherence-val'),
-            } : null;
 
             this.group = new THREE.Group();
             this.group.visible = false;
@@ -1255,11 +1214,6 @@
             this.points = new THREE.Points(geometry, this.material);
             this.points.frustumCulled = false;
             this.motionGroup.add(this.points);
-
-            // Update debug
-            if (this.debugElements?.frameTotal) {
-                this.debugElements.frameTotal.textContent = metadata.frames;
-            }
         }
 
         rebuildPointCloud() {
@@ -1487,20 +1441,6 @@
             u.dofStrength.value = config.dofStrength;
             this.syncLayout(rect);
             this.updateMotionTransform(effectiveDepth);
-
-            const nowMs = performance.now();
-            if (nowMs - this.lastDebugUpdateMs >= DEBUG_UI_UPDATE_MS) {
-                if (this.debugElements?.tiltAngle) {
-                    this.debugElements.tiltAngle.textContent = this.currentTilt.toFixed(1) + '°';
-                }
-                if (this.debugElements?.frameNum) {
-                    this.debugElements.frameNum.textContent = frameIndex + 1;
-                }
-                if (this.debugElements?.coherenceVal) {
-                    this.debugElements.coherenceVal.textContent = Math.round(this.currentCoherence * 100) + '%';
-                }
-                this.lastDebugUpdateMs = nowMs;
-            }
         }
     }
 
@@ -1598,9 +1538,6 @@
     function activateNoWebGLFallback(message, error = null) {
         hasWebGL = false;
         document.body.classList.add('no-webgl');
-        setGlobalStat('global-speed', 'n/a');
-        setGlobalStat('render-count', '0');
-        setGlobalStat('gl-context-count', '0');
         enableNoWebGLLegacyBehavior();
         if (error) {
             console.error(message, error);
@@ -1783,12 +1720,10 @@
                 await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 320, token, { easing: 'inOut' });
                 if (!this.isTokenActive(token)) return;
 
-                if (!ctx.details.hidden) {
-                    requestAnimationFrame(() => {
-                        if (!this.isTokenActive(token)) return;
-                        ctx.item.classList.add('pc-content-visible');
-                    });
-                }
+                requestAnimationFrame(() => {
+                    if (!this.isTokenActive(token)) return;
+                    ctx.item.classList.add('pc-content-visible');
+                });
                 ctx.closeButton.disabled = false;
                 this.currentOpenSlug = slug;
                 ctx.thumbnail.resetTransitionState();
@@ -1804,9 +1739,7 @@
                 ctx.thumbnail.setCoherenceOverride(1);
                 ctx.container.classList.add('thumb-hidden');
                 ctx.thumbnail.setRenderSuppressed(true);
-                if (!ctx.details.hidden) {
-                    ctx.item.classList.add('pc-content-visible');
-                }
+                ctx.item.classList.add('pc-content-visible');
                 ctx.closeButton.disabled = false;
                 this.currentOpenSlug = slug;
                 ctx.thumbnail.resetTransitionState();
@@ -1863,12 +1796,10 @@
                 ctx.thumbnail.setRenderSuppressed(false);
             }
 
-            if (!ctx.details.hidden) {
-                requestAnimationFrame(() => {
-                    if (!this.isTokenActive(token)) return;
-                    ctx.item.classList.add('pc-content-visible');
-                });
-            }
+            requestAnimationFrame(() => {
+                if (!this.isTokenActive(token)) return;
+                ctx.item.classList.add('pc-content-visible');
+            });
 
             ctx.closeButton.disabled = false;
             this.currentOpenSlug = slug;
@@ -2837,7 +2768,6 @@
         });
 
         console.log(`Created ${thumbnails.length} point cloud thumbnails`);
-        setGlobalStat('gl-context-count', '1');
 
         setupGlobalMouseTracking();
         setupDeviceOrientation();
@@ -3026,13 +2956,6 @@
         });
 
         sharedRenderer.render(renderables, animationProgress, time);
-
-        const nowMs = performance.now();
-        if (nowMs - lastGlobalStatsUpdateMs >= DEBUG_UI_UPDATE_MS) {
-            setGlobalStat('global-speed', animationSpeed.toFixed(1));
-            setGlobalStat('render-count', String(renderState.renderedCount));
-            lastGlobalStatsUpdateMs = nowMs;
-        }
     }
 
     function handleResize() {
