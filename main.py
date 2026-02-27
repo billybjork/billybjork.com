@@ -28,25 +28,25 @@ load_dotenv()
 
 init_db()
 
-# Sync content from S3 on startup (remote edits survive redeployments)
-if os.environ.get("EDIT_TOKEN"):
-    try:
-        from utils.content_sync import sync_from_s3
-        policy = os.environ.get("CONTENT_STARTUP_SYNC_POLICY", "guarded").strip().lower()
+# Sync content from S3 on startup in all environments so localhost/prod
+# resolve content from the same canonical source.
+try:
+    from utils.content_sync import sync_from_s3
+    policy = os.environ.get("CONTENT_STARTUP_SYNC_POLICY", "always").strip().lower()
 
-        if policy in {"off", "disabled", "none"}:
-            logger.info("Startup: content sync from S3 disabled by CONTENT_STARTUP_SYNC_POLICY=%s", policy)
-        else:
-            if policy == "legacy":
-                logger.warning(
-                    "CONTENT_STARTUP_SYNC_POLICY=legacy is deprecated; use 'always' or 'guarded'."
-                )
-            require_marker = policy not in {"always", "legacy"}
-            count = sync_from_s3(require_marker=require_marker)
-            if count:
-                logger.info("Startup: synced %d content file(s) from S3", count)
-    except Exception:
-        logger.exception("Startup S3 content sync failed (using local files)")
+    if policy in {"off", "disabled", "none"}:
+        logger.info("Startup: content sync from S3 disabled by CONTENT_STARTUP_SYNC_POLICY=%s", policy)
+    else:
+        if policy == "legacy":
+            logger.warning(
+                "CONTENT_STARTUP_SYNC_POLICY=legacy is deprecated; use 'always' or 'guarded'."
+            )
+        require_marker = policy not in {"always", "legacy"}
+        count = sync_from_s3(require_marker=require_marker)
+        if count:
+            logger.info("Startup: synced %d content file(s) from S3", count)
+except Exception:
+    logger.exception("Startup S3 content sync failed (using local files)")
 
 app = FastAPI()
 app.add_middleware(ForwardedProtoMiddleware)
