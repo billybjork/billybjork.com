@@ -477,6 +477,7 @@ footer {
 
 .project-name {
     font-size: var(--font-size-medium);
+    line-height: 1.2;
     transform-origin: left center;
     backface-visibility: hidden;
 }
