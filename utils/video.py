@@ -21,6 +21,15 @@ from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, get_s3_client
 
 CACHE_CONTROL_IMMUTABLE = 'max-age=31536000'
 ProgressCallback = Callable[[str, float], None]
+HLS_HEIGHT_BITRATE_LADDER = [
+    (2160, 12000),  # 4K
+    (1440, 8000),   # 1440p
+    (1080, 5000),   # 1080p
+    (720, 2500),    # 720p
+    (480, 1200),    # 480p
+    (360, 800),     # 360p
+    (240, 400),     # 240p
+]
 
 __all__ = [
     "check_ffmpeg",
@@ -35,6 +44,99 @@ __all__ = [
     "generate_hls_only",
     "generate_sprite_and_thumbnail",
 ]
+
+
+def _round_even(value: float) -> int:
+    rounded = int(round(value))
+    if rounded % 2 != 0:
+        rounded += 1 if value >= rounded else -1
+    return max(2, rounded)
+
+
+def _floor_even(value: int) -> int:
+    floored = int(value)
+    if floored % 2 != 0:
+        floored -= 1
+    return max(2, floored)
+
+
+def _pick_stable_variant_dimensions(
+    source_width: int,
+    source_height: int,
+    target_height: int,
+    search_radius: int = 12,
+) -> tuple[int, int]:
+    """
+    Pick even output dimensions near target_height with minimal aspect drift.
+
+    Searching a small height window allows us to find dimensions that preserve
+    source aspect ratio more consistently across the full ladder.
+    """
+    safe_source_width = max(2, source_width)
+    safe_source_height = max(2, source_height)
+    source_ratio = safe_source_width / safe_source_height
+
+    capped_target_height = min(max(2, target_height), safe_source_height)
+    capped_target_height = _floor_even(capped_target_height)
+
+    start = max(2, capped_target_height - search_radius)
+    end = min(safe_source_height, capped_target_height + search_radius)
+
+    best: tuple[tuple[float, int, int], int, int] | None = None
+    seen_heights: set[int] = set()
+
+    for raw_height in range(start, end + 1):
+        height = _floor_even(raw_height)
+        if height < 2 or height in seen_heights:
+            continue
+        seen_heights.add(height)
+
+        width = _round_even(height * source_ratio)
+        width = min(width, _floor_even(safe_source_width))
+        if width < 2:
+            continue
+
+        aspect_drift = abs((width / height) - source_ratio)
+        height_delta = abs(height - capped_target_height)
+        score = (aspect_drift, height_delta, -height)
+
+        if best is None or score < best[0]:
+            best = (score, width, height)
+
+    if best:
+        return best[1], best[2]
+
+    fallback_height = _floor_even(capped_target_height)
+    fallback_width = _round_even(fallback_height * source_ratio)
+    fallback_width = min(fallback_width, _floor_even(safe_source_width))
+    return max(2, fallback_width), max(2, fallback_height)
+
+
+def _build_hls_resolutions(source_width: int, source_height: int) -> list[tuple[int, int, int]]:
+    """
+    Build an HLS ladder with dimensions that stay close to the source DAR.
+    """
+    resolutions: list[tuple[int, int, int]] = []
+    seen_dimensions: set[tuple[int, int]] = set()
+
+    for target_height, bitrate in HLS_HEIGHT_BITRATE_LADDER:
+        # Match previous behavior: only include higher tiers when source can support them.
+        if target_height >= 720 and source_height < target_height:
+            continue
+
+        width, height = _pick_stable_variant_dimensions(source_width, source_height, target_height)
+        dimensions = (width, height)
+        if dimensions in seen_dimensions:
+            continue
+
+        seen_dimensions.add(dimensions)
+        resolutions.append((width, height, bitrate))
+
+    if resolutions:
+        return resolutions
+
+    # Extremely small/odd sources: ensure at least one valid rendition.
+    return [(_floor_even(source_width), _floor_even(source_height), 800)]
 
 
 def _report_progress(progress_callback: ProgressCallback | None, stage: str, progress: float) -> None:
@@ -159,21 +261,9 @@ def generate_hls(
         Path to master.m3u8
     """
     info = get_video_info(video_path)
+    source_width = info['width']
     source_height = info['height']
-
-    # Define resolution ladder based on source
-    resolutions = []
-    if source_height >= 2160:
-        resolutions.append((3840, 2160, 12000))  # 4K
-    if source_height >= 1440:
-        resolutions.append((2560, 1440, 8000))   # 1440p
-    if source_height >= 1080:
-        resolutions.append((1920, 1080, 5000))   # 1080p
-    if source_height >= 720:
-        resolutions.append((1280, 720, 2500))    # 720p
-    resolutions.append((854, 480, 1200))         # 480p
-    resolutions.append((640, 360, 800))          # 360p
-    resolutions.append((426, 240, 400))          # 240p
+    resolutions = _build_hls_resolutions(source_width, source_height)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -189,9 +279,9 @@ def generate_hls(
     stream_maps = []
 
     for i, (width, height, bitrate) in enumerate(resolutions):
-        # Keep source aspect ratio (no letterbox padding) so portrait videos remain portrait.
+        # Explicit per-rendition dimensions keep the ladder aspect-stable across ABR switches.
         filter_complex.append(
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[v{i}]"
+            f"[0:v]scale={width}:{height}:flags=lanczos,setsar=1[v{i}]"
         )
         maps.extend(['-map', f'[v{i}]', '-map', '0:a?'])
         stream_maps.append(f'v:{i},a:{i}')
