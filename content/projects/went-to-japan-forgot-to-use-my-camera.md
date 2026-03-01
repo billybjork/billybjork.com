@@ -34,7 +34,7 @@ The whole experience changes when you’ve got a specific video in mind — you�
 
 I did, out of habit, pack a couple cameras when I traveled to Japan last month. They mostly stayed in my bag. How could I worry about getting the shot when I’m fully occupied choosing a snack at the konbini?
 
-Of course we still ended up with a huge shared photo album. And when I got home, like clockwork, I found myself wanting to make *something* from our wonderful time in Japan. But what to make from a pile of iPhone pics?
+Of course we still ended up with a huge shared photo album. And when I got home, I found myself wanting to make *something* from our wonderful time in Japan. But what to make from a pile of iPhone pics?
 
 <!-- block -->
 
@@ -52,9 +52,9 @@ I got curious and looked into how it worked. Turns out the feature is based on a
 <!-- block -->
 
 <!-- row -->
-I downloaded the model and got it running on my laptop (no cloud was harmed) then fed it some photos. Out came “splat” files, which I now think of as ‘3D reconstructions’ of one or more input images.
+I downloaded the model and got it running on my laptop (no cloud was harmed). Fed it a photo, and out came a “splat” file. A *splat*, I’ve learned, is a 3D representation (or guesstimation?) of the physical space captured in any image(s) you give it.
 
-Now, how do I open these  .ply files? Didn’t think I’d get that far. From the file previews, I can hardly tell what photo each splat file came from.
+In my case, the splats came in the form of  .ply files, which… I don’t know how to open? Didn’t think I’d get that far. From the file previews, I can hardly tell what photo a given splat file came from.
 <!-- col -->
 <video src="https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/20260220_160227_005472.mp4" autoplay loop muted playsinline style="display: block; width: 384px"></video>
 <p class="media-caption">New file format unlocked</p>
@@ -66,7 +66,7 @@ So Claude and I whipped up a simple web UI to look at the splats in all their 3D
 
 <!-- block -->
 
-<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
+<!-- html style="display: block; height: 524px; width: 524px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -918,7 +918,7 @@ document.getElementById('info').textContent=String(err&&err.message?err.message:
 
 <!-- block -->
 
-I almost forgot. The goal wasn't to build the next Unreal Engine, it was to make a fun edit from the trip. I needed a way to turn these splats into video clips I can pull into a timeline.
+I almost forgot. The goal wasn't to build the next Unreal Engine, it was to make a fun edit from the trip. I needed a way to turn these splats into video clips I could wrangle into a timeline and cut to music. Like usual.
 
 Through After Effects, I got familiar with the idea of a “virtual camera.” Figured I could do something similar here, with a coding agent and some Python libraries. I was right.
 
@@ -929,9 +929,9 @@ Through After Effects, I got familiar with the idea of a “virtual camera.” F
 
 <!-- block -->
 
-Turns out, rendering a virtual camera travel through a splat is pretty easy.
+Turns out, simulating a virtual camera moving through a splat is pretty easy.
 
-The hard part is describing the exact camera you want, especially when each iteration takes a minutes of rendering on a cloud GPU (sadly my Macbook wasn’t an option here).
+The hard part is describing the exact camera you want. Does this photo need a sideways dolly shot or a rotating Dutch angle? We’ll find out in a few minutes, once they’re back from rendering in us-west-1 (sadly my Macbook doesn’t speak CUDA). That’ll be 37 cents please.
 
 <!-- block -->
 
@@ -1083,7 +1083,7 @@ Exhausted and ready to be done, I committed to this approach for the final video
 
 <!-- block -->
 
-<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
+<img src="https://d17y8p6t5eu2ht.cloudfront.net/images/project-content/20260220_170144_709446.webp" alt="" style="display: block; width: 359px;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; margin-left: auto; margin-right: auto">
 <p class="media-caption">The &quot;export&quot; button when you edit videos in Python</p>
 
 <!-- block -->
