@@ -171,9 +171,7 @@ function initializeLazyThumbnails(root: ParentNode = document): void {
 // ========== HLS VIDEO PLAYER ==========
 
 const MOBILE_BREAKPOINT = 768;
-const VIDEO_VIEWPORT_PADDING_MOBILE = 12;
-const VIDEO_VIEWPORT_PADDING_DESKTOP = 24;
-const VIDEO_MIN_RENDER_HEIGHT = 180;
+const HLS_LEVEL_ASPECT_DRIFT_TOLERANCE = 0.0015;
 const DEBUG_HLS = document.body.dataset.debugHls === 'true';
 
 function hlsDebug(...args: unknown[]): void {
@@ -186,9 +184,11 @@ function getVideoContainer(videoElement: HTMLVideoElement): HTMLElement | null {
   return videoElement.closest<HTMLElement>('.video-container');
 }
 
-function parsePositiveNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const parsed = Number.parseFloat(value);
+function parsePositiveNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number'
+    ? value
+    : Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
@@ -205,15 +205,10 @@ function resolveVideoAspectRatio(videoElement: HTMLVideoElement): number | null 
     return nativeWidth / nativeHeight;
   }
 
-  const posterAspectRatio = parsePositiveNumber(videoElement.dataset.posterAspectRatio);
-  if (posterAspectRatio) {
-    return posterAspectRatio;
-  }
-
   return null;
 }
 
-function updateVideoContainerLayout(videoElement: HTMLVideoElement): void {
+function updateVideoContainerAspectRatio(videoElement: HTMLVideoElement): void {
   const container = getVideoContainer(videoElement);
   if (!container) return;
 
@@ -221,14 +216,6 @@ function updateVideoContainerLayout(videoElement: HTMLVideoElement): void {
   if (aspectRatio) {
     container.style.setProperty('--video-aspect-ratio', aspectRatio.toString());
   }
-
-  const viewportPadding = window.innerWidth <= MOBILE_BREAKPOINT
-    ? VIDEO_VIEWPORT_PADDING_MOBILE
-    : VIDEO_VIEWPORT_PADDING_DESKTOP;
-  const availableHeight = window.innerHeight - (viewportPadding * 2);
-  const maxHeight = Math.max(VIDEO_MIN_RENDER_HEIGHT, Math.floor(availableHeight));
-
-  container.style.setProperty('--video-max-height', `${maxHeight}px`);
 }
 
 function bindVideoLayout(videoElement: HTMLVideoElement): void {
@@ -236,53 +223,104 @@ function bindVideoLayout(videoElement: HTMLVideoElement): void {
     videoElement.videoLayoutCleanup();
   }
 
-  const refreshLayout = () => updateVideoContainerLayout(videoElement);
-  const posterUrl = videoElement.getAttribute('poster');
-  const needsPosterProbe = !!posterUrl && !resolveVideoAspectRatio(videoElement);
-  let posterProbe: HTMLImageElement | null = null;
-  let posterProbeActive = false;
-
-  if (needsPosterProbe && posterUrl) {
-    posterProbeActive = true;
-    posterProbe = new Image();
-    posterProbe.onload = () => {
-      if (!posterProbeActive || !posterProbe) return;
-      const { naturalWidth, naturalHeight } = posterProbe;
-      if (naturalWidth > 0 && naturalHeight > 0) {
-        videoElement.dataset.posterAspectRatio = (naturalWidth / naturalHeight).toString();
-        refreshLayout();
-      }
-      posterProbeActive = false;
-      posterProbe = null;
-    };
-    posterProbe.onerror = () => {
-      posterProbeActive = false;
-      posterProbe = null;
-    };
-    posterProbe.src = posterUrl;
-  }
+  const refreshLayout = () => updateVideoContainerAspectRatio(videoElement);
 
   videoElement.addEventListener('loadedmetadata', refreshLayout);
-  window.addEventListener('resize', refreshLayout);
+  videoElement.addEventListener('resize', refreshLayout);
   refreshLayout();
 
   videoElement.videoLayoutCleanup = () => {
     videoElement.removeEventListener('loadedmetadata', refreshLayout);
-    window.removeEventListener('resize', refreshLayout);
-    posterProbeActive = false;
-    if (posterProbe) {
-      posterProbe.onload = null;
-      posterProbe.onerror = null;
-      posterProbe.src = '';
-      posterProbe = null;
-    }
-
-    const container = getVideoContainer(videoElement);
-    if (!container) return;
-
-    container.style.removeProperty('--video-max-height');
-    delete videoElement.dataset.posterAspectRatio;
+    videoElement.removeEventListener('resize', refreshLayout);
   };
+}
+
+interface HlsLevelSelection {
+  index: number;
+  width: number | null;
+  height: number;
+  bitrate: number;
+  aspectDrift: number;
+}
+
+function selectStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): number | null {
+  const targetAspectRatio = resolveVideoAspectRatio(videoElement);
+  const containerRect = getVideoContainer(videoElement)?.getBoundingClientRect();
+  const targetRenderHeight = containerRect?.height ?? videoElement.clientHeight ?? 0;
+  if (targetRenderHeight <= 0) {
+    return null;
+  }
+
+  const levelSelections: HlsLevelSelection[] = hls.levels
+    .map((level, index) => {
+      const height = parsePositiveNumber(level.height);
+      if (!height) {
+        return null;
+      }
+
+      const width = parsePositiveNumber(level.width);
+      const aspectDrift = (targetAspectRatio && width)
+        ? Math.abs((width / height) - targetAspectRatio)
+        : 0;
+
+      return {
+        index,
+        width,
+        height,
+        bitrate: parsePositiveNumber(level.bitrate) ?? 0,
+        aspectDrift,
+      };
+    })
+    .filter((selection): selection is HlsLevelSelection => selection !== null);
+
+  if (!levelSelections.length) {
+    return null;
+  }
+
+  let candidates = levelSelections;
+  if (targetAspectRatio) {
+    const aspectMatched = levelSelections.filter(selection =>
+      selection.width !== null && selection.aspectDrift <= HLS_LEVEL_ASPECT_DRIFT_TOLERANCE
+    );
+    if (aspectMatched.length) {
+      candidates = aspectMatched;
+    }
+  }
+
+  const sorted = [...candidates].sort((a, b) => {
+    if (a.height !== b.height) return a.height - b.height;
+    return b.bitrate - a.bitrate;
+  });
+
+  const firstCoveringLevel = sorted.find(selection => selection.height >= (targetRenderHeight * 0.95));
+  if (firstCoveringLevel) {
+    return firstCoveringLevel.index;
+  }
+
+  return sorted[sorted.length - 1]?.index ?? null;
+}
+
+function applyStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): void {
+  const stableLevel = selectStableHlsLevel(hls, videoElement);
+  if (stableLevel === null) {
+    return;
+  }
+
+  const level = hls.levels[stableLevel];
+  hlsDebug('[HLS] Stable start level selected', {
+    level: stableLevel,
+    resolution: level ? `${level.width ?? '?'}x${level.height}` : 'unknown',
+    bitrate: level?.bitrate,
+  });
+
+  hls.startLevel = stableLevel;
+
+  // Narrow viewports are where first-segment ABR shifts were causing visible fit changes.
+  if (window.innerWidth <= MOBILE_BREAKPOINT) {
+    hls.loadLevel = stableLevel;
+    hls.nextLevel = stableLevel;
+    hls.currentLevel = stableLevel;
+  }
 }
 
 /**
@@ -312,7 +350,7 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
     bindVideoLayout(videoElement);
 
     const initializeVideo = () => {
-      updateVideoContainerLayout(videoElement);
+      updateVideoContainerAspectRatio(videoElement);
       if (document.body.classList.contains('editing')) {
         videoElement.pause();
         resolve();
@@ -363,18 +401,12 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
       hls.loadSource(streamUrl);
       hls.attachMedia(videoElement);
 
-      // Try to play immediately after attaching media to preserve user gesture context
-      if (autoplay && !document.body.classList.contains('editing')) {
-        videoElement.play().catch(() => {
-          // Expected to fail here, will retry after manifest is parsed
-        });
-      }
-
       hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          applyStableHlsLevel(hls, videoElement);
           hlsDebug('[HLS] Available quality levels:');
           hls.levels.forEach((level, i) => {
-            hlsDebug(`  [${i}] ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
+            hlsDebug(`  [${i}] ${level.width ?? '?'}x${level.height} @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
           });
           hlsDebug(`[HLS] Starting level: ${hls.startLevel} (auto: ${hls.autoLevelEnabled})`);
           hlsDebug(`[HLS] Current level: ${hls.currentLevel}, Next level: ${hls.nextLevel}`);

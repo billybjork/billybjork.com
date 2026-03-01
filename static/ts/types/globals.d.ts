@@ -39,6 +39,7 @@ declare class Hls {
   destroy(): void;
   levels: HlsLevel[];
   startLevel: number;
+  loadLevel: number;
   currentLevel: number;
   nextLevel: number;
   autoLevelEnabled: boolean;
@@ -53,6 +54,7 @@ interface HlsConfig {
 }
 
 interface HlsLevel {
+  width?: number;
   height: number;
   bitrate: number;
 }
