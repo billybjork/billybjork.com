@@ -44,6 +44,12 @@ interface ProjectData {
   revision?: string;
 }
 
+interface ShowVideoEditorOptions {
+  file?: File | null;
+  projectData?: ProjectData;
+  onVideoSaved?: (videoData: VideoData) => Promise<void> | void;
+}
+
 type ViewType = 'settings' | 'video';
 type VideoFlowMode = 'upload' | 'existing';
 
@@ -91,10 +97,13 @@ interface ProjectSettingsState {
   _thumbPollErrorLogged: boolean;
   _hlsPollErrorLogged: boolean;
   _processingPollErrorLogged: boolean;
+  videoOnlyMode: boolean;
+  onVideoSaved: ((videoData: VideoData) => Promise<void> | void) | null;
 }
 
 const ProjectSettings: ProjectSettingsState & {
   show(slug: string): Promise<void>;
+  showVideoEditor(slug: string, options?: ShowVideoEditorOptions): Promise<void>;
   hide(): void;
   createModal(): void;
   setupBaseListeners(): void;
@@ -166,12 +175,16 @@ const ProjectSettings: ProjectSettingsState & {
   _thumbPollErrorLogged: false,
   _hlsPollErrorLogged: false,
   _processingPollErrorLogged: false,
+  videoOnlyMode: false,
+  onVideoSaved: null,
 
   /**
    * Show settings modal for a project
    */
   async show(slug: string): Promise<void> {
     this.projectSlug = slug;
+    this.videoOnlyMode = false;
+    this.onVideoSaved = null;
 
     // Pause any playing videos in the project
     const projectItem = document.querySelector(`#project-${slug}`);
@@ -185,6 +198,29 @@ const ProjectSettings: ProjectSettingsState & {
     } catch (error) {
       console.error('Failed to load project:', error);
       showNotification('Failed to load project settings', 'error');
+    }
+  },
+
+  /**
+   * Open directly in hero video editor view (without settings form).
+   */
+  async showVideoEditor(slug: string, options: ShowVideoEditorOptions = {}): Promise<void> {
+    this.projectSlug = slug;
+    this.videoOnlyMode = true;
+    this.onVideoSaved = options.onVideoSaved ?? null;
+
+    const projectItem = document.querySelector(`#project-${slug}`);
+    if (projectItem) {
+      projectItem.querySelectorAll('video').forEach((video) => (video as HTMLVideoElement).pause());
+    }
+
+    try {
+      this.projectData = options.projectData ?? await fetchJSON<ProjectData>(`/api/project/${slug}`);
+      this.createModal();
+      this.showVideoView(options.file ?? null);
+    } catch (error) {
+      console.error('Failed to load project:', error);
+      showNotification('Failed to load hero video editor', 'error');
     }
   },
 
@@ -203,7 +239,9 @@ const ProjectSettings: ProjectSettingsState & {
     document.body.appendChild(this.modal);
     lockBodyScroll();
 
-    this.renderSettingsView();
+    if (!this.videoOnlyMode) {
+      this.renderSettingsView();
+    }
     this.setupBaseListeners();
   },
 
@@ -218,7 +256,11 @@ const ProjectSettings: ProjectSettingsState & {
     if (overlay) {
       overlay.addEventListener('click', () => {
         if (this.currentView === 'video') {
-          this.showSettingsView();
+          if (this.videoOnlyMode) {
+            this.hide();
+          } else {
+            this.showSettingsView();
+          }
         } else {
           this.hide();
         }
@@ -231,7 +273,11 @@ const ProjectSettings: ProjectSettingsState & {
         e.preventDefault();
         e.stopPropagation();
         if (this.currentView === 'video') {
-          this.cancelUpload();
+          if (this.videoOnlyMode) {
+            this.hide();
+          } else {
+            this.cancelUpload();
+          }
         } else {
           this.hide();
         }
@@ -1016,6 +1062,10 @@ const ProjectSettings: ProjectSettingsState & {
    * Restore the settings form view, cleaning up video state
    */
   showSettingsView(): void {
+    if (this.videoOnlyMode) {
+      this.hide();
+      return;
+    }
     this.cleanupVideoState();
     this.renderSettingsView();
   },
@@ -1352,7 +1402,11 @@ const ProjectSettings: ProjectSettingsState & {
         if (this.projectData) {
           this.projectData.video = result.video;
         }
-        await this.saveVideoData(result.video);
+        if (this.onVideoSaved) {
+          await this.onVideoSaved(result.video);
+        } else {
+          await this.saveVideoData(result.video);
+        }
 
         progressFill.style.width = '100%';
         progressText.textContent = 'Complete!';
@@ -1514,6 +1568,8 @@ const ProjectSettings: ProjectSettingsState & {
       this.modal.remove();
       this.modal = null;
     }
+    this.onVideoSaved = null;
+    this.videoOnlyMode = false;
     unlockBodyScroll();
   },
 };

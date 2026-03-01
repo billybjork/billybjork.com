@@ -68,61 +68,40 @@ function loadEditModeScripts(): Promise<void> {
 // ========== UI CONTROLS ==========
 
 /**
- * Add project controls (Edit, Settings) to an active project item.
+ * Attach click handlers to project edit button(s) in the template.
  */
-function addProjectControls(projectItem: HTMLElement): void {
+function attachProjectControlHandlers(projectItem: HTMLElement): void {
   const slug = projectItem.dataset.slug;
   if (!slug) return;
 
-  if (projectItem.querySelector('.edit-buttons')) return;
+  // Mark as already initialized to avoid duplicate handlers
+  if (projectItem.dataset.editHandlersAttached === 'true') return;
+  projectItem.dataset.editHandlersAttached = 'true';
 
-  const editBtns = document.createElement('div');
-  editBtns.className = 'edit-buttons';
+  const editBtns = projectItem.querySelectorAll<HTMLButtonElement>('.edit-project-btn');
 
-  const editBtn = document.createElement('button');
-  editBtn.className = 'edit-btn-action';
-  editBtn.textContent = 'Edit';
-  editBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  editBtns.forEach((btn) => {
+    const action = btn.dataset.action;
 
-    if (!isIsolationMode()) {
-      const destination = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
-      persistScrollForNavigation(new URL(destination).pathname, '.project-item.active .project-content');
-      window.location.href = destination;
-      return;
+    if (action === 'edit') {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!isIsolationMode()) {
+          const destination = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
+          persistScrollForNavigation(new URL(destination).pathname, '.project-item.active .project-content');
+          window.location.href = destination;
+          return;
+        }
+
+        if (!window.EditMode) {
+          await loadEditModeScripts();
+        }
+        window.EditMode?.init(slug);
+      });
     }
-
-    if (!window.EditMode) {
-      await loadEditModeScripts();
-    }
-    window.EditMode?.init(slug);
   });
-
-  const settingsBtn = document.createElement('button');
-  settingsBtn.className = 'edit-btn-action edit-btn-settings';
-  settingsBtn.innerHTML = '&#9881;';
-  settingsBtn.title = 'Project Settings';
-  settingsBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!window.ProjectSettings) {
-      await loadEditModeScripts();
-    }
-    window.ProjectSettings?.show(slug);
-  });
-
-  editBtns.appendChild(editBtn);
-  editBtns.appendChild(settingsBtn);
-  projectItem.appendChild(editBtns);
-}
-
-function removeProjectControls(projectItem: HTMLElement): void {
-  const editBtns = projectItem.querySelector('.edit-buttons');
-  if (editBtns) {
-    editBtns.remove();
-  }
 }
 
 function initHeaderNavCompaction(): void {
@@ -317,7 +296,7 @@ function initializeEditMode(): void {
   addShowDraftsToggle();
   initHeaderNavCompaction();
 
-  document.querySelectorAll<HTMLElement>('.project-item.active').forEach(addProjectControls);
+  document.querySelectorAll<HTMLElement>('.project-item.active').forEach(attachProjectControlHandlers);
 
   document.body.addEventListener('project:afterSwap', (event) => {
     const customEvent = event as CustomEvent<{ element?: HTMLElement; isOpen?: boolean }>;
@@ -325,12 +304,8 @@ function initializeEditMode(): void {
 
     if (element?.classList?.contains('project-details')) {
       const projectItem = element.closest<HTMLElement>('.project-item');
-      if (projectItem) {
-        if (isOpen) {
-          setTimeout(() => addProjectControls(projectItem), 50);
-        } else {
-          removeProjectControls(projectItem);
-        }
+      if (projectItem && isOpen) {
+        setTimeout(() => attachProjectControlHandlers(projectItem), 50);
       }
     }
   });
@@ -341,20 +316,19 @@ function initializeEditMode(): void {
     const slug = projectItem?.dataset.slug;
 
     if (slug) {
-      if (urlParams.has('edit')) {
+      if (urlParams.has('edit') || urlParams.has('settings')) {
+        if (urlParams.has('settings')) {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete('settings');
+          nextUrl.searchParams.set('edit', '');
+          window.history.replaceState({}, '', nextUrl.toString());
+        }
+
         setTimeout(async () => {
           if (!window.EditMode) {
             await loadEditModeScripts();
           }
           window.EditMode?.init(slug);
-        }, 100);
-      } else if (urlParams.has('settings')) {
-        window.history.replaceState({}, '', buildUrlWithShowDrafts(`/${slug}`));
-        setTimeout(async () => {
-          if (!window.ProjectSettings) {
-            await loadEditModeScripts();
-          }
-          window.ProjectSettings?.show(slug);
         }, 100);
       }
     }

@@ -660,8 +660,9 @@ footer {
 
 .video-container {
     --video-aspect-ratio: 1.7777777778;
-    --video-max-height: calc(100vh - 4rem);
     --video-inline-padding: clamp(0.75rem, 2vw, 1.5rem);
+    --video-max-height: calc(100vh - (var(--video-inline-padding) * 2));
+    --video-max-height: calc(100svh - (var(--video-inline-padding) * 2));
     position: relative;
     width: min(
         100%,
@@ -983,6 +984,22 @@ footer {
 .copy-text-link:hover::after {
     transform: scaleX(1);
     transform-origin: left;
+}
+
+/* Override copy-text-link styles when used as icon button in project-links */
+.project-links .copy-text-link {
+    color: var(--primary-color);
+    background: none;
+    padding: 0;
+}
+
+.project-links .copy-text-link:hover {
+    color: var(--highlight-color);
+    background: none;
+}
+
+.project-links .copy-text-link::after {
+    display: none;
 }
 
 /* =========================

@@ -44,6 +44,7 @@ import { persistScrollForNavigation } from './scroll-restore';
 import { ScrollAnchorManager } from './scroll-anchors';
 import { slugify, uniqueSlug } from './slugify';
 import { INLINE_MAX_DEPTH, findNextInlineMatch, renderInlineMarkdown, sanitizeUrl } from './inline-markdown';
+import ProjectSettings from './project-settings';
 
 // ========== ICONS ==========
 
@@ -124,6 +125,10 @@ interface InlineToolbarContext {
   onEdit: () => void;
 }
 
+interface HeroMediaControlsElement extends HTMLElement {
+  refreshState?: () => void;
+}
+
 // ========== STATE ==========
 
 let blocks: Block[] = [];
@@ -135,6 +140,7 @@ let container: HTMLElement | null = null;
 let toolbar: HTMLElement | null = null;
 let editMode: EditModeType = null;
 let hiddenProjectControls: HTMLElement | null = null;
+let inlineProjectMetadataControls: HTMLElement | null = null;
 
 // Auto-save state
 let saveState: SaveState = SaveState.UNCHANGED;
@@ -232,6 +238,9 @@ function setupEditor(data: ProjectData | AboutData): void {
   const contentContainer = editMode === 'about'
     ? document.querySelector<HTMLElement>('.about-content')
     : document.querySelector<HTMLElement>('.project-content');
+  const projectItem = editMode === 'project'
+    ? contentContainer?.closest<HTMLElement>('.project-item') ?? null
+    : null;
 
   if (!contentContainer) {
     console.error('Content container not found');
@@ -240,7 +249,6 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   // For project mode, pause any playing videos
   if (editMode === 'project') {
-    const projectItem = contentContainer.closest('.project-item');
     if (projectItem) {
       projectItem.querySelectorAll('video').forEach(video => {
         video.pause();
@@ -312,13 +320,29 @@ function setupEditor(data: ProjectData | AboutData): void {
   document.body.classList.add('editing');
   initInlineToolbar();
 
-  // Inject hero thumbnail controls for project mode with hero video
-  if (editMode === 'project' && 'video' in data && data.video?.hls) {
-    const projectItem = contentContainer.closest('.project-item');
-    const videoContainer = projectItem?.querySelector('.video-container');
+  if (editMode === 'project' && projectItem) {
+    const project = data as ProjectData;
+    setupEditableProjectHeader(projectItem, project);
+
+    const details = projectItem.querySelector<HTMLElement>('.project-details');
+    const videoContainer = details?.querySelector<HTMLElement>('.video-container');
+
+    inlineProjectMetadataControls = createInlineProjectMetadataControls(project);
+    if (inlineProjectMetadataControls) {
+      if (videoContainer) {
+        videoContainer.before(inlineProjectMetadataControls);
+      } else {
+        contentContainer.before(inlineProjectMetadataControls);
+      }
+    }
+
+    heroThumbnailControls = createHeroThumbnailControls(project);
     if (videoContainer) {
-      heroThumbnailControls = createHeroThumbnailControls(data as ProjectData);
       videoContainer.after(heroThumbnailControls);
+    } else if (inlineProjectMetadataControls) {
+      inlineProjectMetadataControls.after(heroThumbnailControls);
+    } else {
+      contentContainer.before(heroThumbnailControls);
     }
   }
 
@@ -354,8 +378,9 @@ function buildProjectSavePayload(markdown: string, options: { force?: boolean } 
   }
 
   const project = projectData as ProjectData;
+  const nextSlug = String(project.slug || projectSlug).trim();
   const payload: Record<string, unknown> = {
-    slug: projectSlug,
+    slug: nextSlug,
     original_slug: projectSlug,
     name: project.name,
     date: project.date,
@@ -377,6 +402,52 @@ function buildProjectSavePayload(markdown: string, options: { force?: boolean } 
   }
 
   return payload;
+}
+
+function syncProjectSlug(nextSlugValue: unknown): void {
+  if (editMode !== 'project' || typeof nextSlugValue !== 'string') return;
+
+  const nextSlug = nextSlugValue.trim();
+  if (!nextSlug || !projectData || !('slug' in projectData)) return;
+
+  const previousSlug = projectSlug;
+  (projectData as ProjectData).slug = nextSlug;
+  if (previousSlug === nextSlug) return;
+
+  projectSlug = nextSlug;
+
+  const projectItem = document.querySelector<HTMLElement>('.project-item.active');
+  if (projectItem) {
+    projectItem.dataset.slug = nextSlug;
+    if (previousSlug && projectItem.id === `project-${previousSlug}`) {
+      projectItem.id = `project-${nextSlug}`;
+    }
+    const details = projectItem.querySelector<HTMLElement>('.project-details');
+    if (details && previousSlug && details.id === `details-${previousSlug}`) {
+      details.id = `details-${nextSlug}`;
+    }
+  }
+
+  const slugInput = inlineProjectMetadataControls?.querySelector<HTMLInputElement>('#inline-settings-slug');
+  if (slugInput) {
+    slugInput.value = nextSlug;
+  }
+
+  const url = new URL(window.location.href);
+  if (url.pathname !== `/${nextSlug}`) {
+    url.pathname = `/${nextSlug}`;
+    window.history.replaceState({}, '', url.toString());
+  }
+}
+
+function applyProjectSaveResult(result: { revision?: string; slug?: string }): void {
+  if (result.revision) {
+    currentRevision = result.revision;
+  }
+  if (editMode === 'project') {
+    cleanupCandidateUrls.clear();
+    syncProjectSlug(result.slug);
+  }
 }
 
 /**
@@ -429,12 +500,7 @@ function showConflictBanner(): void {
 
       if (response.ok) {
         const result = await response.json();
-        if (result.revision) {
-          currentRevision = result.revision;
-        }
-        if (editMode === 'project') {
-          cleanupCandidateUrls.clear();
-        }
+        applyProjectSaveResult(result);
         isDirty = false;
         dispatchSaveAction({ type: 'save_ok' });
         showNotification('Changes saved (overwritten)', 'success');
@@ -521,6 +587,10 @@ export function cleanup(): void {
   if (heroThumbnailControls) {
     heroThumbnailControls.remove();
     heroThumbnailControls = null;
+  }
+  if (inlineProjectMetadataControls) {
+    inlineProjectMetadataControls.remove();
+    inlineProjectMetadataControls = null;
   }
 
   // Remove edit param from URL
@@ -1182,12 +1252,7 @@ async function performAutoSave(): Promise<void> {
     }
 
     const result = await response.json();
-    if (result.revision) {
-      currentRevision = result.revision;
-    }
-    if (editMode === 'project') {
-      cleanupCandidateUrls.clear();
-    }
+    applyProjectSaveResult(result);
 
     isDirty = false;
     dispatchSaveAction({ type: 'save_ok' });
@@ -3355,12 +3420,7 @@ async function handleSave(): Promise<void> {
     }
 
     const result = await response.json();
-    if (result.revision) {
-      currentRevision = result.revision;
-    }
-    if (editMode === 'project') {
-      cleanupCandidateUrls.clear();
-    }
+    applyProjectSaveResult(result);
 
     isDirty = false;
     dispatchSaveAction({ type: 'save_ok' });
@@ -3404,39 +3464,206 @@ export function updateBlock(
   updateBlockFieldsInContext({ index }, updates, options);
 }
 
-// ========== HERO THUMBNAIL CONTROLS ==========
+// ========== INLINE PROJECT SETTINGS ==========
 
-/**
- * Create hero thumbnail controls for customizing the hero video thumbnail.
- */
+function getEditableProjectData(): ProjectData | null {
+  if (!projectData || !('slug' in projectData)) return null;
+  return projectData as ProjectData;
+}
+
+function setupEditableProjectHeader(projectItem: HTMLElement, project: ProjectData): void {
+  const header = projectItem.querySelector<HTMLElement>('.project-header');
+  const nameEl = projectItem.querySelector<HTMLElement>('.project-name');
+  const dateEl = projectItem.querySelector<HTMLElement>('.project-date');
+  if (!header || !nameEl || !dateEl) return;
+
+  header.classList.add('edit-project-header-active');
+
+  dateEl.innerHTML = `
+    <input
+      type="date"
+      class="edit-project-header-date-input"
+      value="${escapeHtmlAttr(project.date || '')}"
+      aria-label="Project date"
+    >
+  `;
+  nameEl.innerHTML = `
+    <input
+      type="text"
+      class="edit-project-header-name-input"
+      value="${escapeHtmlAttr(project.name || '')}"
+      aria-label="Project name"
+      required
+    >
+  `;
+
+  const dateInput = dateEl.querySelector<HTMLInputElement>('.edit-project-header-date-input');
+  const nameInput = nameEl.querySelector<HTMLInputElement>('.edit-project-header-name-input');
+  if (!dateInput || !nameInput) return;
+
+  const blockHeaderInteractions = (event: Event): void => {
+    event.stopPropagation();
+  };
+
+  [dateInput, nameInput].forEach((input) => {
+    input.addEventListener('click', blockHeaderInteractions);
+    input.addEventListener('mousedown', blockHeaderInteractions);
+    input.addEventListener('pointerdown', blockHeaderInteractions);
+    input.addEventListener('keydown', blockHeaderInteractions);
+  });
+
+  dateInput.addEventListener('input', () => {
+    project.date = dateInput.value;
+    markDirty();
+  });
+
+  nameInput.addEventListener('input', () => {
+    project.name = nameInput.value;
+    const toolbarTitle = toolbar?.querySelector<HTMLElement>('.edit-project-name');
+    if (toolbarTitle) {
+      const label = project.name.trim() || 'Project';
+      toolbarTitle.textContent = `Editing: ${label}`;
+    }
+    markDirty();
+  });
+}
+
+function createInlineProjectMetadataControls(project: ProjectData): HTMLElement {
+  const controls = document.createElement('section');
+  controls.className = 'edit-inline-project-settings';
+  controls.innerHTML = `
+    <div class="edit-inline-project-settings-grid">
+      <div class="edit-form-group">
+        <label for="inline-settings-slug">URL Slug</label>
+        <input
+          type="text"
+          id="inline-settings-slug"
+          value="${escapeHtmlAttr(project.slug || '')}"
+          pattern="[a-z0-9_\\-]+"
+          required
+        >
+      </div>
+      <div class="edit-form-group">
+        <label for="inline-settings-youtube">YouTube Link</label>
+        <input
+          type="url"
+          id="inline-settings-youtube"
+          value="${escapeHtmlAttr(project.youtube || '')}"
+          placeholder="https://youtube.com/watch?v=..."
+        >
+      </div>
+    </div>
+    <div class="edit-form-row edit-inline-project-settings-flags">
+      <label class="edit-form-checkbox">
+        <input type="checkbox" id="inline-settings-draft" ${project.draft ? 'checked' : ''}>
+        <span>Draft</span>
+      </label>
+      <label class="edit-form-checkbox">
+        <input type="checkbox" id="inline-settings-pinned" ${project.pinned ? 'checked' : ''}>
+        <span>Pinned</span>
+      </label>
+    </div>
+  `;
+
+  const slugInput = controls.querySelector<HTMLInputElement>('#inline-settings-slug');
+  const youtubeInput = controls.querySelector<HTMLInputElement>('#inline-settings-youtube');
+  const draftInput = controls.querySelector<HTMLInputElement>('#inline-settings-draft');
+  const pinnedInput = controls.querySelector<HTMLInputElement>('#inline-settings-pinned');
+
+  slugInput?.addEventListener('input', () => {
+    project.slug = slugInput.value;
+    markDirty();
+  });
+
+  youtubeInput?.addEventListener('input', () => {
+    project.youtube = youtubeInput.value.trim();
+    markDirty();
+  });
+
+  draftInput?.addEventListener('change', () => {
+    project.draft = draftInput.checked;
+    markDirty();
+  });
+
+  pinnedInput?.addEventListener('change', () => {
+    project.pinned = pinnedInput.checked;
+    markDirty();
+  });
+
+  return controls;
+}
+
+function openHeroVideoEditor(file: File | null = null): void {
+  if (editMode !== 'project' || !projectSlug) return;
+  const project = getEditableProjectData();
+  if (!project) return;
+
+  void ProjectSettings.showVideoEditor(projectSlug, {
+    file,
+    projectData: project,
+    onVideoSaved: (videoData) => {
+      const previousVideo = project.video || {};
+      for (const key of ['hls', 'thumbnail', 'spriteSheet'] as const) {
+        const previous = previousVideo[key];
+        const next = videoData[key];
+        if (previous && previous !== next) {
+          addCleanupCandidateUrl(cleanupCandidateUrls, previous);
+        }
+      }
+      project.video = { ...videoData };
+      (heroThumbnailControls as HeroMediaControlsElement | null)?.refreshState?.();
+      markDirty();
+    },
+  });
+}
+
+// ========== HERO MEDIA CONTROLS ==========
+
 function createHeroThumbnailControls(data: ProjectData): HTMLElement {
-  const controls = document.createElement('div');
+  const controls = document.createElement('div') as HeroMediaControlsElement;
   controls.className = 'edit-hero-thumbnail-controls';
 
   const currentThumbnail = data.video?.thumbnail || '';
-
   controls.innerHTML = `
-    <div class="edit-hero-thumbnail-header">
-      <span class="edit-hero-thumbnail-label">Thumbnail</span>
-    </div>
-    <div class="edit-hero-thumbnail-content">
-      <img class="edit-hero-thumbnail-preview" src="${escapeHtmlAttr(currentThumbnail)}"
-           alt="Thumbnail" style="${currentThumbnail ? '' : 'display:none'}">
-      <div class="edit-hero-thumbnail-actions">
-        <input type="url" class="edit-hero-thumbnail-input"
-               placeholder="Thumbnail image URL..."
-               value="${escapeHtmlAttr(currentThumbnail)}">
-        <div class="edit-hero-thumbnail-buttons">
-          <button type="button" class="edit-btn-small" data-action="upload">Upload</button>
-          <button type="button" class="edit-btn-small" data-action="capture">Use current frame</button>
-          <button type="button" class="edit-btn-small" data-action="clear" style="${currentThumbnail ? '' : 'display:none'}">Clear</button>
+    <div class="edit-hero-media-grid">
+      <div class="edit-hero-video-panel">
+        <div class="edit-hero-video-header">
+          <span class="edit-hero-panel-label">Hero Video</span>
+          <span class="edit-hero-video-status"></span>
         </div>
-        <input type="file" class="edit-hero-thumbnail-file" accept="image/*" style="display: none;">
+        <div class="edit-hero-video-buttons">
+          <button type="button" class="edit-btn-small" data-action="update-sprite">Update Sprite</button>
+          <button type="button" class="edit-btn-small" data-action="replace-video">Replace</button>
+        </div>
+        <input type="file" class="edit-hero-video-file" accept="video/*" style="display: none;">
+      </div>
+      <div class="edit-hero-thumbnail-panel">
+        <div class="edit-hero-thumbnail-header">
+          <span class="edit-hero-panel-label">Thumbnail</span>
+        </div>
+        <div class="edit-hero-thumbnail-content">
+          <img class="edit-hero-thumbnail-preview" src="${escapeHtmlAttr(currentThumbnail)}"
+              alt="Thumbnail" style="${currentThumbnail ? '' : 'display:none'}">
+          <div class="edit-hero-thumbnail-actions">
+            <input type="url" class="edit-hero-thumbnail-input"
+                placeholder="Thumbnail image URL..."
+                value="${escapeHtmlAttr(currentThumbnail)}">
+            <div class="edit-hero-thumbnail-buttons">
+              <button type="button" class="edit-btn-small" data-action="upload">Upload</button>
+              <button type="button" class="edit-btn-small" data-action="capture">Use current frame</button>
+              <button type="button" class="edit-btn-small" data-action="clear" style="${currentThumbnail ? '' : 'display:none'}">Clear</button>
+            </div>
+            <input type="file" class="edit-hero-thumbnail-file" accept="image/*" style="display: none;">
+          </div>
+        </div>
       </div>
     </div>
   `;
 
-  // Setup event listeners
+  const statusEl = controls.querySelector('.edit-hero-video-status') as HTMLElement;
+  const updateSpriteBtn = controls.querySelector('[data-action="update-sprite"]') as HTMLButtonElement;
+  const replaceBtn = controls.querySelector('[data-action="replace-video"]') as HTMLButtonElement;
+  const videoFileInput = controls.querySelector('.edit-hero-video-file') as HTMLInputElement;
   const input = controls.querySelector('.edit-hero-thumbnail-input') as HTMLInputElement;
   const preview = controls.querySelector('.edit-hero-thumbnail-preview') as HTMLImageElement;
   const uploadBtn = controls.querySelector('[data-action="upload"]') as HTMLButtonElement;
@@ -3444,43 +3671,83 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   const clearBtn = controls.querySelector('[data-action="clear"]') as HTMLButtonElement;
   const fileInput = controls.querySelector('.edit-hero-thumbnail-file') as HTMLInputElement;
 
-  // Helper to sync thumbnail URL
-  const syncThumbnail = (url: string | null): void => {
-    if (projectData && 'video' in projectData && projectData.video) {
-      // Track old thumbnail URL for orphan cleanup
-      const oldThumbnail = projectData.video.thumbnail;
-      if (oldThumbnail && oldThumbnail !== url) {
-        addCleanupCandidateUrl(cleanupCandidateUrls, oldThumbnail);
-      }
-      projectData.video.thumbnail = url || undefined;
-      markDirty();
-    }
-    if (input) input.value = url || '';
-    if (preview) {
-      if (url) {
-        preview.src = url;
-        preview.style.display = '';
-      } else {
-        preview.style.display = 'none';
-      }
-    }
-    if (clearBtn) {
-      clearBtn.style.display = url ? '' : 'none';
+  const renderThumbnailFromProject = (): void => {
+    const project = getEditableProjectData();
+    const thumbnail = project?.video?.thumbnail?.trim() || '';
+    input.value = thumbnail;
+    if (thumbnail) {
+      preview.src = thumbnail;
+      preview.style.display = '';
+      clearBtn.style.display = '';
+    } else {
+      preview.style.display = 'none';
+      clearBtn.style.display = 'none';
     }
   };
 
-  // URL input change
-  input?.addEventListener('change', () => {
+  const refreshState = (): void => {
+    const project = getEditableProjectData();
+    const hls = project?.video?.hls?.trim() || '';
+    const hasHls = hls.length > 0;
+    statusEl.textContent = hasHls ? `Current: ${hls.split('/').pop()}` : 'No hero video yet';
+    updateSpriteBtn.disabled = !hasHls;
+    replaceBtn.textContent = hasHls ? 'Replace' : 'Upload Hero Video';
+    captureBtn.disabled = !hasHls;
+    renderThumbnailFromProject();
+  };
+  controls.refreshState = refreshState;
+  refreshState();
+
+  const syncThumbnail = (url: string | null): void => {
+    const project = getEditableProjectData();
+    if (!project) return;
+
+    if (!project.video) {
+      project.video = {};
+    }
+
+    const nextUrl = url || undefined;
+    const oldThumbnail = project.video.thumbnail;
+    if (oldThumbnail && oldThumbnail !== nextUrl) {
+      addCleanupCandidateUrl(cleanupCandidateUrls, oldThumbnail);
+    }
+    project.video.thumbnail = nextUrl;
+    markDirty();
+    renderThumbnailFromProject();
+  };
+
+  updateSpriteBtn.addEventListener('click', () => {
+    const project = getEditableProjectData();
+    if (!project?.video?.hls) {
+      showNotification('No existing hero video found for this project.', 'error');
+      return;
+    }
+    openHeroVideoEditor();
+  });
+
+  replaceBtn.addEventListener('click', () => videoFileInput.click());
+  videoFileInput.addEventListener('change', () => {
+    const file = videoFileInput.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('video/')) {
+      showNotification('Please select a video file', 'error');
+      videoFileInput.value = '';
+      return;
+    }
+    openHeroVideoEditor(file);
+    videoFileInput.value = '';
+  });
+
+  input.addEventListener('change', () => {
     syncThumbnail(input.value.trim() || null);
   });
-  input?.addEventListener('blur', () => {
+  input.addEventListener('blur', () => {
     syncThumbnail(input.value.trim() || null);
   });
 
-  // Upload button
-  uploadBtn?.addEventListener('click', () => fileInput?.click());
+  uploadBtn.addEventListener('click', () => fileInput.click());
 
-  fileInput?.addEventListener('change', async () => {
+  fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
 
@@ -3505,9 +3772,7 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
     }
   });
 
-  // Capture current frame button
-  captureBtn?.addEventListener('click', async () => {
-    // Find the hero video element on the page
+  captureBtn.addEventListener('click', async () => {
     const projectItem = controls.closest('.project-item');
     const video = projectItem?.querySelector('.video-container video') as HTMLVideoElement | null;
 
@@ -3532,11 +3797,11 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
     } finally {
       captureBtn.disabled = false;
       captureBtn.textContent = 'Use current frame';
+      refreshState();
     }
   });
 
-  // Clear button
-  clearBtn?.addEventListener('click', () => {
+  clearBtn.addEventListener('click', () => {
     syncThumbnail(null);
     showNotification('Thumbnail cleared', 'info');
   });

@@ -103,38 +103,116 @@
    ======================================== */
 
 @media (max-width: 768px) {
+    body.editing .project-item {
+        --project-shell-inline-padding: 0.35rem;
+    }
+
+    body.editing .project-item.active {
+        margin-bottom: 0.75rem;
+        padding: 0.6rem 0.45rem 0.75rem;
+        border-radius: 8px;
+    }
+
+    body.editing .project-content {
+        padding-inline: 0;
+    }
+
+    .edit-mode-container {
+        padding-top: 106px;
+    }
+
     .edit-mode-toolbar {
-        gap: 8px;
-        padding: 8px 10px;
+        gap: 6px;
+        padding: 8px;
+        align-items: center;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        border-radius: 0;
+    }
+
+    .edit-mode-toolbar-fixed {
+        padding-top: 8px;
+        padding-top: calc(constant(safe-area-inset-top) + 8px);
+        padding-top: calc(env(safe-area-inset-top) + 8px);
+        padding-left: 8px;
+        padding-right: 8px;
     }
 
     .edit-toolbar-left {
+        width: auto;
         min-width: 0;
-    }
-
-    .edit-toolbar-right {
+        justify-content: flex-start;
         gap: 6px;
     }
 
+    .edit-toolbar-right {
+        width: auto;
+        gap: 5px;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
+    }
+
     .edit-project-name {
-        max-width: 44vw;
+        max-width: clamp(120px, 42vw, 260px);
         font-size: 13px;
     }
 
     .edit-status {
         font-size: 12px;
+        white-space: nowrap;
     }
 
     .edit-btn {
-        padding: 7px 10px;
+        padding: 7px 9px;
         font-size: 13px;
     }
 
     .edit-btn-icon {
-        width: 30px;
-        min-width: 30px;
-        height: 30px;
+        width: 32px;
+        min-width: 32px;
+        height: 32px;
         padding: 0;
+    }
+
+    .edit-btn-icon svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    .edit-blocks-container {
+        gap: 11px;
+    }
+
+    .block-wrapper {
+        gap: 6px;
+        padding: 8px;
+        padding-right: 34px;
+        padding-bottom: 32px;
+    }
+
+    .block-delete-btn {
+        opacity: 1;
+    }
+
+    .block-align-toolbar {
+        opacity: 1;
+    }
+
+    .row-toolbar {
+        gap: 8px;
+    }
+
+    .row-action-btn,
+    .merge-add-btn,
+    .merge-columns-btn {
+        width: 28px;
+        height: 28px;
+    }
+
+    .row-action-btn svg,
+    .merge-columns-btn svg {
+        width: 16px;
+        height: 16px;
     }
 
     .inline-format-toolbar {
@@ -157,6 +235,39 @@
         width: auto;
         min-width: auto;
         max-height: 50vh;
+    }
+}
+
+@media (max-width: 460px) {
+    .edit-mode-container {
+        padding-top: 112px;
+    }
+
+    .edit-project-name {
+        max-width: clamp(96px, 36vw, 180px);
+        font-size: 12px;
+    }
+
+    .edit-status {
+        display: none;
+    }
+
+    .edit-btn {
+        font-size: 12px;
+        padding: 7px 8px;
+    }
+
+    .block-wrapper {
+        padding: 7px;
+        padding-right: 32px;
+        padding-bottom: 30px;
+    }
+
+    .text-block-line-preview,
+    .text-line-input,
+    .block-textarea {
+        font-size: 15px;
+        line-height: 1.58;
     }
 }
 

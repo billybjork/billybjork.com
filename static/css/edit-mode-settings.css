@@ -428,36 +428,166 @@
 }
 
 /* ========================================
-   Hero Thumbnail Controls (on project page)
+   Inline Settings (project edit mode)
+   ======================================== */
+
+.project-header.edit-project-header-active {
+    cursor: default;
+    transform: none;
+}
+
+.project-header.edit-project-header-active .project-name,
+.project-header.edit-project-header-active .project-date,
+.project-item.active .project-header.edit-project-header-active .project-name,
+.project-item.active .project-header.edit-project-header-active .project-date {
+    transform: none;
+    max-width: 100%;
+}
+
+.edit-project-header-name-input,
+.edit-project-header-date-input {
+    width: 100%;
+    padding: 6px 10px;
+    background: #101010;
+    border: 1px solid #2f2f2f;
+    border-radius: 6px;
+    color: #f3f4f6;
+    font: inherit;
+    line-height: inherit;
+}
+
+.edit-project-header-name-input {
+    margin-top: 4px;
+}
+
+.edit-project-header-date-input {
+    max-width: 210px;
+    transform: scale(0.9);
+    transform-origin: left center;
+}
+
+.edit-project-header-name-input:focus,
+.edit-project-header-date-input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.edit-inline-project-settings {
+    margin: 0 auto 12px;
+    width: min(100%, 1040px);
+    padding: 12px 16px;
+    background: #171717;
+    border: 1px solid #2b2b2b;
+    border-radius: 10px;
+}
+
+.edit-inline-project-settings-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.edit-inline-project-settings input[type="text"],
+.edit-inline-project-settings input[type="url"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #101010;
+    border: 1px solid #2f2f2f;
+    border-radius: 6px;
+    color: #e5e7eb;
+    font-size: 14px;
+}
+
+.edit-inline-project-settings input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+
+.edit-inline-project-settings-flags {
+    margin-top: 10px;
+    gap: 20px;
+}
+
+.edit-inline-project-settings .edit-form-checkbox {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: #d1d5db;
+    font-size: 14px;
+}
+
+/* ========================================
+   Hero Media Controls (on project page)
    ======================================== */
 
 .edit-hero-thumbnail-controls {
-    background: #1a1a1a;
-    border-radius: 8px;
+    width: min(100%, 1040px);
+    background: #171717;
+    border: 1px solid #2b2b2b;
+    border-radius: 10px;
     padding: 12px 16px;
-    margin: 12px 0;
+    margin: 12px auto 0;
 }
 
+.edit-hero-media-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 14px;
+    align-items: start;
+}
+
+.edit-hero-video-panel,
+.edit-hero-thumbnail-panel {
+    background: #101010;
+    border: 1px solid #252525;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.edit-hero-video-header,
 .edit-hero-thumbnail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
     margin-bottom: 10px;
 }
 
-.edit-hero-thumbnail-label {
+.edit-hero-panel-label {
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
+    color: #d1d5db;
+}
+
+.edit-hero-video-status {
+    font-size: 12px;
     color: #9ca3af;
+    text-align: right;
+    word-break: break-all;
+}
+
+.edit-hero-video-buttons,
+.edit-hero-thumbnail-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .edit-hero-thumbnail-content {
     display: flex;
     gap: 12px;
-    align-items: flex-start;
+    align-items: stretch;
 }
 
 .edit-hero-thumbnail-preview {
     width: 120px;
+    aspect-ratio: 16 / 9;
     height: auto;
+    display: block;
     border-radius: 4px;
+    border: 1px solid #272727;
     background: #151515;
     object-fit: cover;
     flex-shrink: 0;
@@ -465,6 +595,7 @@
 
 .edit-hero-thumbnail-actions {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -485,25 +616,52 @@
     outline: none;
 }
 
-.edit-hero-thumbnail-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
 .edit-hero-thumbnail-buttons button[disabled] {
     opacity: 0.6;
     cursor: default;
 }
 
+@media (max-width: 820px) {
+    .edit-inline-project-settings-grid,
+    .edit-hero-media-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .edit-inline-project-settings,
+    .edit-hero-thumbnail-controls {
+        width: 100%;
+        padding: 10px 12px;
+    }
+
+    .edit-hero-thumbnail-preview {
+        width: min(200px, 45vw);
+    }
+}
+
 @media (max-width: 480px) {
+    .edit-inline-project-settings,
+    .edit-hero-thumbnail-controls {
+        padding: 10px;
+        border-radius: 8px;
+    }
+
     .edit-hero-thumbnail-content {
         flex-direction: column;
+        gap: 10px;
     }
 
     .edit-hero-thumbnail-preview {
         width: 100%;
-        max-width: 200px;
+        max-width: none;
+    }
+
+    .edit-hero-thumbnail-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .edit-hero-thumbnail-buttons .edit-btn-small:last-child {
+        grid-column: 1 / -1;
     }
 }
 
