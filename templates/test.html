@@ -2143,6 +2143,34 @@
             }
         }
 
+        expandCompactModeForClose(ctx) {
+            if (!this.listSceneEl || !ctx?.item) return;
+            const hadCompact = this.listSceneEl.classList.contains('pc-single-project-compact')
+                || document.body.classList.contains('pc-header-collapsed');
+            if (!hadCompact) return;
+
+            this.cancelManagedScrollTween();
+            setScrollTopImmediate(getCurrentScrollY());
+            const beforeTop = ctx.item.getBoundingClientRect().top;
+
+            this.listSceneEl.classList.remove('pc-single-project-compact');
+            document.body.classList.remove('pc-header-collapsed');
+
+            const afterTop = ctx.item.getBoundingClientRect().top;
+            const delta = afterTop - beforeTop;
+            if (Math.abs(delta) > 0.5) {
+                setScrollTopImmediate(getCurrentScrollY() + delta);
+            }
+
+            logTransitionDebug('close:expand-compact', {
+                slug: ctx.slug,
+                beforeTop: roundDebug(beforeTop),
+                afterTop: roundDebug(afterTop),
+                delta: roundDebug(delta),
+                listClasses: this.listSceneEl.className,
+            });
+        }
+
         async toggleProject(slug) {
             if (!slug || this.transitionInFlight) return;
             this.transitionInFlight = true;
@@ -2389,14 +2417,9 @@
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
-            if (session?.origin === 'list' && Number.isFinite(session.sourceScrollY)) {
-                window.scrollTo({ top: session.sourceScrollY, behavior: 'auto' });
-            } else {
-                const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
-                window.scrollTo({ top: projectTop, behavior: prefersInstant ? 'auto' : 'smooth' });
-            }
 
             if (prefersInstant) {
+                this.expandCompactModeForClose(ctx);
                 this.restoreContainer(ctx, false);
                 ctx.container.classList.remove('thumb-hidden');
                 this.setHeroSlotVisibility(ctx, false);
@@ -2412,11 +2435,7 @@
                 ctx.closeButton.disabled = false;
                 this.currentOpenSlug = null;
                 this.destroyVideosExcept(null);
-                if (session?.origin === 'list') {
-                    this.clearSingleProjectMode({ restoreScrollY: session.sourceScrollY });
-                } else {
-                    this.clearSingleProjectMode();
-                }
+                this.clearSingleProjectMode();
                 return;
             }
 
@@ -2439,9 +2458,8 @@
             this.animateMainFlowShift(ctx, closeDuration, token, () => {
                 ctx.item.classList.remove('pc-hero-expanded');
             });
-            const targetRect = (session?.origin === 'list' && session.sourceRect)
-                ? session.sourceRect
-                : this.measureContainerOriginRect(ctx);
+            this.expandCompactModeForClose(ctx);
+            const targetRect = this.measureContainerOriginRect(ctx);
 
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, heroRect);
@@ -2454,13 +2472,6 @@
                 ctx.item.classList.remove('pc-closing');
                 ctx.closeButton.disabled = false;
                 return;
-            }
-
-            if (session?.origin === 'list') {
-                this.clearSingleProjectMode({
-                    keepSession: true,
-                    restoreScrollY: session.sourceScrollY,
-                });
             }
 
             this.restoreContainer(ctx, false);
