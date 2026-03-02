@@ -1690,6 +1690,7 @@
             this.singleProjectCompactTimer = null;
             this.openScrollTraceCleanup = null;
             this.scrollTweenRafId = null;
+            this.scrollTweenTarget = null;
             this.transitionToken = 0;
             this.transitionInFlight = false;
             this.fetchController = null;
@@ -1858,12 +1859,20 @@
         }
 
         fixInactiveProjectsInPlace(activeSlug) {
-            // Fix inactive projects BELOW the active one in place
-            // Projects above will scroll out of view and fade via CSS normally
-            // Only fixing below prevents scroll calculation issues
+            // Fix inactive projects BELOW the active one in place BEFORE any layout
+            // changes (pc-open, hero expansion). This prevents visible shifts when
+            // the active project's header appears or hero expands.
+            // Projects above will scroll out of view and fade via CSS normally.
             const activeCtx = this.contextBySlug.get(activeSlug);
             if (!activeCtx) return;
             const activeTop = activeCtx.item.getBoundingClientRect().top;
+
+            // If scroll tween is already running (rare), account for remaining scroll
+            // to place elements at their final positions
+            const currentScroll = getCurrentScrollY();
+            const scrollRemaining = this.scrollTweenTarget !== null
+                ? this.scrollTweenTarget - currentScroll
+                : 0;
 
             // FIRST PASS: Capture all rects before any layout changes
             // This is critical because adding position:fixed removes elements from
@@ -1879,8 +1888,9 @@
             });
 
             // SECOND PASS: Apply fixed positioning with captured rects
+            // Subtract scrollRemaining to place at final scroll position
             for (const { ctx, rect } of projectsToFix) {
-                ctx.item.style.top = `${rect.top}px`;
+                ctx.item.style.top = `${rect.top - scrollRemaining}px`;
                 ctx.item.style.left = `${rect.left}px`;
                 ctx.item.style.width = `${rect.width}px`;
                 ctx.item.classList.add('pc-fading-out');
@@ -1904,6 +1914,7 @@
             if (this.scrollTweenRafId === null) return;
             cancelAnimationFrame(this.scrollTweenRafId);
             this.scrollTweenRafId = null;
+            this.scrollTweenTarget = null;
             logTransitionDebug('scroll-tween:cancelled');
         }
 
@@ -1912,9 +1923,11 @@
 
             const startY = getCurrentScrollY();
             const clampedTarget = Math.max(0, Number(targetTop) || 0);
+            this.scrollTweenTarget = clampedTarget;
             const delta = clampedTarget - startY;
             if (Math.abs(delta) < 0.5 || durationMs <= 0) {
                 setScrollTopImmediate(clampedTarget);
+                this.scrollTweenTarget = null;
                 logTransitionDebug(`${label}:scroll-tween:instant`, {
                     startY: roundDebug(startY),
                     targetTop: roundDebug(clampedTarget),
@@ -1933,6 +1946,7 @@
             const step = (now) => {
                 if (!this.isTokenActive(token)) {
                     this.scrollTweenRafId = null;
+                    this.scrollTweenTarget = null;
                     logTransitionDebug(`${label}:scroll-tween:stale-token`);
                     return;
                 }
@@ -1947,6 +1961,7 @@
                 }
 
                 this.scrollTweenRafId = null;
+                this.scrollTweenTarget = null;
                 logTransitionDebug(`${label}:scroll-tween:end`, {
                     finalScrollY: roundDebug(getCurrentScrollY()),
                     targetTop: roundDebug(clampedTarget),
@@ -2186,6 +2201,10 @@
             const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
 
             ctx.thumbnail.setRenderSuppressed(false);
+            // Fix inactive projects BEFORE pc-open is added to prevent layout shift.
+            // When pc-open reveals the header, elements below would shift down.
+            // By fixing them first, they stay at their current viewport positions.
+            this.fixInactiveProjectsInPlace(slug);
             ctx.item.classList.add('pc-open');
             ctx.item.classList.remove('pc-content-visible');
             this.resetProjectVisualState(ctx);
@@ -2318,10 +2337,6 @@
             const startRect = ctx.container.getBoundingClientRect();
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, startRect);
-            // Fix inactive projects in place RIGHT BEFORE hero expansion.
-            // This captures positions after scroll has progressed and just before
-            // the layout shift, ensuring fixed elements stay at correct positions.
-            this.fixInactiveProjectsInPlace(slug);
             this.animateMainFlowShift(ctx, morphDuration, token, () => {
                 ctx.item.classList.add('pc-hero-expanded');
             });
