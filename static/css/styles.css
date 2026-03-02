@@ -603,6 +603,12 @@ footer {
     opacity: 1;
     max-height: none;
     transform: translateY(0);
+    /* iOS native video controls render the scrubber thumb extending beyond
+       the video element bounds. Without overflow:visible here, the thumb
+       is clipped by this parent element's overflow:hidden (set for the
+       collapse animation). Desktop browsers don't clip because their
+       controls stay within bounds. */
+    overflow: visible;
 }
 
 .project-content {
@@ -713,22 +719,10 @@ footer {
 .video-container video {
     display: block;
     width: 100%;
-    height: auto;
+    height: 100%;
     max-width: 100%;
-    max-height: var(--video-max-height);
+    max-height: 100%;
     object-fit: contain;
-}
-
-/* iOS inline media controls can clip the timeline thumb unless overflow is visible. */
-@supports (-webkit-touch-callout: none) {
-    @media (max-width: 768px) {
-        .video-container,
-        .video-container video,
-        .video-container video::-webkit-media-controls-enclosure,
-        .video-container video::-webkit-media-controls-panel {
-            overflow: visible;
-        }
-    }
 }
 
 /* =========================
@@ -1145,4 +1139,149 @@ hr::after {
     max-width: none;
     border: none;
     display: block;
+}
+
+/* =========================
+   Hero Video Debug Mode (?hero_debug=1)
+   Used to isolate iOS scrubber/playhead bug
+   ========================= */
+
+/* Debug panel styles */
+.hero-debug-panel {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 99999;
+    background: rgba(0, 0, 0, 0.9);
+    color: #0f0;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 10px;
+    border-radius: 4px;
+    max-width: 300px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.hero-debug-panel h4 {
+    margin: 0 0 8px 0;
+    color: #ff0;
+    font-size: 14px;
+}
+
+.hero-debug-panel label {
+    display: block;
+    margin: 4px 0;
+    cursor: pointer;
+}
+
+.hero-debug-panel label:hover {
+    color: #fff;
+}
+
+.hero-debug-panel input[type="checkbox"] {
+    margin-right: 6px;
+}
+
+.hero-debug-panel .variant-select {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 4px;
+    background: #333;
+    color: #0f0;
+    border: 1px solid #0f0;
+}
+
+.hero-debug-panel .debug-info {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #333;
+    color: #888;
+    font-size: 10px;
+}
+
+/* Variant A: Native baseline - minimal CSS */
+.video-container.debug-variant-a {
+    all: unset;
+    display: block;
+    width: 100%;
+    max-width: 100vw;
+    background: #000;
+}
+
+.video-container.debug-variant-a video {
+    all: unset;
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Debug toggle: remove parent overflow hidden (THE ROOT CAUSE) */
+.project-details.debug-no-parent-overflow {
+    overflow: visible !important;
+}
+
+/* Debug toggle: remove overflow hidden */
+.video-container.debug-no-overflow {
+    overflow: visible !important;
+}
+
+.video-container.debug-no-overflow video {
+    overflow: visible !important;
+}
+
+/* Debug toggle: remove object-fit */
+.video-container.debug-no-object-fit video {
+    object-fit: unset !important;
+}
+
+/* Debug toggle: remove aspect-ratio */
+.video-container.debug-no-aspect {
+    aspect-ratio: unset !important;
+}
+
+/* Debug toggle: remove flex layout */
+.video-container.debug-no-flex {
+    display: block !important;
+    justify-content: unset !important;
+    align-items: unset !important;
+}
+
+/* Debug toggle: remove video sizing */
+.video-container.debug-no-sizing video {
+    width: auto !important;
+    height: auto !important;
+    max-width: 100% !important;
+    max-height: none !important;
+}
+
+/* Debug toggle: remove max-height constraint */
+.video-container.debug-no-max-height {
+    max-height: none !important;
+}
+
+/* Debug toggle: remove position relative */
+.video-container.debug-no-position {
+    position: static !important;
+}
+
+/* Debug toggle: force WebKit controls visible */
+.video-container.debug-webkit-controls video::-webkit-media-controls,
+.video-container.debug-webkit-controls video::-webkit-media-controls-enclosure,
+.video-container.debug-webkit-controls video::-webkit-media-controls-panel,
+.video-container.debug-webkit-controls video::-webkit-media-controls-timeline {
+    overflow: visible !important;
+    -webkit-appearance: none;
+}
+
+/* Debug variant labels */
+.hero-debug-variant-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: monospace;
+    z-index: 10;
 }
