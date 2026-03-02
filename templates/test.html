@@ -135,7 +135,7 @@
 
     .pc-project.pc-closing .pc-project-main {
         opacity: 0;
-        transition: none;
+        transition: opacity 0.12s ease;
     }
 
     .pc-header-main {
@@ -290,7 +290,7 @@
 
     .pc-project.pc-closing .pc-project-details {
         opacity: 0;
-        transition: none;
+        transition: opacity 0.12s ease;
     }
 
     .pc-project-details .project-content {
@@ -2413,10 +2413,17 @@
             const prefersInstant = prefersReducedMotion;
             ctx.closeButton.disabled = true;
             const hadHeroVideo = ctx.item.classList.contains('pc-has-hero-video');
+            const heroRect = hadHeroVideo
+                ? ctx.heroSlot.getBoundingClientRect()
+                : ctx.container.getBoundingClientRect();
             ctx.item.classList.add('pc-closing');
+            this.setHeroSlotVisibility(ctx, false);
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
+            if (!prefersInstant) {
+                ctx.container.classList.remove('thumb-hidden');
+            }
 
             if (prefersInstant) {
                 this.expandCompactModeForClose(ctx);
@@ -2446,12 +2453,6 @@
                 ctx.closeButton.disabled = false;
                 return;
             }
-
-            const heroRect = hadHeroVideo
-                ? ctx.heroSlot.getBoundingClientRect()
-                : ctx.container.getBoundingClientRect();
-            // Hide the visible hero immediately so only the promoted thumbnail drives close animation.
-            this.setHeroSlotVisibility(ctx, false);
 
             // Collapse stage sizing before measuring target so close animates to the true thumbnail footprint.
             const closeDuration = 420;
