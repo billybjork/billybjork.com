@@ -336,6 +336,12 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     toggleControlsVisibility(video, controls);
   };
 
+  // Tap on video itself to show/hide controls (needed when controls are hidden with pointer-events: none)
+  const onVideoTap = (e: Event) => {
+    e.preventDefault();
+    toggleControlsVisibility(video, controls);
+  };
+
   const onProgressStart = (e: MouseEvent | TouchEvent) => {
     handleProgressInteraction(video, controls, e);
   };
@@ -357,6 +363,8 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
   fullscreenBtn?.addEventListener('click', onFullscreenClick);
   controls.addEventListener('click', onControlsTouch);
   controls.addEventListener('touchend', onControlsTouch);
+  video.addEventListener('click', onVideoTap);
+  video.addEventListener('touchend', onVideoTap);
 
   // Initial state
   updatePlayState(video, controls);
@@ -390,6 +398,8 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     fullscreenBtn?.removeEventListener('click', onFullscreenClick);
     controls.removeEventListener('click', onControlsTouch);
     controls.removeEventListener('touchend', onControlsTouch);
+    video.removeEventListener('click', onVideoTap);
+    video.removeEventListener('touchend', onVideoTap);
 
     videoStates.delete(video);
   };
