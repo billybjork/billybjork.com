@@ -720,10 +720,10 @@ footer {
 }
 
 /* =========================
-   Mobile Video Controls
+   Video Controls
    ========================= */
 
-.mobile-video-controls {
+.video-controls {
     position: absolute;
     inset: 0;
     display: flex;
@@ -735,16 +735,16 @@ footer {
     transition: opacity 0.25s ease;
 }
 
-.mobile-video-controls.mvc-visible {
+.video-controls.vc-visible {
     opacity: 1;
 }
 
-.mobile-video-controls > * {
+.video-controls > * {
     pointer-events: auto;
 }
 
 /* Play overlay (center) */
-.mvc-play-overlay {
+.vc-play-overlay {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -763,29 +763,29 @@ footer {
     transition: opacity 0.2s ease, transform 0.15s ease;
 }
 
-.mvc-play-overlay:active {
+.vc-play-overlay:active {
     transform: translate(-50%, -50%) scale(0.92);
 }
 
-.mvc-play-overlay svg {
+.vc-play-overlay svg {
     width: 32px;
     height: 32px;
 }
 
-.mobile-video-controls.is-playing .mvc-play-overlay {
+.video-controls.is-playing .vc-play-overlay {
     opacity: 0;
     pointer-events: none;
 }
 
 /* Show/hide play vs pause icons */
-.mvc-pause-icon { display: none; }
-.mvc-play-icon { display: block; }
+.vc-pause-icon { display: none; }
+.vc-play-icon { display: block; }
 
-.mobile-video-controls.is-playing .mvc-pause-icon { display: block; }
-.mobile-video-controls.is-playing .mvc-play-icon { display: none; }
+.video-controls.is-playing .vc-pause-icon { display: block; }
+.video-controls.is-playing .vc-play-icon { display: none; }
 
 /* Bottom control bar */
-.mvc-bottom-bar {
+.vc-bottom-bar {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -793,8 +793,9 @@ footer {
     background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
 }
 
-.mvc-play-btn,
-.mvc-fullscreen-btn {
+.vc-play-btn,
+.vc-mute-btn,
+.vc-fullscreen-btn {
     flex-shrink: 0;
     width: 44px;
     height: 44px;
@@ -809,21 +810,23 @@ footer {
     -webkit-tap-highlight-color: transparent;
 }
 
-.mvc-play-btn svg,
-.mvc-fullscreen-btn svg {
+.vc-play-btn svg,
+.vc-mute-btn svg,
+.vc-fullscreen-btn svg {
     width: 24px;
     height: 24px;
 }
 
-.mvc-play-btn:focus-visible,
-.mvc-fullscreen-btn:focus-visible {
+.vc-play-btn:focus-visible,
+.vc-mute-btn:focus-visible,
+.vc-fullscreen-btn:focus-visible {
     outline: 2px solid var(--highlight-color);
     outline-offset: 2px;
     border-radius: 4px;
 }
 
 /* Time display */
-.mvc-time {
+.vc-time {
     flex-shrink: 0;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
@@ -833,7 +836,7 @@ footer {
 }
 
 /* Progress/scrubber container - 44px touch target */
-.mvc-progress-container {
+.vc-progress-container {
     flex: 1;
     height: 44px;
     display: flex;
@@ -843,15 +846,15 @@ footer {
     -webkit-tap-highlight-color: transparent;
 }
 
-.mvc-progress-container:focus-visible {
+.vc-progress-container:focus-visible {
     outline: none;
 }
 
-.mvc-progress-container:focus-visible .mvc-progress-track {
+.vc-progress-container:focus-visible .vc-progress-track {
     box-shadow: 0 0 0 2px var(--highlight-color);
 }
 
-.mvc-progress-track {
+.vc-progress-track {
     position: relative;
     width: 100%;
     height: 4px;
@@ -860,7 +863,7 @@ footer {
     overflow: visible;
 }
 
-.mvc-progress-buffered {
+.vc-progress-buffered {
     position: absolute;
     top: 0;
     left: 0;
@@ -871,7 +874,7 @@ footer {
     transition: width 0.1s linear;
 }
 
-.mvc-progress-played {
+.vc-progress-played {
     position: absolute;
     top: 0;
     left: 0;
@@ -881,7 +884,7 @@ footer {
     width: 0;
 }
 
-.mvc-progress-thumb {
+.vc-progress-thumb {
     position: absolute;
     top: 50%;
     left: 0;
@@ -895,30 +898,37 @@ footer {
     transition: opacity 0.15s ease;
 }
 
-.mvc-progress-container:hover .mvc-progress-thumb,
-.mvc-progress-container:focus-visible .mvc-progress-thumb,
-.mobile-video-controls.mvc-dragging .mvc-progress-thumb {
+.vc-progress-container:hover .vc-progress-thumb,
+.vc-progress-container:focus-visible .vc-progress-thumb,
+.video-controls.vc-dragging .vc-progress-thumb {
     opacity: 1;
 }
 
 /* Expand track on drag for easier targeting */
-.mobile-video-controls.mvc-dragging .mvc-progress-track {
+.video-controls.vc-dragging .vc-progress-track {
     height: 6px;
 }
 
-/* Fullscreen icons */
-.mvc-fullscreen-exit { display: none; }
-.mvc-fullscreen-enter { display: block; }
+/* Mute icons */
+.vc-muted-icon { display: none; }
+.vc-unmuted-icon { display: block; }
 
-.mobile-video-controls.is-fullscreen .mvc-fullscreen-exit { display: block; }
-.mobile-video-controls.is-fullscreen .mvc-fullscreen-enter { display: none; }
+.video-controls.is-muted .vc-muted-icon { display: block; }
+.video-controls.is-muted .vc-unmuted-icon { display: none; }
+
+/* Fullscreen icons */
+.vc-fullscreen-exit { display: none; }
+.vc-fullscreen-enter { display: block; }
+
+.video-controls.is-fullscreen .vc-fullscreen-exit { display: block; }
+.video-controls.is-fullscreen .vc-fullscreen-enter { display: none; }
 
 /* Hide native controls when custom controls active */
-.video-container.has-mobile-controls video::-webkit-media-controls {
+.video-container.has-video-controls video::-webkit-media-controls {
     display: none !important;
 }
 
-.video-container.has-mobile-controls video::-webkit-media-controls-enclosure {
+.video-container.has-video-controls video::-webkit-media-controls-enclosure {
     display: none !important;
 }
 

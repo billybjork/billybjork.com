@@ -1,17 +1,7 @@
 /**
- * Mobile Video Controls Module
- * Custom video controls for mobile devices where native iOS controls have issues.
- * Desktop retains native controls.
+ * Video Controls Module
+ * Custom video controls for all viewports and browsers.
  */
-
-// Mobile detection using touch capability + viewport width
-const MOBILE_MAX_WIDTH = 768;
-
-function isMobileDevice(): boolean {
-  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  const isNarrowViewport = window.innerWidth <= MOBILE_MAX_WIDTH;
-  return hasTouch && isNarrowViewport;
-}
 
 // Format time as MM:SS or HH:MM:SS
 function formatTime(seconds: number): string {
@@ -25,15 +15,15 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-interface MobileControlsState {
+interface ControlsState {
   isDragging: boolean;
   hideTimeout: number | null;
   controlsVisible: boolean;
 }
 
-const videoStates = new WeakMap<HTMLVideoElement, MobileControlsState>();
+const videoStates = new WeakMap<HTMLVideoElement, ControlsState>();
 
-function getVideoState(video: HTMLVideoElement): MobileControlsState {
+function getVideoState(video: HTMLVideoElement): ControlsState {
   let state = videoStates.get(video);
   if (!state) {
     state = { isDragging: false, hideTimeout: null, controlsVisible: true };
@@ -44,38 +34,46 @@ function getVideoState(video: HTMLVideoElement): MobileControlsState {
 
 function createControlsHTML(videoId: string): string {
   return `
-    <div class="mobile-video-controls" data-for="${videoId}">
-      <button class="mvc-play-overlay" aria-label="Play" type="button">
-        <svg class="mvc-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <div class="video-controls" data-for="${videoId}">
+      <button class="vc-play-overlay" aria-label="Play" type="button">
+        <svg class="vc-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M8 5v14l11-7z"/>
         </svg>
-        <svg class="mvc-pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <svg class="vc-pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
         </svg>
       </button>
-      <div class="mvc-bottom-bar">
-        <button class="mvc-play-btn" aria-label="Play" type="button">
-          <svg class="mvc-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <div class="vc-bottom-bar">
+        <button class="vc-play-btn" aria-label="Play" type="button">
+          <svg class="vc-play-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M8 5v14l11-7z"/>
           </svg>
-          <svg class="mvc-pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <svg class="vc-pause-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
           </svg>
         </button>
-        <span class="mvc-time mvc-current-time" aria-live="off">0:00</span>
-        <div class="mvc-progress-container" role="slider" aria-label="Video progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-          <div class="mvc-progress-track">
-            <div class="mvc-progress-buffered"></div>
-            <div class="mvc-progress-played"></div>
-            <div class="mvc-progress-thumb" aria-hidden="true"></div>
+        <span class="vc-time vc-current-time" aria-live="off">0:00</span>
+        <div class="vc-progress-container" role="slider" aria-label="Video progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+          <div class="vc-progress-track">
+            <div class="vc-progress-buffered"></div>
+            <div class="vc-progress-played"></div>
+            <div class="vc-progress-thumb" aria-hidden="true"></div>
           </div>
         </div>
-        <span class="mvc-time mvc-duration" aria-live="off">0:00</span>
-        <button class="mvc-fullscreen-btn" aria-label="Toggle fullscreen" type="button">
-          <svg class="mvc-fullscreen-enter" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <span class="vc-time vc-duration" aria-live="off">0:00</span>
+        <button class="vc-mute-btn" aria-label="Mute" type="button">
+          <svg class="vc-unmuted-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+          <svg class="vc-muted-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+          </svg>
+        </button>
+        <button class="vc-fullscreen-btn" aria-label="Toggle fullscreen" type="button">
+          <svg class="vc-fullscreen-enter" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
           </svg>
-          <svg class="mvc-fullscreen-exit" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <svg class="vc-fullscreen-exit" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
           </svg>
         </button>
@@ -89,9 +87,9 @@ function updateProgressBar(video: HTMLVideoElement, controls: HTMLElement): void
   const currentTime = video.currentTime || 0;
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  const playedBar = controls.querySelector<HTMLElement>('.mvc-progress-played');
-  const thumb = controls.querySelector<HTMLElement>('.mvc-progress-thumb');
-  const progressContainer = controls.querySelector<HTMLElement>('.mvc-progress-container');
+  const playedBar = controls.querySelector<HTMLElement>('.vc-progress-played');
+  const thumb = controls.querySelector<HTMLElement>('.vc-progress-thumb');
+  const progressContainer = controls.querySelector<HTMLElement>('.vc-progress-container');
 
   if (playedBar) playedBar.style.width = `${progress}%`;
   if (thumb) thumb.style.left = `${progress}%`;
@@ -113,13 +111,13 @@ function updateBufferedBar(video: HTMLVideoElement, controls: HTMLElement): void
   }
 
   const bufferedPercent = (bufferedEnd / duration) * 100;
-  const bufferedBar = controls.querySelector<HTMLElement>('.mvc-progress-buffered');
+  const bufferedBar = controls.querySelector<HTMLElement>('.vc-progress-buffered');
   if (bufferedBar) bufferedBar.style.width = `${bufferedPercent}%`;
 }
 
 function updateTimeDisplay(video: HTMLVideoElement, controls: HTMLElement): void {
-  const currentTimeEl = controls.querySelector<HTMLElement>('.mvc-current-time');
-  const durationEl = controls.querySelector<HTMLElement>('.mvc-duration');
+  const currentTimeEl = controls.querySelector<HTMLElement>('.vc-current-time');
+  const durationEl = controls.querySelector<HTMLElement>('.vc-duration');
 
   if (currentTimeEl) currentTimeEl.textContent = formatTime(video.currentTime);
   if (durationEl) durationEl.textContent = formatTime(video.duration);
@@ -130,11 +128,21 @@ function updatePlayState(video: HTMLVideoElement, controls: HTMLElement): void {
   controls.classList.toggle('is-playing', !isPaused);
   controls.classList.toggle('is-paused', isPaused);
 
-  const playOverlay = controls.querySelector<HTMLButtonElement>('.mvc-play-overlay');
-  const playBtn = controls.querySelector<HTMLButtonElement>('.mvc-play-btn');
+  const playOverlay = controls.querySelector<HTMLButtonElement>('.vc-play-overlay');
+  const playBtn = controls.querySelector<HTMLButtonElement>('.vc-play-btn');
   const label = isPaused ? 'Play' : 'Pause';
   if (playOverlay) playOverlay.setAttribute('aria-label', label);
   if (playBtn) playBtn.setAttribute('aria-label', label);
+}
+
+function updateMuteState(video: HTMLVideoElement, controls: HTMLElement): void {
+  const isMuted = video.muted;
+  controls.classList.toggle('is-muted', isMuted);
+
+  const muteBtn = controls.querySelector<HTMLButtonElement>('.vc-mute-btn');
+  if (muteBtn) {
+    muteBtn.setAttribute('aria-label', isMuted ? 'Unmute' : 'Mute');
+  }
 }
 
 function updateFullscreenState(video: HTMLVideoElement, controls: HTMLElement): void {
@@ -142,7 +150,7 @@ function updateFullscreenState(video: HTMLVideoElement, controls: HTMLElement): 
   const isFullscreen = !!document.fullscreenElement || !!videoWithWebkit.webkitDisplayingFullscreen;
   controls.classList.toggle('is-fullscreen', isFullscreen);
 
-  const fsBtn = controls.querySelector<HTMLButtonElement>('.mvc-fullscreen-btn');
+  const fsBtn = controls.querySelector<HTMLButtonElement>('.vc-fullscreen-btn');
   if (fsBtn) {
     fsBtn.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
   }
@@ -151,7 +159,7 @@ function updateFullscreenState(video: HTMLVideoElement, controls: HTMLElement): 
 function showControls(video: HTMLVideoElement, controls: HTMLElement): void {
   const state = getVideoState(video);
   state.controlsVisible = true;
-  controls.classList.add('mvc-visible');
+  controls.classList.add('vc-visible');
 
   if (state.hideTimeout) {
     clearTimeout(state.hideTimeout);
@@ -173,7 +181,7 @@ function hideControlsDelayed(video: HTMLVideoElement, controls: HTMLElement, del
   state.hideTimeout = window.setTimeout(() => {
     if (!video.paused && !state.isDragging) {
       state.controlsVisible = false;
-      controls.classList.remove('mvc-visible');
+      controls.classList.remove('vc-visible');
     }
     state.hideTimeout = null;
   }, delay);
@@ -184,7 +192,7 @@ function toggleControlsVisibility(video: HTMLVideoElement, controls: HTMLElement
   if (state.controlsVisible) {
     if (!video.paused) {
       state.controlsVisible = false;
-      controls.classList.remove('mvc-visible');
+      controls.classList.remove('vc-visible');
     }
   } else {
     showControls(video, controls);
@@ -193,13 +201,17 @@ function toggleControlsVisibility(video: HTMLVideoElement, controls: HTMLElement
 }
 
 function seekToPosition(video: HTMLVideoElement, controls: HTMLElement, clientX: number): void {
-  const progressContainer = controls.querySelector<HTMLElement>('.mvc-progress-container');
+  const progressContainer = controls.querySelector<HTMLElement>('.vc-progress-container');
   if (!progressContainer || !video.duration) return;
 
   const rect = progressContainer.getBoundingClientRect();
   const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width));
   const percent = relativeX / rect.width;
   video.currentTime = percent * video.duration;
+
+  // Update visual position immediately during drag
+  updateProgressBar(video, controls);
+  updateTimeDisplay(video, controls);
 }
 
 function handleProgressInteraction(
@@ -212,7 +224,7 @@ function handleProgressInteraction(
 
   const state = getVideoState(video);
   state.isDragging = true;
-  controls.classList.add('mvc-dragging');
+  controls.classList.add('vc-dragging');
 
   const clientX = 'touches' in event && event.touches[0] ? event.touches[0].clientX : (event as MouseEvent).clientX;
   seekToPosition(video, controls, clientX);
@@ -224,7 +236,7 @@ function handleProgressInteraction(
 
   const handleEnd = () => {
     state.isDragging = false;
-    controls.classList.remove('mvc-dragging');
+    controls.classList.remove('vc-dragging');
     document.removeEventListener('mousemove', handleMove);
     document.removeEventListener('mouseup', handleEnd);
     document.removeEventListener('touchmove', handleMove);
@@ -287,6 +299,7 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 
   const onTimeUpdate = () => {
     const state = getVideoState(video);
+    // Always update progress bar, even during dragging (seekToPosition already updates)
     if (!state.isDragging) {
       updateProgressBar(video, controls);
       updateTimeDisplay(video, controls);
@@ -315,6 +328,8 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     showControls(video, controls);
   };
 
+  const onVolumeChange = () => updateMuteState(video, controls);
+
   const onFullscreenChange = () => updateFullscreenState(video, controls);
 
   video.addEventListener('timeupdate', onTimeUpdate);
@@ -324,16 +339,18 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
   video.addEventListener('play', onPlay);
   video.addEventListener('pause', onPause);
   video.addEventListener('ended', onEnded);
+  video.addEventListener('volumechange', onVolumeChange);
   document.addEventListener('fullscreenchange', onFullscreenChange);
   // iOS fullscreen events
   video.addEventListener('webkitbeginfullscreen', onFullscreenChange);
   video.addEventListener('webkitendfullscreen', onFullscreenChange);
 
   // UI event handlers
-  const playOverlay = controls.querySelector<HTMLButtonElement>('.mvc-play-overlay');
-  const playBtn = controls.querySelector<HTMLButtonElement>('.mvc-play-btn');
-  const progressContainer = controls.querySelector<HTMLElement>('.mvc-progress-container');
-  const fullscreenBtn = controls.querySelector<HTMLButtonElement>('.mvc-fullscreen-btn');
+  const playOverlay = controls.querySelector<HTMLButtonElement>('.vc-play-overlay');
+  const playBtn = controls.querySelector<HTMLButtonElement>('.vc-play-btn');
+  const progressContainer = controls.querySelector<HTMLElement>('.vc-progress-container');
+  const muteBtn = controls.querySelector<HTMLButtonElement>('.vc-mute-btn');
+  const fullscreenBtn = controls.querySelector<HTMLButtonElement>('.vc-fullscreen-btn');
 
   const togglePlay = (e: Event) => {
     e.stopPropagation();
@@ -344,10 +361,15 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     }
   };
 
+  const toggleMute = (e: Event) => {
+    e.stopPropagation();
+    video.muted = !video.muted;
+  };
+
   const onControlsTouch = (e: Event) => {
     const target = e.target as HTMLElement;
     // If tapping an interactive element, let it handle it
-    if (target.closest('button') || target.closest('.mvc-progress-container')) {
+    if (target.closest('button') || target.closest('.vc-progress-container')) {
       return;
     }
     e.stopPropagation();
@@ -375,6 +397,7 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 
   playOverlay?.addEventListener('click', togglePlay);
   playBtn?.addEventListener('click', togglePlay);
+  muteBtn?.addEventListener('click', toggleMute);
   progressContainer?.addEventListener('mousedown', onProgressStart);
   progressContainer?.addEventListener('touchstart', onProgressStart, { passive: false });
   progressContainer?.addEventListener('keydown', onProgressKeydown);
@@ -386,6 +409,7 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 
   // Initial state
   updatePlayState(video, controls);
+  updateMuteState(video, controls);
   updateFullscreenState(video, controls);
   showControls(video, controls);
   if (!video.paused) {
@@ -406,12 +430,14 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     video.removeEventListener('play', onPlay);
     video.removeEventListener('pause', onPause);
     video.removeEventListener('ended', onEnded);
+    video.removeEventListener('volumechange', onVolumeChange);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
     video.removeEventListener('webkitbeginfullscreen', onFullscreenChange);
     video.removeEventListener('webkitendfullscreen', onFullscreenChange);
 
     playOverlay?.removeEventListener('click', togglePlay);
     playBtn?.removeEventListener('click', togglePlay);
+    muteBtn?.removeEventListener('click', toggleMute);
     progressContainer?.removeEventListener('mousedown', onProgressStart);
     progressContainer?.removeEventListener('touchstart', onProgressStart);
     progressContainer?.removeEventListener('keydown', onProgressKeydown);
@@ -426,21 +452,17 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 }
 
 /**
- * Initialize mobile controls for a video element.
- * Returns a cleanup function, or null if not applicable (desktop).
+ * Initialize custom video controls for a video element.
+ * Returns a cleanup function.
  */
-export function initMobileControls(video: HTMLVideoElement): (() => void) | null {
-  if (!isMobileDevice()) {
-    return null;
-  }
-
+export function initVideoControls(video: HTMLVideoElement): (() => void) | null {
   const container = video.closest<HTMLElement>('.video-container');
   if (!container) {
     return null;
   }
 
   // Check if already initialized
-  if (container.querySelector('.mobile-video-controls')) {
+  if (container.querySelector('.video-controls')) {
     return null;
   }
 
@@ -452,9 +474,9 @@ export function initMobileControls(video: HTMLVideoElement): (() => void) | null
   if (!video.id) video.id = videoId;
 
   container.insertAdjacentHTML('beforeend', createControlsHTML(videoId));
-  container.classList.add('has-mobile-controls');
+  container.classList.add('has-video-controls');
 
-  const controls = container.querySelector<HTMLElement>('.mobile-video-controls');
+  const controls = container.querySelector<HTMLElement>('.video-controls');
   if (!controls) return null;
 
   const cleanup = bindVideoEvents(video, controls);
@@ -462,19 +484,18 @@ export function initMobileControls(video: HTMLVideoElement): (() => void) | null
   return () => {
     cleanup();
     controls.remove();
-    container.classList.remove('has-mobile-controls');
-    video.setAttribute('controls', '');
+    container.classList.remove('has-video-controls');
   };
 }
 
 /**
- * Destroy mobile controls for a video element.
+ * Destroy custom video controls for a video element.
  */
-export function destroyMobileControls(video: HTMLVideoElement): void {
+export function destroyVideoControls(video: HTMLVideoElement): void {
   const container = video.closest<HTMLElement>('.video-container');
   if (!container) return;
 
-  const controls = container.querySelector<HTMLElement>('.mobile-video-controls');
+  const controls = container.querySelector<HTMLElement>('.video-controls');
   if (!controls) return;
 
   const state = getVideoState(video);
@@ -484,12 +505,5 @@ export function destroyMobileControls(video: HTMLVideoElement): void {
   videoStates.delete(video);
 
   controls.remove();
-  container.classList.remove('has-mobile-controls');
-}
-
-/**
- * Check if mobile controls are needed for current device
- */
-export function shouldUseMobileControls(): boolean {
-  return isMobileDevice();
+  container.classList.remove('has-video-controls');
 }
