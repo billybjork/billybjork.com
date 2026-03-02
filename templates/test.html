@@ -703,6 +703,7 @@
         uniform bool dofEnable;
         uniform float dofFocal;
         uniform float dofStrength;
+        uniform float alphaClip;
 
         varying vec2 vUv;
         varying float vDepth;
@@ -751,16 +752,18 @@
                 if (dist > 0.5) discard;
             }
             // pointShape == 2 is square, no modification needed
+            float baseOpacity = alpha * opacity;
+            if (baseOpacity < alphaClip) discard;
 
             // Debug views
             if (showDepth) {
-                gl_FragColor = vec4(vec3(vDepth), alpha * opacity);
+                gl_FragColor = vec4(vec3(vDepth), baseOpacity);
                 return;
             }
 
             if (showEdges) {
                 float edge = 1.0 - vEdgeMask;
-                gl_FragColor = vec4(edge, edge * 0.5, 0.0, alpha * opacity);
+                gl_FragColor = vec4(edge, edge * 0.5, 0.0, baseOpacity);
                 return;
             }
 
@@ -768,7 +771,7 @@
                 // Visualize as grid pattern
                 vec2 grid = fract(vUv * 20.0);
                 float g = step(0.1, grid.x) * step(0.1, grid.y);
-                gl_FragColor = vec4(vec3(g * 0.5 + 0.5), alpha * opacity);
+                gl_FragColor = vec4(vec3(g * 0.5 + 0.5), baseOpacity);
                 return;
             }
 
@@ -789,7 +792,7 @@
             }
 
             // Opacity adjustments
-            float finalOpacity = opacity * alpha;
+            float finalOpacity = baseOpacity;
 
             // Depth-based opacity (fade distant points)
             if (depthOpacity) {
@@ -804,6 +807,7 @@
                 finalOpacity *= 1.0 / (1.0 + blur * 2.0);
             }
 
+            if (finalOpacity < alphaClip) discard;
             gl_FragColor = vec4(color, finalOpacity);
         }
     `;
@@ -835,6 +839,7 @@
         dofEnable: false,
         dofFocal: 0.5,
         dofStrength: 1.0,
+        alphaClip: 0.12,         // Clip very faint point halos to reduce overlap artifacts
         // Color mode
         colorMode: 0, // 0 = original, 1 = depth, 2 = normal, 3 = blend
         // Debug
@@ -1299,9 +1304,11 @@
                     dofEnable: { value: config.dofEnable },
                     dofFocal: { value: config.dofFocal },
                     dofStrength: { value: config.dofStrength },
+                    alphaClip: { value: config.alphaClip },
                 },
                 transparent: true,
-                depthWrite: false,
+                depthTest: true,
+                depthWrite: true,
                 blending: THREE.NormalBlending,
             });
 
@@ -1342,6 +1349,18 @@
             const elementCenter = rect.top + rect.height / 2;
             this.viewportPosition = 1 - (elementCenter / viewportHeight);
             this.viewportPosition = Math.max(-0.2, Math.min(1.2, this.viewportPosition));
+        }
+
+        calculateNaturalCoherence(rect) {
+            if (prefersReducedMotion) return 1;
+            const viewportHeight = window.innerHeight;
+            const elementCenter = rect.top + rect.height / 2;
+            const viewportPosition = 1 - (elementCenter / viewportHeight);
+            const clampedViewportPos = Math.max(-0.2, Math.min(1.2, viewportPosition));
+            const distanceFromCenter = Math.abs((clampedViewportPos - 0.5) * 2);
+            const clampedDistance = Math.min(1, Math.max(0, distanceFromCenter));
+            const curvedDistance = Math.pow(clampedDistance, config.transitionCurve);
+            return 1 - curvedDistance;
         }
 
         setVisible(isVisible) {
@@ -1549,6 +1568,7 @@
             u.dofEnable.value = config.dofEnable;
             u.dofFocal.value = config.dofFocal;
             u.dofStrength.value = config.dofStrength;
+            u.alphaClip.value = config.alphaClip;
             this.syncLayout(rect);
             this.updateMotionTransform(effectiveDepth);
         }
@@ -2334,7 +2354,16 @@
             ctx.container.style.opacity = '1';
 
             ctx.item.classList.remove('pc-content-visible');
-            await this.animateRect(ctx.container, heroRect, targetRect, closeDuration, token);
+
+            // Calculate natural coherence at target position so thumbnail ends
+            // in its proper viewport-based state (no "pop" when transition ends)
+            const naturalCoherence = ctx.thumbnail.calculateNaturalCoherence(targetRect);
+
+            // Animate rect and coherence in parallel (mirroring the open transition)
+            const rectPromise = this.animateRect(ctx.container, heroRect, targetRect, closeDuration, token);
+            const coherencePromise = this.animateCoherence(ctx.thumbnail, naturalCoherence, closeDuration, token);
+            await Promise.all([rectPromise, coherencePromise]);
+
             if (!this.isTokenActive(token)) {
                 ctx.item.classList.remove('pc-closing');
                 ctx.closeButton.disabled = false;
@@ -2350,10 +2379,10 @@
             this.resetProjectVisualState(ctx);
             ctx.closeButton.disabled = false;
 
-            // Release inactive projects from fixed positioning and start fading
-            // them in. This must happen AFTER pc-open is removed (layout collapsed)
-            // so they snap to correct positions while still invisible, then fade in
-            // concurrent with the active thumbnail's coherence animation.
+            // Release inactive projects from fixed positioning. Before making them
+            // visible, set coherence to 1 (flat) so they can smoothly animate to
+            // their natural 3D state as they fade in (prevents "pop" effect).
+            const otherThumbnails = [];
             this.contextBySlug.forEach((otherCtx, otherSlug) => {
                 if (otherSlug !== slug) {
                     otherCtx.item.classList.remove('pc-fading-out');
@@ -2361,14 +2390,36 @@
                     otherCtx.item.style.left = '';
                     otherCtx.item.style.width = '';
                     if (otherCtx.thumbnail) {
+                        // Set coherence to flat before fading in
+                        otherCtx.thumbnail.setCoherenceOverride(1);
                         otherCtx.thumbnail.setOpacityOverride(null);
+                        otherThumbnails.push(otherCtx);
                     }
                 }
             });
 
-            await this.animateCoherence(ctx.thumbnail, 0, 260, token);
+            // Animate other thumbnails' coherence to their natural values
+            const otherCoherencePromises = otherThumbnails.map((otherCtx) => {
+                const otherRect = otherCtx.container.getBoundingClientRect();
+                const otherNaturalCoherence = otherCtx.thumbnail.calculateNaturalCoherence(otherRect);
+                return this.animateCoherence(otherCtx.thumbnail, otherNaturalCoherence, 320, token);
+            });
+
+            // Clear coherence overrides for other thumbnails after animation
+            Promise.all(otherCoherencePromises).then(() => {
+                if (!this.isTokenActive(token)) return;
+                otherThumbnails.forEach((otherCtx) => {
+                    otherCtx.thumbnail.setCoherenceOverride(null);
+                });
+            });
+
+            // Clear main thumbnail's coherence override (already at natural value)
+            // and unfreeze motion. Since coherence is already at its natural value
+            // and pan/tilt use lerping, the transition to mouse-driven motion is smooth.
+            ctx.thumbnail.setCoherenceOverride(null);
+            ctx.thumbnail.setMotionFrozen(false);
+
             if (!this.isTokenActive(token)) return;
-            ctx.thumbnail.resetTransitionState();
             this.currentOpenSlug = null;
             this.destroyVideosExcept(null);
             this.clearSingleProjectMode();
