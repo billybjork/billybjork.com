@@ -1865,18 +1865,26 @@
             if (!activeCtx) return;
             const activeTop = activeCtx.item.getBoundingClientRect().top;
 
+            // FIRST PASS: Capture all rects before any layout changes
+            // This is critical because adding position:fixed removes elements from
+            // document flow, which would shift subsequent elements up
+            const projectsToFix = [];
             this.contextBySlug.forEach((ctx, ctxSlug) => {
                 if (ctxSlug !== activeSlug) {
                     const rect = ctx.item.getBoundingClientRect();
-                    // Only fix projects below the active one
                     if (rect.top > activeTop) {
-                        ctx.item.style.top = `${rect.top}px`;
-                        ctx.item.style.left = `${rect.left}px`;
-                        ctx.item.style.width = `${rect.width}px`;
-                        ctx.item.classList.add('pc-fading-out');
+                        projectsToFix.push({ ctx, rect });
                     }
                 }
             });
+
+            // SECOND PASS: Apply fixed positioning with captured rects
+            for (const { ctx, rect } of projectsToFix) {
+                ctx.item.style.top = `${rect.top}px`;
+                ctx.item.style.left = `${rect.left}px`;
+                ctx.item.style.width = `${rect.width}px`;
+                ctx.item.classList.add('pc-fading-out');
+            }
         }
 
         cancelSingleProjectCompactCommit() {
@@ -2231,6 +2239,15 @@
                 });
             }
 
+            // For animated hero path, ensure a paint occurs at opacity: 1 before
+            // triggering the CSS transition to opacity: 0. Without this, the reflow
+            // caused by getBoundingClientRect() later would compute opacity: 0 before
+            // any paint occurs at opacity: 1, causing the transition to be skipped.
+            if (hasHeroVideo && !prefersInstant) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                if (!this.isTokenActive(token)) return;
+            }
+
             this.setSingleProjectMode(slug, sourceState, {
                 origin: openOrigin,
             });
@@ -2301,7 +2318,9 @@
             const startRect = ctx.container.getBoundingClientRect();
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, startRect);
-            // Fix inactive projects in place AFTER capturing morph start, BEFORE hero expansion
+            // Fix inactive projects in place RIGHT BEFORE hero expansion.
+            // This captures positions after scroll has progressed and just before
+            // the layout shift, ensuring fixed elements stay at correct positions.
             this.fixInactiveProjectsInPlace(slug);
             this.animateMainFlowShift(ctx, morphDuration, token, () => {
                 ctx.item.classList.add('pc-hero-expanded');
