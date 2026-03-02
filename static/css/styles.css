@@ -526,10 +526,19 @@ footer {
    Close button
    ========================= */
 
-.close-project {
+.project-top-actions {
     position: absolute;
     right: var(--project-close-inline-offset);
     top: var(--spacing-medium);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    z-index: 2;
+}
+
+.edit-project-btn-top,
+.close-project {
+    position: relative;
     font-size: 2em;
     background: none;
     border: none;
@@ -543,14 +552,36 @@ footer {
         transform 0.3s ease;
 }
 
+.edit-project-btn-top {
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.edit-project-btn-top .icon {
+    width: 1rem;
+    height: 1rem;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.project-item.active .edit-project-btn-top,
 .project-item.active .close-project {
     opacity: 1;
     visibility: visible;
 }
 
+.edit-project-btn-top:hover,
 .close-project:hover {
     color: var(--highlight-color);
-    transform: scale(1.3);
+    transform: scale(1.2);
 }
 
 /* =========================
@@ -686,6 +717,18 @@ footer {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+}
+
+/* iOS inline media controls can clip the timeline thumb unless overflow is visible. */
+@supports (-webkit-touch-callout: none) {
+    @media (max-width: 768px) {
+        .video-container,
+        .video-container video,
+        .video-container video::-webkit-media-controls-enclosure,
+        .video-container video::-webkit-media-controls-panel {
+            overflow: visible;
+        }
+    }
 }
 
 /* =========================

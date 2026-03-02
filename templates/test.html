@@ -10,6 +10,20 @@
         overflow-x: hidden;
     }
 
+    #main-header {
+        visibility: visible;
+        transition: opacity 0.28s ease, transform 0.28s ease, visibility 0s linear 0s;
+        will-change: opacity, transform;
+    }
+
+    body.pc-test-detail-mode #main-header {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+        visibility: hidden;
+        transition: opacity 0.28s ease, transform 0.28s ease, visibility 0s linear 0.28s;
+    }
+
     #shared-depth-canvas {
         position: fixed;
         inset: 0;
@@ -1658,6 +1672,7 @@
 
         init() {
             this.rebuildContextMap();
+            this.syncDetailModeClass(false);
             addManagedEventListener(document, 'click', this.boundCaptureClick, true);
             addManagedEventListener(document, 'keydown', this.boundKeyDown);
             addManagedEventListener(document, 'pointerover', this.boundPrefetchIntent, true);
@@ -1701,6 +1716,7 @@
                 this.listSceneEl.classList.remove('pc-single-project-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
+            this.syncDetailModeClass(false);
             this.transitionInFlight = false;
         }
 
@@ -1753,6 +1769,10 @@
             ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
         }
 
+        syncDetailModeClass(isDetailOpen) {
+            document.body.classList.toggle('pc-test-detail-mode', !!isDetailOpen);
+        }
+
         captureListSourceState(ctx) {
             return {
                 sourceRect: ctx.container.getBoundingClientRect(),
@@ -1768,6 +1788,7 @@
             this.listSceneEl.classList.remove('pc-single-project-compact');
             this.listSceneEl.classList.add('pc-single-project-mode');
             this.listSceneEl.setAttribute('data-active-slug', slug);
+            this.syncDetailModeClass(true);
             logTransitionDebug('open:set-single-project-mode', {
                 slug,
                 origin: options.origin || 'list',
@@ -1995,6 +2016,7 @@
                 this.listSceneEl.classList.remove('pc-single-project-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
+            this.syncDetailModeClass(false);
             logTransitionDebug('project:clear-single-project-mode', {
                 keepSession: !!options.keepSession,
                 restoreScrollY: options.restoreScrollY ?? null,
