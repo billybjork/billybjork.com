@@ -395,6 +395,20 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     if (container) toggleFullscreen(video, container);
   };
 
+  // Mouse movement shows controls on desktop (non-touch)
+  const onMouseMove = () => {
+    showControls(video, controls);
+    hideControlsDelayed(video, controls);
+  };
+
+  const onMouseLeave = () => {
+    const state = getVideoState(video);
+    if (!video.paused && !state.isDragging) {
+      state.controlsVisible = false;
+      controls.classList.remove('vc-visible');
+    }
+  };
+
   playOverlay?.addEventListener('click', togglePlay);
   playBtn?.addEventListener('click', togglePlay);
   muteBtn?.addEventListener('click', toggleMute);
@@ -406,6 +420,10 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
   controls.addEventListener('touchend', onControlsTouch);
   video.addEventListener('click', onVideoTap);
   video.addEventListener('touchend', onVideoTap);
+
+  // Desktop mouse hover behavior
+  container?.addEventListener('mousemove', onMouseMove);
+  container?.addEventListener('mouseleave', onMouseLeave);
 
   // Initial state
   updatePlayState(video, controls);
@@ -446,6 +464,8 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     controls.removeEventListener('touchend', onControlsTouch);
     video.removeEventListener('click', onVideoTap);
     video.removeEventListener('touchend', onVideoTap);
+    container?.removeEventListener('mousemove', onMouseMove);
+    container?.removeEventListener('mouseleave', onMouseLeave);
 
     videoStates.delete(video);
   };
