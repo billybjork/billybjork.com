@@ -862,7 +862,6 @@
     const SPRITE_REQUEST_VERSION = Date.now().toString(36);
     const prefersReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
     let prefersReducedMotion = prefersReducedMotionMedia.matches;
-    const TRANSITION_DEBUG_ENABLED = false;
 
     // =============================================
     // Global State
@@ -886,7 +885,6 @@
     const renderState = {
         width: 0,
         height: 0,
-        renderedCount: 0,
     };
 
     let animationProgress = 0;
@@ -925,11 +923,6 @@
         return window.pageYOffset || document.documentElement.scrollTop || 0;
     }
 
-    function roundDebug(value) {
-        if (!Number.isFinite(value)) return null;
-        return Math.round(value * 100) / 100;
-    }
-
     function getScrollElement() {
         return document.scrollingElement || document.documentElement;
     }
@@ -955,21 +948,6 @@
 
         if (root) root.style.scrollBehavior = prevRootBehavior;
         if (body) body.style.scrollBehavior = prevBodyBehavior;
-    }
-
-    function collectDebugSnapshot(extra = {}) {
-        return {
-            scrollY: roundDebug(getCurrentScrollY()),
-            viewportHeight: roundDebug(window.innerHeight || 0),
-            docHeight: roundDebug(document.documentElement?.scrollHeight || 0),
-            bodyHeight: roundDebug(document.body?.scrollHeight || 0),
-            ...extra,
-        };
-    }
-
-    function logTransitionDebug(label, extra = {}) {
-        if (!TRANSITION_DEBUG_ENABLED) return;
-        console.log(`[pc-transition] ${label}`, collectDebugSnapshot(extra));
     }
 
     function getGeometryCacheKey(frameWidth, frameHeight, density) {
@@ -1228,7 +1206,6 @@
             this.camera.updateMatrixWorld(true);
 
             if (renderables.length === 0) {
-                renderState.renderedCount = 0;
                 return;
             }
 
@@ -1238,7 +1215,6 @@
             });
 
             renderer.render(this.scene, this.camera);
-            renderState.renderedCount = renderables.length;
         }
     }
 
@@ -1673,7 +1649,6 @@
             this.currentOpenSlug = null;
             this.openSession = null;
             this.singleProjectCompactTimer = null;
-            this.openScrollTraceCleanup = null;
             this.scrollTweenRafId = null;
             this.scrollTweenTarget = null;
             this.transitionToken = 0;
@@ -1734,7 +1709,6 @@
             this.currentOpenSlug = null;
             this.openSession = null;
             this.cancelSingleProjectCompactCommit();
-            this.stopOpenScrollTrace();
             this.cancelManagedScrollTween();
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
@@ -1827,14 +1801,6 @@
                 }
             });
 
-            logTransitionDebug('open:set-single-project-mode', {
-                slug,
-                origin: options.origin || 'list',
-                sourceScrollY: sourceState?.sourceScrollY ?? null,
-                itemTop: roundDebug(context.item.getBoundingClientRect().top),
-                listClasses: this.listSceneEl.className,
-            });
-
             this.openSession = {
                 slug,
                 origin: options.origin || 'list',
@@ -1888,22 +1854,14 @@
             this.singleProjectCompactTimer = null;
         }
 
-        stopOpenScrollTrace() {
-            if (typeof this.openScrollTraceCleanup === 'function') {
-                this.openScrollTraceCleanup();
-            }
-            this.openScrollTraceCleanup = null;
-        }
-
         cancelManagedScrollTween() {
             if (this.scrollTweenRafId === null) return;
             cancelAnimationFrame(this.scrollTweenRafId);
             this.scrollTweenRafId = null;
             this.scrollTweenTarget = null;
-            logTransitionDebug('scroll-tween:cancelled');
         }
 
-        startManagedScrollTween(targetTop, durationMs, token, label = 'open') {
+        startManagedScrollTween(targetTop, durationMs, token) {
             this.cancelManagedScrollTween();
 
             const startY = getCurrentScrollY();
@@ -1913,26 +1871,15 @@
             if (Math.abs(delta) < 0.5 || durationMs <= 0) {
                 setScrollTopImmediate(clampedTarget);
                 this.scrollTweenTarget = null;
-                logTransitionDebug(`${label}:scroll-tween:instant`, {
-                    startY: roundDebug(startY),
-                    targetTop: roundDebug(clampedTarget),
-                });
                 return;
             }
 
             const startTime = performance.now();
-            logTransitionDebug(`${label}:scroll-tween:start`, {
-                startY: roundDebug(startY),
-                targetTop: roundDebug(clampedTarget),
-                delta: roundDebug(delta),
-                durationMs: roundDebug(durationMs),
-            });
 
             const step = (now) => {
                 if (!this.isTokenActive(token)) {
                     this.scrollTweenRafId = null;
                     this.scrollTweenTarget = null;
-                    logTransitionDebug(`${label}:scroll-tween:stale-token`);
                     return;
                 }
 
@@ -1947,54 +1894,9 @@
 
                 this.scrollTweenRafId = null;
                 this.scrollTweenTarget = null;
-                logTransitionDebug(`${label}:scroll-tween:end`, {
-                    finalScrollY: roundDebug(getCurrentScrollY()),
-                    targetTop: roundDebug(clampedTarget),
-                });
             };
 
             this.scrollTweenRafId = requestAnimationFrame(step);
-        }
-
-        startOpenScrollTrace(slug, phase = 'open', durationMs = 2200) {
-            this.stopOpenScrollTrace();
-            const startedAt = performance.now();
-            let lastLogAt = 0;
-            const onScroll = () => {
-                const now = performance.now();
-                if ((now - lastLogAt) < 80) return;
-                lastLogAt = now;
-                logTransitionDebug(`${phase}:scroll`, {
-                    slug,
-                    elapsedMs: roundDebug(now - startedAt),
-                    listClasses: this.listSceneEl?.className || '',
-                });
-            };
-
-            const timeoutId = window.setTimeout(() => {
-                window.removeEventListener('scroll', onScroll);
-                if (this.openScrollTraceCleanup === cleanup) {
-                    this.openScrollTraceCleanup = null;
-                }
-                logTransitionDebug(`${phase}:scroll-trace:end`, {
-                    slug,
-                    elapsedMs: roundDebug(performance.now() - startedAt),
-                });
-            }, durationMs);
-
-            const cleanup = () => {
-                clearTimeout(timeoutId);
-                window.removeEventListener('scroll', onScroll);
-            };
-
-            this.openScrollTraceCleanup = cleanup;
-            window.addEventListener('scroll', onScroll, { passive: true });
-            logTransitionDebug(`${phase}:scroll-trace:start`, {
-                slug,
-                durationMs,
-                listClasses: this.listSceneEl?.className || '',
-            });
-            onScroll();
         }
 
         scheduleSingleProjectCompact(slug, options = {}) {
@@ -2008,23 +1910,11 @@
                 if (this.currentOpenSlug !== slug) return;
                 const shouldCompensate = options.compensate !== false && (options.origin || this.openSession?.origin) === 'list';
                 this.cancelManagedScrollTween();
-                logTransitionDebug('open:compact:before', {
-                    slug,
-                    shouldCompensate,
-                    delayMs,
-                    listClasses: this.listSceneEl.className,
-                    itemTop: roundDebug(context.item.getBoundingClientRect().top),
-                });
                 if (shouldCompensate) {
                     // Cancel any in-flight smooth scroll before layout compaction.
                     setScrollTopImmediate(getCurrentScrollY());
                     const scrollYBefore = getCurrentScrollY();
                     const removedAbove = this.measureCompactRemovedHeightAbove(context);
-                    logTransitionDebug('open:compact:pre-adjust', {
-                        slug,
-                        currentScrollY: roundDebug(scrollYBefore),
-                        removedAbove: roundDebug(removedAbove),
-                    });
                     if (removedAbove > 0.5) {
                         setScrollTopImmediate(scrollYBefore - removedAbove);
                     }
@@ -2040,20 +1930,6 @@
                     if (Math.abs(clampedDelta) > 0.5) {
                         setScrollTopImmediate(getCurrentScrollY() + clampedDelta);
                     }
-                    logTransitionDebug('open:compact:post-adjust', {
-                        slug,
-                        beforeTop: roundDebug(beforeTop),
-                        afterTop: roundDebug(afterTop),
-                        delta: roundDebug(delta),
-                        clampedDelta: roundDebug(clampedDelta),
-                        listClasses: this.listSceneEl.className,
-                    });
-                } else {
-                    logTransitionDebug('open:compact:applied', {
-                        slug,
-                        listClasses: this.listSceneEl.className,
-                        itemTop: roundDebug(context.item.getBoundingClientRect().top),
-                    });
                 }
             };
 
@@ -2130,11 +2006,6 @@
                 }
             });
 
-            logTransitionDebug('project:clear-single-project-mode', {
-                keepSession: !!options.keepSession,
-                restoreScrollY: options.restoreScrollY ?? null,
-                listClasses: this.listSceneEl?.className || '',
-            });
             if (Number.isFinite(options.restoreScrollY)) {
                 setScrollTopImmediate(options.restoreScrollY);
             }
@@ -2161,13 +2032,36 @@
             if (Math.abs(delta) > 0.5) {
                 setScrollTopImmediate(getCurrentScrollY() + delta);
             }
+        }
 
-            logTransitionDebug('close:expand-compact', {
-                slug: ctx.slug,
-                beforeTop: roundDebug(beforeTop),
-                afterTop: roundDebug(afterTop),
-                delta: roundDebug(delta),
-                listClasses: this.listSceneEl.className,
+        waitForCloseThumbnailReady(ctx, token, maxFrames = 6) {
+            if (!ctx?.thumbnail) return Promise.resolve(false);
+            rectsNeedUpdate = true;
+            bumpTransitionRectRefresh(220);
+            return new Promise((resolve) => {
+                let frames = 0;
+                const step = () => {
+                    if (!this.isTokenActive(token)) {
+                        resolve(false);
+                        return;
+                    }
+
+                    const thumb = ctx.thumbnail;
+                    const ready = !!thumb.group?.visible && thumb.isRenderable;
+                    if (ready) {
+                        requestAnimationFrame(() => resolve(true));
+                        return;
+                    }
+
+                    frames += 1;
+                    if (frames >= maxFrames) {
+                        resolve(false);
+                        return;
+                    }
+
+                    requestAnimationFrame(step);
+                };
+                requestAnimationFrame(step);
             });
         }
 
@@ -2197,18 +2091,6 @@
             const sourceState = openOrigin === 'list' ? this.captureListSourceState(ctx) : null;
             const prefersInstant = prefersReducedMotion || options.instant === true;
             const shouldScrollToProject = options.skipScroll !== true;
-            this.startOpenScrollTrace(slug, 'open', 2200);
-            logTransitionDebug('open:start', {
-                slug,
-                token,
-                openOrigin,
-                prefersInstant,
-                shouldScrollToProject,
-                sourceScrollY: sourceState?.sourceScrollY ?? null,
-                itemTop: roundDebug(ctx.item.getBoundingClientRect().top),
-                containerTop: roundDebug(ctx.container.getBoundingClientRect().top),
-                listClasses: this.listSceneEl?.className || '',
-            });
             this.destroyVideosExcept(slug);
             this.destroyVideoInContext(ctx);
             const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
@@ -2251,24 +2133,11 @@
 
             if (shouldScrollToProject) {
                 const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
-                logTransitionDebug('open:scrollTo:before', {
-                    slug,
-                    projectTop: roundDebug(projectTop),
-                    behavior: prefersInstant ? 'auto' : 'managed-tween',
-                    itemTop: roundDebug(ctx.item.getBoundingClientRect().top),
-                });
                 if (prefersInstant) {
                     setScrollTopImmediate(projectTop);
                 } else {
-                    this.startManagedScrollTween(projectTop, 620, token, 'open');
+                    this.startManagedScrollTween(projectTop, 620, token);
                 }
-                requestAnimationFrame(() => {
-                    logTransitionDebug('open:scrollTo:after-raf', {
-                        slug,
-                        itemTop: roundDebug(ctx.item.getBoundingClientRect().top),
-                        listClasses: this.listSceneEl?.className || '',
-                    });
-                });
             }
 
             // For animated hero path, ensure a paint occurs at opacity: 1 before
@@ -2301,10 +2170,6 @@
                     origin: openOrigin,
                     delayMs: prefersInstant ? 0 : 450,
                 });
-                logTransitionDebug('open:complete:no-hero', {
-                    slug,
-                    listClasses: this.listSceneEl?.className || '',
-                });
                 return;
             }
 
@@ -2322,10 +2187,6 @@
                 this.scheduleSingleProjectCompact(slug, {
                     origin: openOrigin,
                     delayMs: 0,
-                });
-                logTransitionDebug('open:complete:instant-hero', {
-                    slug,
-                    listClasses: this.listSceneEl?.className || '',
                 });
 
                 if (heroVideo) {
@@ -2391,11 +2252,6 @@
                 origin: openOrigin,
                 delayMs: prefersInstant ? 0 : 450,
             });
-            logTransitionDebug('open:complete:hero', {
-                slug,
-                videoIsReady,
-                listClasses: this.listSceneEl?.className || '',
-            });
         }
 
         async closeProject(slug) {
@@ -2417,10 +2273,12 @@
                 ? ctx.heroSlot.getBoundingClientRect()
                 : ctx.container.getBoundingClientRect();
             ctx.item.classList.add('pc-closing');
-            this.setHeroSlotVisibility(ctx, false);
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
+            const thumbReadyPromise = prefersInstant
+                ? Promise.resolve(true)
+                : this.waitForCloseThumbnailReady(ctx, token);
             if (!prefersInstant) {
                 ctx.container.classList.remove('thumb-hidden');
             }
@@ -2453,6 +2311,14 @@
                 ctx.closeButton.disabled = false;
                 return;
             }
+
+            await thumbReadyPromise;
+            if (!this.isTokenActive(token)) {
+                ctx.item.classList.remove('pc-closing');
+                ctx.closeButton.disabled = false;
+                return;
+            }
+            this.setHeroSlotVisibility(ctx, false);
 
             // Collapse stage sizing before measuring target so close animates to the true thumbnail footprint.
             const closeDuration = 420;
@@ -2558,22 +2424,20 @@
             return token === this.transitionToken;
         }
 
-        buildProjectURL(slug) {
-            const url = new URL(`/${slug}`, window.location.origin);
+        applyDraftModeParam(url) {
             const params = new URLSearchParams(window.location.search);
             if (params.get('show_drafts') === 'true' || sessionStorage.getItem('bb_show_drafts') === 'true') {
                 url.searchParams.set('show_drafts', 'true');
             }
-            return url.toString();
+            return url;
+        }
+
+        buildProjectURL(slug) {
+            return this.applyDraftModeParam(new URL(`/${slug}`, window.location.origin)).toString();
         }
 
         buildListURL() {
-            const url = new URL(this.testBasePath || '/test', window.location.origin);
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('show_drafts') === 'true' || sessionStorage.getItem('bb_show_drafts') === 'true') {
-                url.searchParams.set('show_drafts', 'true');
-            }
-            return url.toString();
+            return this.applyDraftModeParam(new URL(this.testBasePath || '/test', window.location.origin)).toString();
         }
 
         navigateToListScene() {
