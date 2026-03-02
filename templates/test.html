@@ -862,7 +862,7 @@
     const SPRITE_REQUEST_VERSION = Date.now().toString(36);
     const prefersReducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
     let prefersReducedMotion = prefersReducedMotionMedia.matches;
-    const TRANSITION_DEBUG_ENABLED = true;
+    const TRANSITION_DEBUG_ENABLED = false;
 
     // =============================================
     // Global State
@@ -1655,24 +1655,9 @@
         });
     }
 
-    function enableNoWebGLLegacyBehavior() {
-        document.querySelectorAll('.pc-project[data-slug]').forEach((item) => {
-            item.classList.add('project-item', 'no-fade');
-            const header = item.querySelector('.pc-project-header');
-            if (header) header.classList.add('project-header');
-            const container = item.querySelector('.pc-thumbnail-container');
-            if (container) container.classList.add('thumbnail');
-            const closeButton = item.querySelector('.pc-close-project');
-            if (closeButton) closeButton.classList.add('close-project');
-            const details = item.querySelector('.pc-project-details');
-            if (details) details.classList.add('project-details');
-        });
-    }
-
     function activateNoWebGLFallback(message, error = null) {
         hasWebGL = false;
         document.body.classList.add('no-webgl');
-        enableNoWebGLLegacyBehavior();
         if (error) {
             console.error(message, error);
         } else {
