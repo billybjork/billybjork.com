@@ -3,7 +3,7 @@
 import json
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from config import templates
@@ -105,11 +105,19 @@ def _test_template_context(
 
 
 @router.get("/test", response_class=HTMLResponse)
-async def test_page(request: Request):
+async def test_page(request: Request, project: str | None = Query(None)):
     """Render the shared-canvas point cloud depth test page."""
+    initial_project_slug = project.strip() if isinstance(project, str) else None
+    if initial_project_slug == "":
+        initial_project_slug = None
+
     return templates.TemplateResponse(
         "test.html",
-        _test_template_context(request),
+        _test_template_context(
+            request,
+            initial_project_slug=initial_project_slug,
+            initial_project_direct_entry=bool(initial_project_slug),
+        ),
     )
 
 

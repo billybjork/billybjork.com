@@ -1699,9 +1699,11 @@
             this.testBasePath = this.listSceneEl?.dataset.testBasePath || '/test';
             this.initialProjectSlug = this.listSceneEl?.dataset.initialProjectSlug || '';
             this.initialProjectDirectEntry = this.listSceneEl?.dataset.initialProjectDirectEntry === 'true';
+            this.projectQueryParam = 'project';
             this.boundCaptureClick = this.handleCaptureClick.bind(this);
             this.boundKeyDown = this.handleKeyDown.bind(this);
             this.boundPrefetchIntent = this.handlePrefetchIntent.bind(this);
+            this.boundPopState = this.handlePopState.bind(this);
         }
 
         init() {
@@ -1713,6 +1715,8 @@
             addManagedEventListener(document, 'pointerdown', this.boundPrefetchIntent, true);
             addManagedEventListener(document, 'focusin', this.boundPrefetchIntent, true);
             addManagedEventListener(document, 'touchstart', this.boundPrefetchIntent, { passive: true, capture: true });
+            this.ensureHistoryStateFromLocation();
+            addManagedEventListener(window, 'popstate', this.boundPopState);
             this.warmHlsScript();
             document.querySelectorAll('.pc-project[data-hls-url]').forEach((item) => {
                 this.ensurePreconnectForUrl(item.dataset.hlsUrl || '');
@@ -2104,7 +2108,7 @@
             this.transitionInFlight = true;
             try {
                 if (this.currentOpenSlug && this.currentOpenSlug !== slug) {
-                    await this.closeProject(this.currentOpenSlug);
+                    await this.closeProject(this.currentOpenSlug, { updateUrl: false });
                 }
 
                 if (this.currentOpenSlug === slug) {
@@ -2122,6 +2126,8 @@
             if (!ctx) return;
             const token = this.beginTransition();
             const openOrigin = options.origin || 'list';
+            const shouldUpdateUrl = options.updateUrl !== false;
+            const historyMode = options.historyMode === 'replace' ? 'replace' : 'push';
             const sourceState = openOrigin === 'list' ? this.captureListSourceState(ctx) : null;
             const prefersInstant = prefersReducedMotion || options.instant === true;
             const shouldScrollToProject = options.skipScroll !== true;
@@ -2204,6 +2210,9 @@
                     origin: openOrigin,
                     delayMs: prefersInstant ? 0 : 450,
                 });
+                if (shouldUpdateUrl) {
+                    this.syncOpenUrlState(slug, openOrigin, historyMode);
+                }
                 return;
             }
 
@@ -2222,6 +2231,9 @@
                     origin: openOrigin,
                     delayMs: 0,
                 });
+                if (shouldUpdateUrl) {
+                    this.syncOpenUrlState(slug, openOrigin, historyMode);
+                }
 
                 if (heroVideo) {
                     this.prepareHeroVideoReady(heroVideo, ctx, token)
@@ -2286,21 +2298,27 @@
                 origin: openOrigin,
                 delayMs: prefersInstant ? 0 : 450,
             });
+            if (shouldUpdateUrl) {
+                this.syncOpenUrlState(slug, openOrigin, historyMode);
+            }
         }
 
-        async closeProject(slug) {
+        async closeProject(slug, options = {}) {
             const ctx = this.contextBySlug.get(slug);
             if (!ctx) return;
+            const shouldUpdateUrl = options.updateUrl !== false;
+            const historyMode = options.historyMode === 'replace' ? 'replace' : 'push';
+            const isPopState = options.fromPopState === true;
             const session = this.openSession && this.openSession.slug === slug
                 ? this.openSession
                 : null;
-            if (session?.origin === 'direct') {
+            if (session?.origin === 'direct' && shouldUpdateUrl && !isPopState) {
                 this.navigateToListScene();
                 return;
             }
 
             const token = this.beginTransition();
-            const prefersInstant = prefersReducedMotion;
+            const prefersInstant = prefersReducedMotion || options.instant === true;
             ctx.closeButton.disabled = true;
             const hadHeroVideo = ctx.item.classList.contains('pc-has-hero-video');
             const heroRect = hadHeroVideo
@@ -2335,6 +2353,9 @@
                 this.currentOpenSlug = null;
                 this.destroyVideosExcept(null);
                 this.clearSingleProjectMode();
+                if (shouldUpdateUrl) {
+                    this.syncListUrlState(historyMode);
+                }
                 return;
             }
 
@@ -2450,6 +2471,9 @@
             this.currentOpenSlug = null;
             this.destroyVideosExcept(null);
             this.clearSingleProjectMode();
+            if (shouldUpdateUrl) {
+                this.syncListUrlState(historyMode);
+            }
         }
 
         handleCaptureClick(event) {
@@ -2526,20 +2550,168 @@
             return url;
         }
 
+        getProjectSlugFromURL(sourceUrl = window.location.href) {
+            let parsedUrl = null;
+            try {
+                parsedUrl = sourceUrl instanceof URL
+                    ? sourceUrl
+                    : new URL(sourceUrl, window.location.origin);
+            } catch {
+                return '';
+            }
+
+            const querySlug = (parsedUrl.searchParams.get(this.projectQueryParam) || '').trim();
+            if (querySlug) {
+                return querySlug;
+            }
+
+            const rawBasePath = this.testBasePath || '/test';
+            const normalizedBasePath = rawBasePath.endsWith('/')
+                ? rawBasePath.slice(0, -1)
+                : rawBasePath;
+            if (!normalizedBasePath || parsedUrl.pathname === normalizedBasePath) {
+                return '';
+            }
+
+            if (!parsedUrl.pathname.startsWith(`${normalizedBasePath}/`)) {
+                return '';
+            }
+
+            const remainder = parsedUrl.pathname.slice(normalizedBasePath.length + 1);
+            if (!remainder) {
+                return '';
+            }
+
+            const firstSegment = remainder.split('/')[0];
+            try {
+                return decodeURIComponent(firstSegment).trim();
+            } catch {
+                return firstSegment.trim();
+            }
+        }
+
         buildProjectURL(slug) {
             return this.applyDraftModeParam(new URL(`/${slug}`, window.location.origin)).toString();
+        }
+
+        buildProjectSceneURL(slug) {
+            const url = this.applyDraftModeParam(new URL(this.testBasePath || '/test', window.location.origin));
+            url.searchParams.set(this.projectQueryParam, slug);
+            return url.toString();
         }
 
         buildListURL() {
             return this.applyDraftModeParam(new URL(this.testBasePath || '/test', window.location.origin)).toString();
         }
 
+        ensureHistoryStateFromLocation() {
+            const slugFromUrl = this.getProjectSlugFromURL();
+            if (slugFromUrl && this.contextBySlug.has(slugFromUrl)) {
+                history.replaceState(
+                    {
+                        projectSlug: slugFromUrl,
+                        isOpen: true,
+                        origin: this.initialProjectDirectEntry ? 'direct' : 'list',
+                    },
+                    '',
+                    this.buildProjectSceneURL(slugFromUrl)
+                );
+                return;
+            }
+
+            history.replaceState(
+                {
+                    projectSlug: null,
+                    isOpen: false,
+                    origin: 'list',
+                },
+                '',
+                this.buildListURL()
+            );
+        }
+
+        syncOpenUrlState(slug, origin = 'list', mode = 'push') {
+            const method = mode === 'replace' ? 'replaceState' : 'pushState';
+            history[method](
+                {
+                    projectSlug: slug,
+                    isOpen: true,
+                    origin: origin === 'direct' ? 'direct' : 'list',
+                },
+                '',
+                this.buildProjectSceneURL(slug)
+            );
+        }
+
+        syncListUrlState(mode = 'push') {
+            const method = mode === 'replace' ? 'replaceState' : 'pushState';
+            history[method](
+                {
+                    projectSlug: null,
+                    isOpen: false,
+                    origin: 'list',
+                },
+                '',
+                this.buildListURL()
+            );
+        }
+
         navigateToListScene() {
             window.location.assign(this.buildListURL());
         }
 
+        handlePopState(event) {
+            const state = event.state || {};
+            const slugFromUrl = this.getProjectSlugFromURL();
+            const hasTargetProject = !!slugFromUrl && this.contextBySlug.has(slugFromUrl);
+            const targetOrigin = state?.origin === 'direct' ? 'direct' : 'list';
+
+            if (this.transitionInFlight) return;
+            this.transitionInFlight = true;
+
+            Promise.resolve()
+                .then(async () => {
+                    if (hasTargetProject) {
+                        if (this.currentOpenSlug === slugFromUrl) {
+                            return;
+                        }
+
+                        if (this.currentOpenSlug && this.currentOpenSlug !== slugFromUrl) {
+                            await this.closeProject(this.currentOpenSlug, {
+                                updateUrl: false,
+                                fromPopState: true,
+                                instant: true,
+                            });
+                        }
+
+                        await this.openProject(slugFromUrl, {
+                            origin: targetOrigin,
+                            updateUrl: false,
+                            instant: true,
+                            skipScroll: targetOrigin === 'direct',
+                        });
+                        return;
+                    }
+
+                    if (this.currentOpenSlug) {
+                        await this.closeProject(this.currentOpenSlug, {
+                            updateUrl: false,
+                            fromPopState: true,
+                            instant: true,
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.error('Failed to process /test popstate:', err);
+                })
+                .finally(() => {
+                    this.transitionInFlight = false;
+                });
+        }
+
         openInitialProjectIfNeeded() {
-            const slug = (this.initialProjectSlug || '').trim();
+            const slugFromUrl = this.getProjectSlugFromURL();
+            const slug = (slugFromUrl || this.initialProjectSlug || '').trim();
             if (!slug || this.transitionInFlight) return;
 
             const context = this.contextBySlug.get(slug);
@@ -2548,11 +2720,13 @@
                 return;
             }
 
+            const isDirectEntry = !!slugFromUrl || this.initialProjectDirectEntry;
             this.transitionInFlight = true;
             this.openProject(slug, {
-                origin: this.initialProjectDirectEntry ? 'direct' : 'list',
+                origin: isDirectEntry ? 'direct' : 'list',
                 instant: true,
-                skipScroll: this.initialProjectDirectEntry,
+                skipScroll: isDirectEntry,
+                historyMode: 'replace',
             })
                 .catch((err) => {
                     console.error(`Failed to initialize /test project view for ${slug}:`, err);
