@@ -24,6 +24,19 @@
         transition: opacity 0.28s ease, transform 0.28s ease, visibility 0s linear 0.28s;
     }
 
+    /* When compact mode is active, collapse the header from layout entirely */
+    body.pc-test-detail-mode.pc-header-collapsed #main-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+    }
+
+    /* Remove main element padding in compact mode so project sits at viewport top */
+    body.pc-test-detail-mode.pc-header-collapsed main {
+        padding-top: 0;
+    }
+
     #shared-depth-canvas {
         position: fixed;
         inset: 0;
@@ -61,6 +74,7 @@
 
     .page-container.pc-single-project-compact .pc-project.pc-open {
         margin-bottom: 0;
+        padding-top: 24px; /* Slight padding above hero video */
     }
 
     .spacer {
@@ -1949,6 +1963,7 @@
                 }
                 const beforeTop = shouldCompensate ? context.item.getBoundingClientRect().top : 0;
                 this.listSceneEl.classList.add('pc-single-project-compact');
+                document.body.classList.add('pc-header-collapsed');
                 if (shouldCompensate) {
                     const afterTop = context.item.getBoundingClientRect().top;
                     const delta = afterTop - beforeTop;
@@ -1987,8 +2002,22 @@
 
         measureCompactRemovedHeightAbove(context) {
             if (!this.listSceneEl || !context?.item) return 0;
-            const children = Array.from(this.listSceneEl.children);
             let removedHeight = 0;
+
+            // Include main header height since it will be collapsed
+            const mainHeader = document.getElementById('main-header');
+            if (mainHeader) {
+                removedHeight += this.getElementOuterHeight(mainHeader);
+            }
+
+            // Include main element's top padding since it will be removed
+            const mainEl = document.querySelector('main');
+            if (mainEl) {
+                const mainStyle = window.getComputedStyle(mainEl);
+                removedHeight += Number.parseFloat(mainStyle.paddingTop || '0') || 0;
+            }
+
+            const children = Array.from(this.listSceneEl.children);
             for (const child of children) {
                 if (!(child instanceof HTMLElement)) continue;
                 if (child === context.item) break;
@@ -2016,6 +2045,7 @@
                 this.listSceneEl.classList.remove('pc-single-project-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
+            document.body.classList.remove('pc-header-collapsed');
             this.syncDetailModeClass(false);
             logTransitionDebug('project:clear-single-project-mode', {
                 keepSession: !!options.keepSession,
