@@ -20,6 +20,7 @@ import {
   openVideoLightbox,
 } from './lightbox';
 import { closeProject as closeProjectBySlug } from './loader';
+import { initMobileControls, destroyMobileControls } from './mobile-video-controls';
 
 // ========== UTILITY FUNCTIONS ==========
 
@@ -351,6 +352,10 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
 
     const initializeVideo = () => {
       updateVideoContainerAspectRatio(videoElement);
+
+      // Initialize mobile controls (no-op on desktop)
+      initMobileControls(videoElement);
+
       if (document.body.classList.contains('editing')) {
         videoElement.pause();
         resolve();
@@ -498,6 +503,9 @@ function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
     videoElement.videoLayoutCleanup();
     videoElement.videoLayoutCleanup = null;
   }
+
+  // Clean up mobile controls
+  destroyMobileControls(videoElement);
 
   destroyHlsInstance(videoElement);
   delete videoElement.dataset.loaded;
