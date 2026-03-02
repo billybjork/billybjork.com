@@ -697,13 +697,14 @@
         uniform bool depthOpacity;
         uniform int pointShape; // 0 = soft, 1 = circle, 2 = square
         uniform int colorMode; // 0 = original, 1 = depth, 2 = normal, 3 = blend
+        uniform float colorGain;
+        uniform float opacityBoost;
         uniform bool showDepth;
         uniform bool showEdges;
         uniform bool showDensity;
         uniform bool dofEnable;
         uniform float dofFocal;
         uniform float dofStrength;
-        uniform float alphaClip;
 
         varying vec2 vUv;
         varying float vDepth;
@@ -746,14 +747,13 @@
             float alpha = 1.0;
             if (pointShape == 0) {
                 // Soft/Gaussian falloff
-                alpha = exp(-dist * dist * 8.0);
+                alpha = exp(-dist * dist * 5.0);
             } else if (pointShape == 1) {
                 // Circle - hard edge
                 if (dist > 0.5) discard;
             }
             // pointShape == 2 is square, no modification needed
             float baseOpacity = alpha * opacity;
-            if (baseOpacity < alphaClip) discard;
 
             // Debug views
             if (showDepth) {
@@ -790,6 +790,7 @@
                 // Blend - mix original with depth color
                 color = mix(vColor, viridis(vDepth), 0.3);
             }
+            color = min(color * colorGain, vec3(1.0));
 
             // Opacity adjustments
             float finalOpacity = baseOpacity;
@@ -806,9 +807,34 @@
                 // Simulate bokeh by making out-of-focus points larger but more transparent
                 finalOpacity *= 1.0 / (1.0 + blur * 2.0);
             }
+            finalOpacity = min(1.0, finalOpacity * opacityBoost);
 
-            if (finalOpacity < alphaClip) discard;
             gl_FragColor = vec4(color, finalOpacity);
+        }
+    `;
+
+    const depthPrepassFragmentShader = `
+        uniform float opacity;
+        uniform int pointShape; // 0 = soft, 1 = circle, 2 = square
+        uniform float alphaClip;
+        uniform float prepassRadius;
+
+        void main() {
+            vec2 pc = gl_PointCoord - 0.5;
+            float dist = length(pc);
+
+            if (pointShape == 0) {
+                // Use a stable circular mask in depth prepass (not gaussian alpha-threshold)
+                // to avoid stipple/banding artifacts while preserving soft color shading.
+                if (dist > prepassRadius) discard;
+            } else if (pointShape == 1) {
+                if (dist > 0.5) discard;
+            }
+            // pointShape == 2 is square, no modification needed
+            if (opacity < alphaClip) discard;
+
+            // Color writes are disabled on this material, so this only populates depth.
+            gl_FragColor = vec4(1.0);
         }
     `;
 
@@ -831,6 +857,8 @@
         pointShape: 0, // 0 = soft, 1 = circle, 2 = square
         sizeAttenuation: true,
         depthSizing: 1.2,
+        colorGain: 1.18,          // Compensation for darker look with strict occlusion
+        opacityBoost: 1.22,       // Lift mid-alpha to reduce perceived darkening
         opacity: 1.0,             // Opacity at center (coherent) - full opacity
         depthOpacity: false,
         // Creative effects (these are the "edge" / exploded values)
@@ -839,7 +867,8 @@
         dofEnable: false,
         dofFocal: 0.5,
         dofStrength: 1.0,
-        alphaClip: 0.12,         // Clip very faint point halos to reduce overlap artifacts
+        alphaClip: 0.05,          // Ignore depth writes only when cloud is nearly transparent
+        prepassRadius: 0.48,      // Circular depth footprint for soft points
         // Color mode
         colorMode: 0, // 0 = original, 1 = depth, 2 = normal, 3 = blend
         // Debug
@@ -1275,45 +1304,68 @@
             const geometry = shared.geometry;
             this.pointCount = geometry.getAttribute('pixelUV').count;
 
-            // Material
+            this.uniforms = {
+                rgbAtlas: { value: rgbTexture },
+                depthAtlas: { value: depthTexture },
+                frameIndex: { value: 0.0 },
+                atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
+                frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
+                columns: { value: metadata.columns },
+                depthAmount: { value: config.depthAmount },
+                pointSize: { value: config.pointSize },
+                depthSizing: { value: config.depthSizing },
+                attenuationBase: { value: CAMERA_Z / 100 },
+                sizeAttenuation: { value: config.sizeAttenuation },
+                edgeScatter: { value: config.edgeScatter },
+                edgeThreshold: { value: config.edgeThreshold },
+                time: { value: 0.0 },
+                opacity: { value: config.opacity },
+                depthOpacity: { value: config.depthOpacity },
+                pointShape: { value: config.pointShape },
+                colorMode: { value: config.colorMode },
+                colorGain: { value: config.colorGain },
+                opacityBoost: { value: config.opacityBoost },
+                showDepth: { value: config.showDepth },
+                showEdges: { value: config.showEdges },
+                showDensity: { value: config.showDensity },
+                dofEnable: { value: config.dofEnable },
+                dofFocal: { value: config.dofFocal },
+                dofStrength: { value: config.dofStrength },
+                alphaClip: { value: config.alphaClip },
+                prepassRadius: { value: config.prepassRadius },
+            };
+
+            // Pass 1: depth-only prepass for stable self-occlusion
+            this.depthMaterial = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader: depthPrepassFragmentShader,
+                uniforms: this.uniforms,
+                transparent: false,
+                depthTest: true,
+                depthWrite: true,
+                colorWrite: false,
+                blending: THREE.NoBlending,
+            });
+
+            // Pass 2: color pass with soft alpha (depth-tested against prepass)
             this.material = new THREE.ShaderMaterial({
                 vertexShader,
                 fragmentShader,
-                uniforms: {
-                    rgbAtlas: { value: rgbTexture },
-                    depthAtlas: { value: depthTexture },
-                    frameIndex: { value: 0.0 },
-                    atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
-                    frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
-                    columns: { value: metadata.columns },
-                    depthAmount: { value: config.depthAmount },
-                    pointSize: { value: config.pointSize },
-                    depthSizing: { value: config.depthSizing },
-                    attenuationBase: { value: CAMERA_Z / 100 },
-                    sizeAttenuation: { value: config.sizeAttenuation },
-                    edgeScatter: { value: config.edgeScatter },
-                    edgeThreshold: { value: config.edgeThreshold },
-                    time: { value: 0.0 },
-                    opacity: { value: config.opacity },
-                    depthOpacity: { value: config.depthOpacity },
-                    pointShape: { value: config.pointShape },
-                    colorMode: { value: config.colorMode },
-                    showDepth: { value: config.showDepth },
-                    showEdges: { value: config.showEdges },
-                    showDensity: { value: config.showDensity },
-                    dofEnable: { value: config.dofEnable },
-                    dofFocal: { value: config.dofFocal },
-                    dofStrength: { value: config.dofStrength },
-                    alphaClip: { value: config.alphaClip },
-                },
+                uniforms: this.uniforms,
                 transparent: true,
                 depthTest: true,
-                depthWrite: true,
+                depthWrite: false,
                 blending: THREE.NormalBlending,
             });
 
+            this.depthPoints = new THREE.Points(geometry, this.depthMaterial);
+            this.depthPoints.frustumCulled = false;
+            this.depthPoints.renderOrder = 0;
+            this.motionGroup.add(this.depthPoints);
+
             this.points = new THREE.Points(geometry, this.material);
             this.points.frustumCulled = false;
+            this.points.renderOrder = 1;
             this.motionGroup.add(this.points);
         }
 
@@ -1323,14 +1375,23 @@
         }
 
         disposePointCloud() {
+            if (this.depthPoints) {
+                this.motionGroup.remove(this.depthPoints);
+                this.depthPoints = null;
+            }
             if (this.points) {
                 this.motionGroup.remove(this.points);
                 this.points = null;
+            }
+            if (this.depthMaterial) {
+                this.depthMaterial.dispose();
+                this.depthMaterial = null;
             }
             if (this.material) {
                 this.material.dispose();
                 this.material = null;
             }
+            this.uniforms = null;
             if (this.geometryKey) {
                 releaseSharedGeometry(this.geometryKey);
                 this.geometryKey = null;
@@ -1487,7 +1548,7 @@
         }
 
         update(globalProgress, time, rect) {
-            if (!this.material) return;
+            if (!this.material || !this.uniforms) return;
 
             const { metadata } = this.spriteData;
             let frameIndex = Math.floor(globalProgress) % metadata.frames;
@@ -1563,7 +1624,7 @@
             // =============================================
             // Update uniforms with viewport-aware values
             // =============================================
-            const u = this.material.uniforms;
+            const u = this.uniforms;
             u.frameIndex.value = frameIndex;
             u.depthAmount.value = effectiveDepth;
             u.pointSize.value = config.pointSize;
@@ -1576,6 +1637,8 @@
             u.depthOpacity.value = config.depthOpacity;
             u.pointShape.value = config.pointShape;
             u.colorMode.value = config.colorMode;
+            u.colorGain.value = config.colorGain;
+            u.opacityBoost.value = config.opacityBoost;
             u.showDepth.value = config.showDepth;
             u.showEdges.value = config.showEdges;
             u.showDensity.value = config.showDensity;
@@ -1583,6 +1646,7 @@
             u.dofFocal.value = config.dofFocal;
             u.dofStrength.value = config.dofStrength;
             u.alphaClip.value = config.alphaClip;
+            u.prepassRadius.value = config.prepassRadius;
             this.syncLayout(rect);
             this.updateMotionTransform(effectiveDepth);
         }
