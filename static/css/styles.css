@@ -740,6 +740,10 @@ footer {
 }
 
 .video-controls > * {
+    pointer-events: none;
+}
+
+.video-controls.vc-visible > * {
     pointer-events: auto;
 }
 

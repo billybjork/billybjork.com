@@ -19,6 +19,7 @@ interface ControlsState {
   isDragging: boolean;
   hideTimeout: number | null;
   controlsVisible: boolean;
+  lastTouchInteractionAt: number;
 }
 
 const videoStates = new WeakMap<HTMLVideoElement, ControlsState>();
@@ -26,7 +27,7 @@ const videoStates = new WeakMap<HTMLVideoElement, ControlsState>();
 function getVideoState(video: HTMLVideoElement): ControlsState {
   let state = videoStates.get(video);
   if (!state) {
-    state = { isDragging: false, hideTimeout: null, controlsVisible: true };
+    state = { isDragging: false, hideTimeout: null, controlsVisible: true, lastTouchInteractionAt: 0 };
     videoStates.set(video, state);
   }
   return state;
@@ -366,7 +367,20 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     video.muted = !video.muted;
   };
 
-  const onControlsTouch = (e: Event) => {
+  const shouldIgnoreSyntheticClick = (e: Event): boolean => {
+    const state = getVideoState(video);
+    if (e.type === 'touchend') {
+      state.lastTouchInteractionAt = Date.now();
+      return false;
+    }
+    return e.type === 'click' && (Date.now() - state.lastTouchInteractionAt) < 500;
+  };
+
+  const onControlsTap = (e: Event) => {
+    if (shouldIgnoreSyntheticClick(e)) {
+      return;
+    }
+
     const target = e.target as HTMLElement;
     // If tapping an interactive element, let it handle it
     if (target.closest('button') || target.closest('.vc-progress-container')) {
@@ -378,7 +392,13 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 
   // Tap on video itself to show/hide controls (needed when controls are hidden with pointer-events: none)
   const onVideoTap = (e: Event) => {
-    e.preventDefault();
+    if (shouldIgnoreSyntheticClick(e)) {
+      return;
+    }
+    if (e.cancelable) {
+      e.preventDefault();
+    }
+    e.stopPropagation();
     toggleControlsVisibility(video, controls);
   };
 
@@ -416,10 +436,15 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
   progressContainer?.addEventListener('touchstart', onProgressStart, { passive: false });
   progressContainer?.addEventListener('keydown', onProgressKeydown);
   fullscreenBtn?.addEventListener('click', onFullscreenClick);
-  controls.addEventListener('click', onControlsTouch);
-  controls.addEventListener('touchend', onControlsTouch);
-  video.addEventListener('click', onVideoTap);
-  video.addEventListener('touchend', onVideoTap);
+  if ('PointerEvent' in window) {
+    controls.addEventListener('pointerup', onControlsTap);
+    video.addEventListener('pointerup', onVideoTap);
+  } else {
+    controls.addEventListener('click', onControlsTap);
+    controls.addEventListener('touchend', onControlsTap);
+    video.addEventListener('click', onVideoTap);
+    video.addEventListener('touchend', onVideoTap);
+  }
 
   // Desktop mouse hover behavior
   container?.addEventListener('mousemove', onMouseMove);
@@ -460,10 +485,15 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     progressContainer?.removeEventListener('touchstart', onProgressStart);
     progressContainer?.removeEventListener('keydown', onProgressKeydown);
     fullscreenBtn?.removeEventListener('click', onFullscreenClick);
-    controls.removeEventListener('click', onControlsTouch);
-    controls.removeEventListener('touchend', onControlsTouch);
-    video.removeEventListener('click', onVideoTap);
-    video.removeEventListener('touchend', onVideoTap);
+    if ('PointerEvent' in window) {
+      controls.removeEventListener('pointerup', onControlsTap);
+      video.removeEventListener('pointerup', onVideoTap);
+    } else {
+      controls.removeEventListener('click', onControlsTap);
+      controls.removeEventListener('touchend', onControlsTap);
+      video.removeEventListener('click', onVideoTap);
+      video.removeEventListener('touchend', onVideoTap);
+    }
     container?.removeEventListener('mousemove', onMouseMove);
     container?.removeEventListener('mouseleave', onMouseLeave);
 
