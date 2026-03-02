@@ -1396,6 +1396,17 @@
             this.motionFrozen = false;
         }
 
+        // Clear coherence override without causing a visual shift by syncing
+        // currentCoherence to the auto-calculated value first
+        clearCoherenceOverrideSmoothly(rect) {
+            if (this.coherenceOverride === null) return;
+            // Calculate what autoCoherence would be at this position
+            const naturalCoherence = this.calculateNaturalCoherence(rect);
+            // Sync currentCoherence to avoid any delta when override clears
+            this.currentCoherence = naturalCoherence;
+            this.coherenceOverride = null;
+        }
+
         setRenderSuppressed(suppressed) {
             this.renderSuppressed = !!suppressed;
             if (this.renderSuppressed) {
@@ -1533,7 +1544,10 @@
             let targetPanX = inputX * config.mouseParallax;
             let targetPanY = inputY * config.mouseParallax * 0.6;
             let targetTilt = scrollTilt;
-            if (this.motionFrozen || this.coherenceOverride !== null) {
+            // Keep camera motion freeze explicitly controlled. Coherence overrides
+            // should not implicitly zero tilt/pan, otherwise clearing override
+            // causes a visible end-of-transition camera snap.
+            if (this.motionFrozen) {
                 targetPanX = 0;
                 targetPanY = 0;
                 targetTilt = 0;
@@ -2391,12 +2405,17 @@
                     otherCtx.item.style.width = '';
                     if (otherCtx.thumbnail) {
                         // Set coherence to flat before fading in
+                        otherCtx.thumbnail.setMotionFrozen(false);
                         otherCtx.thumbnail.setCoherenceOverride(1);
                         otherCtx.thumbnail.setOpacityOverride(null);
                         otherThumbnails.push(otherCtx);
                     }
                 }
             });
+
+            // Keep rect sampling active through the entire inactive-thumb coherence
+            // animation so override release uses up-to-date viewport positions.
+            bumpTransitionRectRefresh(520);
 
             // Animate other thumbnails' coherence to their natural values
             const otherCoherencePromises = otherThumbnails.map((otherCtx) => {
@@ -2406,17 +2425,25 @@
             });
 
             // Clear coherence overrides for other thumbnails after animation
+            // Use clearCoherenceOverrideSmoothly to sync currentCoherence with
+            // the auto-calculated value first, preventing any visual shift
             Promise.all(otherCoherencePromises).then(() => {
                 if (!this.isTokenActive(token)) return;
+                // Force a rect refresh immediately before releasing overrides so
+                // coherence handoff and the next render frame read the same rect basis.
+                rectsNeedUpdate = true;
+                refreshRenderableThumbnails();
                 otherThumbnails.forEach((otherCtx) => {
-                    otherCtx.thumbnail.setCoherenceOverride(null);
+                    const rect = otherCtx.thumbnail.cachedRect || otherCtx.container.getBoundingClientRect();
+                    otherCtx.thumbnail.clearCoherenceOverrideSmoothly(rect);
                 });
             });
 
-            // Clear main thumbnail's coherence override (already at natural value)
-            // and unfreeze motion. Since coherence is already at its natural value
-            // and pan/tilt use lerping, the transition to mouse-driven motion is smooth.
-            ctx.thumbnail.setCoherenceOverride(null);
+            // Clear main thumbnail's coherence override and unfreeze motion.
+            // Use smooth clearing to sync currentCoherence with auto-calculated
+            // value, preventing any visual shift when override is removed.
+            const finalRect = ctx.container.getBoundingClientRect();
+            ctx.thumbnail.clearCoherenceOverrideSmoothly(finalRect);
             ctx.thumbnail.setMotionFrozen(false);
 
             if (!this.isTokenActive(token)) return;
