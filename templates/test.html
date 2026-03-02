@@ -63,6 +63,13 @@
         pointer-events: none;
     }
 
+    .pc-project.pc-fading-out {
+        position: fixed !important;
+        z-index: 15;
+        margin: 0 !important;
+        pointer-events: none;
+    }
+
     .page-container.pc-single-project-mode .pc-project.pc-open {
         opacity: 1;
     }
@@ -1249,6 +1256,8 @@
             this.pointCount = 0;
             this.currentCoherence = prefersReducedMotion ? 1 : 0;
             this.coherenceOverride = null;
+            this.opacityOverride = null;
+            this.currentOpacityMultiplier = 1;
             this.motionFrozen = false;
             this.renderSuppressed = false;
             this.geometryKey = null;
@@ -1373,12 +1382,22 @@
             this.coherenceOverride = Math.max(0, Math.min(1, value));
         }
 
+        setOpacityOverride(value) {
+            if (value === null || value === undefined) {
+                this.opacityOverride = null;
+                return;
+            }
+            this.opacityOverride = Math.max(0, Math.min(1, value));
+        }
+
         setMotionFrozen(frozen) {
             this.motionFrozen = !!frozen;
         }
 
         resetTransitionState() {
             this.coherenceOverride = null;
+            this.opacityOverride = null;
+            this.currentOpacityMultiplier = 1;
             this.motionFrozen = false;
         }
 
@@ -1493,8 +1512,14 @@
                 (config.depthAmount - config.depthAmountCenter) * (1 - this.currentCoherence);
             const effectiveScatter = config.edgeScatterCenter +
                 (config.edgeScatter - config.edgeScatterCenter) * (1 - this.currentCoherence);
-            const effectiveOpacity = config.opacityEdge +
+            const baseOpacity = config.opacityEdge +
                 (config.opacity - config.opacityEdge) * this.currentCoherence;
+
+            // Apply opacity override for fade transitions
+            const targetOpacityMultiplier = this.opacityOverride !== null ? this.opacityOverride : 1;
+            const opacityLerp = prefersReducedMotion ? 1 : 0.15;
+            this.currentOpacityMultiplier += (targetOpacityMultiplier - this.currentOpacityMultiplier) * opacityLerp;
+            const effectiveOpacity = baseOpacity * this.currentOpacityMultiplier;
 
             // =============================================
             // Camera positioning
@@ -1780,7 +1805,11 @@
             ctx.item.classList.remove('pc-has-hero-video');
             ctx.item.classList.remove('pc-hero-expanded');
             ctx.item.classList.remove('pc-closing');
+            ctx.item.classList.remove('pc-fading-out');
             ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+            ctx.item.style.top = '';
+            ctx.item.style.left = '';
+            ctx.item.style.width = '';
         }
 
         syncDetailModeClass(isDetailOpen) {
@@ -1799,10 +1828,19 @@
             const context = this.contextBySlug.get(slug);
             if (!context) return;
             this.cancelSingleProjectCompactCommit();
+
             this.listSceneEl.classList.remove('pc-single-project-compact');
             this.listSceneEl.classList.add('pc-single-project-mode');
             this.listSceneEl.setAttribute('data-active-slug', slug);
             this.syncDetailModeClass(true);
+
+            // Fade out inactive thumbnails via WebGL
+            this.contextBySlug.forEach((ctx, ctxSlug) => {
+                if (ctxSlug !== slug && ctx.thumbnail) {
+                    ctx.thumbnail.setOpacityOverride(0);
+                }
+            });
+
             logTransitionDebug('open:set-single-project-mode', {
                 slug,
                 origin: options.origin || 'list',
@@ -1817,6 +1855,28 @@
                 sourceRect: sourceState?.sourceRect || null,
                 sourceScrollY: Number.isFinite(sourceState?.sourceScrollY) ? sourceState.sourceScrollY : null,
             };
+        }
+
+        fixInactiveProjectsInPlace(activeSlug) {
+            // Fix inactive projects BELOW the active one in place
+            // Projects above will scroll out of view and fade via CSS normally
+            // Only fixing below prevents scroll calculation issues
+            const activeCtx = this.contextBySlug.get(activeSlug);
+            if (!activeCtx) return;
+            const activeTop = activeCtx.item.getBoundingClientRect().top;
+
+            this.contextBySlug.forEach((ctx, ctxSlug) => {
+                if (ctxSlug !== activeSlug) {
+                    const rect = ctx.item.getBoundingClientRect();
+                    // Only fix projects below the active one
+                    if (rect.top > activeTop) {
+                        ctx.item.style.top = `${rect.top}px`;
+                        ctx.item.style.left = `${rect.left}px`;
+                        ctx.item.style.width = `${rect.width}px`;
+                        ctx.item.classList.add('pc-fading-out');
+                    }
+                }
+            });
         }
 
         cancelSingleProjectCompactCommit() {
@@ -2022,6 +2082,9 @@
                 if (!(child instanceof HTMLElement)) continue;
                 if (child === context.item) break;
 
+                // Skip fixed-positioned elements (they don't affect document flow)
+                if (child.classList.contains('pc-fading-out')) continue;
+
                 if (child.classList.contains('spacer') || child.classList.contains('pc-project')) {
                     removedHeight += this.getElementOuterHeight(child);
                 }
@@ -2047,6 +2110,18 @@
             }
             document.body.classList.remove('pc-header-collapsed');
             this.syncDetailModeClass(false);
+
+            // Reset opacity overrides and fixed positioning so inactive projects restore
+            this.contextBySlug.forEach((ctx) => {
+                ctx.item.classList.remove('pc-fading-out');
+                ctx.item.style.top = '';
+                ctx.item.style.left = '';
+                ctx.item.style.width = '';
+                if (ctx.thumbnail) {
+                    ctx.thumbnail.setOpacityOverride(null);
+                }
+            });
+
             logTransitionDebug('project:clear-single-project-mode', {
                 keepSession: !!options.keepSession,
                 restoreScrollY: options.restoreScrollY ?? null,
@@ -2175,7 +2250,7 @@
                 this.setHeroSlotVisibility(ctx, false);
                 this.scheduleSingleProjectCompact(slug, {
                     origin: openOrigin,
-                    delayMs: prefersInstant ? 0 : 360,
+                    delayMs: prefersInstant ? 0 : 450,
                 });
                 logTransitionDebug('open:complete:no-hero', {
                     slug,
@@ -2226,6 +2301,8 @@
             const startRect = ctx.container.getBoundingClientRect();
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, startRect);
+            // Fix inactive projects in place AFTER capturing morph start, BEFORE hero expansion
+            this.fixInactiveProjectsInPlace(slug);
             this.animateMainFlowShift(ctx, morphDuration, token, () => {
                 ctx.item.classList.add('pc-hero-expanded');
             });
@@ -2265,7 +2342,7 @@
             this.currentOpenSlug = slug;
             this.scheduleSingleProjectCompact(slug, {
                 origin: openOrigin,
-                delayMs: prefersInstant ? 0 : 360,
+                delayMs: prefersInstant ? 0 : 450,
             });
             logTransitionDebug('open:complete:hero', {
                 slug,
