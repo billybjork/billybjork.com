@@ -2350,6 +2350,22 @@
             this.resetProjectVisualState(ctx);
             ctx.closeButton.disabled = false;
 
+            // Release inactive projects from fixed positioning and start fading
+            // them in. This must happen AFTER pc-open is removed (layout collapsed)
+            // so they snap to correct positions while still invisible, then fade in
+            // concurrent with the active thumbnail's coherence animation.
+            this.contextBySlug.forEach((otherCtx, otherSlug) => {
+                if (otherSlug !== slug) {
+                    otherCtx.item.classList.remove('pc-fading-out');
+                    otherCtx.item.style.top = '';
+                    otherCtx.item.style.left = '';
+                    otherCtx.item.style.width = '';
+                    if (otherCtx.thumbnail) {
+                        otherCtx.thumbnail.setOpacityOverride(null);
+                    }
+                }
+            });
+
             await this.animateCoherence(ctx.thumbnail, 0, 260, token);
             if (!this.isTokenActive(token)) return;
             ctx.thumbnail.resetTransitionState();
