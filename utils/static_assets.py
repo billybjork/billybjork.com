@@ -1,20 +1,29 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import os
 from pathlib import Path
 
 STATIC_ROOT = Path(__file__).resolve().parents[1] / "static"
 STATIC_VERSION = os.getenv("STATIC_VERSION", "").strip()
 
+# Cache mtimes in memory but track actual mtime to detect changes
+_mtime_cache: dict[str, tuple[float, str]] = {}
 
-@lru_cache(maxsize=512)
+
 def _file_mtime_version(path: str) -> str:
+    """Get version string based on file mtime, with auto-invalidating cache."""
     try:
         mtime = (STATIC_ROOT / path).stat().st_mtime
     except FileNotFoundError:
         return ""
-    return str(int(mtime))
+
+    cached = _mtime_cache.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+
+    version = str(int(mtime))
+    _mtime_cache[path] = (mtime, version)
+    return version
 
 
 def static_url(request, path: str) -> str:

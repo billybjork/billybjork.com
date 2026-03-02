@@ -137,8 +137,9 @@ function updatePlayState(video: HTMLVideoElement, controls: HTMLElement): void {
   if (playBtn) playBtn.setAttribute('aria-label', label);
 }
 
-function updateFullscreenState(controls: HTMLElement): void {
-  const isFullscreen = !!document.fullscreenElement;
+function updateFullscreenState(video: HTMLVideoElement, controls: HTMLElement): void {
+  const videoWithWebkit = video as HTMLVideoElement & { webkitDisplayingFullscreen?: boolean };
+  const isFullscreen = !!document.fullscreenElement || !!videoWithWebkit.webkitDisplayingFullscreen;
   controls.classList.toggle('is-fullscreen', isFullscreen);
 
   const fsBtn = controls.querySelector<HTMLButtonElement>('.mvc-fullscreen-btn');
@@ -259,8 +260,22 @@ function handleProgressKeydown(video: HTMLVideoElement, event: KeyboardEvent): v
   }
 }
 
-function toggleFullscreen(container: HTMLElement): void {
-  if (document.fullscreenElement) {
+function toggleFullscreen(video: HTMLVideoElement, container: HTMLElement): void {
+  // iOS Safari doesn't support Fullscreen API on containers, only webkitEnterFullscreen on video
+  const videoWithWebkit = video as HTMLVideoElement & {
+    webkitEnterFullscreen?: () => void;
+    webkitExitFullscreen?: () => void;
+    webkitDisplayingFullscreen?: boolean;
+  };
+
+  if (videoWithWebkit.webkitEnterFullscreen) {
+    // iOS path
+    if (videoWithWebkit.webkitDisplayingFullscreen) {
+      videoWithWebkit.webkitExitFullscreen?.();
+    } else {
+      videoWithWebkit.webkitEnterFullscreen();
+    }
+  } else if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => {});
   } else {
     container.requestFullscreen().catch(() => {});
@@ -300,7 +315,7 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     showControls(video, controls);
   };
 
-  const onFullscreenChange = () => updateFullscreenState(controls);
+  const onFullscreenChange = () => updateFullscreenState(video, controls);
 
   video.addEventListener('timeupdate', onTimeUpdate);
   video.addEventListener('progress', onProgress);
@@ -310,6 +325,9 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
   video.addEventListener('pause', onPause);
   video.addEventListener('ended', onEnded);
   document.addEventListener('fullscreenchange', onFullscreenChange);
+  // iOS fullscreen events
+  video.addEventListener('webkitbeginfullscreen', onFullscreenChange);
+  video.addEventListener('webkitendfullscreen', onFullscreenChange);
 
   // UI event handlers
   const playOverlay = controls.querySelector<HTMLButtonElement>('.mvc-play-overlay');
@@ -352,7 +370,7 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 
   const onFullscreenClick = (e: Event) => {
     e.stopPropagation();
-    if (container) toggleFullscreen(container);
+    if (container) toggleFullscreen(video, container);
   };
 
   playOverlay?.addEventListener('click', togglePlay);
@@ -368,7 +386,7 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
 
   // Initial state
   updatePlayState(video, controls);
-  updateFullscreenState(controls);
+  updateFullscreenState(video, controls);
   showControls(video, controls);
   if (!video.paused) {
     hideControlsDelayed(video, controls);
@@ -389,6 +407,8 @@ function bindVideoEvents(video: HTMLVideoElement, controls: HTMLElement): () => 
     video.removeEventListener('pause', onPause);
     video.removeEventListener('ended', onEnded);
     document.removeEventListener('fullscreenchange', onFullscreenChange);
+    video.removeEventListener('webkitbeginfullscreen', onFullscreenChange);
+    video.removeEventListener('webkitendfullscreen', onFullscreenChange);
 
     playOverlay?.removeEventListener('click', togglePlay);
     playBtn?.removeEventListener('click', togglePlay);
