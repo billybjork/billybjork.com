@@ -29,6 +29,23 @@ body.editing {
     overflow-x: hidden;
 }
 
+/* Hide the edit button in project top bar when already in edit mode */
+body.editing .edit-project-btn-top {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Hide the main header nav bar when in edit mode */
+body.editing #main-header {
+    display: none;
+}
+
+/* Add padding between project and top of viewport when in edit mode */
+body.editing > main {
+    padding-top: 4rem;
+}
+
 /* Prevent background scrolling when modal is open */
 body.modal-open {
     overflow: hidden;
@@ -140,6 +157,17 @@ body.modal-open {
 .edit-btn-icon:hover:not(:disabled) {
     background: #2f2f2f;
     border-color: #4a4a4a;
+}
+
+.edit-btn-icon-danger {
+    color: #f87171;
+    border-color: #7f1d1d;
+}
+
+.edit-btn-icon-danger:hover:not(:disabled) {
+    background: #450a0a;
+    border-color: #991b1b;
+    color: #fca5a5;
 }
 
 .edit-btn-primary {

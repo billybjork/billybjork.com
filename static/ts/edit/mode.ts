@@ -20,6 +20,7 @@ import {
   insertLink,
   showNotification,
   fetchJSON,
+  withShowDrafts,
 } from '../core/utils';
 import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
 import { escapeHtmlAttr } from '../core/text';
@@ -59,6 +60,7 @@ const ICONS = {
   divider: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>',
   undo: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h8a8 8 0 0 1 8 8v3"/></svg>',
   redo: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9h-8a8 8 0 0 0-8 8v3"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>',
 };
 
 const INLINE_TOOLBAR_ACTIONS: Array<{
@@ -657,12 +659,16 @@ function createFixedToolbar(data: ProjectData | AboutData): HTMLElement {
   bar.style.left = '0';
   bar.style.right = '0';
   bar.style.zIndex = '1200';
+  const deleteBtn = editMode === 'project'
+    ? `<button class="edit-btn edit-btn-icon edit-btn-icon-danger" data-action="delete" aria-label="Delete project" title="Delete project">${ICONS.trash}</button>`
+    : '';
   bar.innerHTML = `
     <div class="edit-toolbar-left">
       <span class="edit-project-name">Editing: ${escapeHtmlAttr(title)}</span>
       <span class="edit-status" aria-live="polite"></span>
     </div>
     <div class="edit-toolbar-right">
+      ${deleteBtn}
       <button class="edit-btn edit-btn-icon" data-action="undo" aria-label="Undo" title="Undo (Cmd/Ctrl+Z)">${ICONS.undo}</button>
       <button class="edit-btn edit-btn-icon" data-action="redo" aria-label="Redo" title="Redo (Cmd/Ctrl+Shift+Z / Cmd/Ctrl+Y)">${ICONS.redo}</button>
       <button class="edit-btn edit-btn-secondary" data-action="cancel">Discard</button>
@@ -679,6 +685,7 @@ function createFixedToolbar(data: ProjectData | AboutData): HTMLElement {
   });
   bar.querySelector('[data-action="cancel"]')?.addEventListener('click', handleCancel);
   bar.querySelector('[data-action="save"]')?.addEventListener('click', handleSave);
+  bar.querySelector('[data-action="delete"]')?.addEventListener('click', handleDeleteProject);
   document.body.appendChild(bar);
   return bar;
 }
@@ -3487,6 +3494,24 @@ async function handleCancel(): Promise<void> {
   persistScrollForNavigation(window.location.pathname);
   cleanup();
   window.location.reload();
+}
+
+async function handleDeleteProject(): Promise<void> {
+  if (editMode !== 'project' || !projectSlug) return;
+
+  const project = getEditableProjectData();
+  const name = project?.name || 'this project';
+  if (!confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) return;
+
+  try {
+    await fetchJSON(`/api/project/${projectSlug}`, { method: 'DELETE' });
+    showNotification('Project deleted', 'success');
+    cleanup();
+    window.location.href = withShowDrafts('/');
+  } catch (error) {
+    console.error('Delete project error:', error);
+    showNotification('Failed to delete project', 'error');
+  }
 }
 
 // ========== UPDATE BLOCK ==========
