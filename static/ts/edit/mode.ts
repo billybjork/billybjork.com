@@ -53,12 +53,12 @@ const ICONS = {
   delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
   image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>',
-  columns: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg>',
-  split: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/></svg>',
-  swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 8 16 13"/><line x1="21" y1="8" x2="3" y2="8"/><polyline points="8 21 3 16 8 11"/><line x1="3" y1="16" x2="21" y2="16"/></svg>',
+  columns: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/></svg>',
+  split: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/></svg>',
+  swap: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 8 16 13"/><line x1="21" y1="8" x2="3" y2="8"/><polyline points="8 21 3 16 8 11"/><line x1="3" y1="16" x2="21" y2="16"/></svg>',
   divider: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><circle cx="6" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="18" cy="12" r="2"/></svg>',
-  undo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h8a8 8 0 0 1 8 8v3"/></svg>',
-  redo: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9h-8a8 8 0 0 0-8 8v3"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h8a8 8 0 0 1 8 8v3"/></svg>',
+  redo: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9h-8a8 8 0 0 0-8 8v3"/></svg>',
 };
 
 const INLINE_TOOLBAR_ACTIONS: Array<{
@@ -141,6 +141,7 @@ let toolbar: HTMLElement | null = null;
 let editMode: EditModeType = null;
 let hiddenProjectControls: HTMLElement | null = null;
 let inlineProjectMetadataControls: HTMLElement | null = null;
+let toolbarViewportEventsBound = false;
 
 // Auto-save state
 let saveState: SaveState = SaveState.UNCHANGED;
@@ -172,6 +173,30 @@ let inlineToolbarEventsBound = false;
 let inlineToolbarUpdateRaf: number | null = null;
 
 const scrollAnchors = new ScrollAnchorManager();
+
+function updateToolbarLayoutMetrics(): void {
+  if (!toolbar) return;
+  const toolbarRect = toolbar.getBoundingClientRect();
+  const nextOffset = Math.max(56, Math.ceil(toolbarRect.height) + 8);
+  document.documentElement.style.setProperty('--edit-toolbar-offset', `${nextOffset}px`);
+}
+
+function bindToolbarViewportEvents(): void {
+  if (toolbarViewportEventsBound) return;
+  window.addEventListener('resize', updateToolbarLayoutMetrics, { passive: true });
+  window.addEventListener('orientationchange', updateToolbarLayoutMetrics);
+  window.visualViewport?.addEventListener('resize', updateToolbarLayoutMetrics);
+  toolbarViewportEventsBound = true;
+}
+
+function unbindToolbarViewportEvents(): void {
+  if (!toolbarViewportEventsBound) return;
+  window.removeEventListener('resize', updateToolbarLayoutMetrics);
+  window.removeEventListener('orientationchange', updateToolbarLayoutMetrics);
+  window.visualViewport?.removeEventListener('resize', updateToolbarLayoutMetrics);
+  toolbarViewportEventsBound = false;
+  document.documentElement.style.removeProperty('--edit-toolbar-offset');
+}
 
 // ========== INITIALIZATION ==========
 
@@ -265,6 +290,8 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   toolbar = createFixedToolbar(data);
   updateToolbarStatus();
+  bindToolbarViewportEvents();
+  updateToolbarLayoutMetrics();
 
   // Parse markdown into blocks
   const markdown = 'markdown' in data ? data.markdown : '';
@@ -572,6 +599,7 @@ export function cleanup(): void {
     contentContainer.classList.remove('edit-mode-active');
   }
 
+  unbindToolbarViewportEvents();
   if (toolbar) {
     toolbar.remove();
     toolbar = null;
@@ -621,6 +649,14 @@ function createFixedToolbar(data: ProjectData | AboutData): HTMLElement {
 
   const bar = document.createElement('div');
   bar.className = 'edit-mode-toolbar edit-mode-toolbar-fixed';
+  // Critical fallback so toolbar stays pinned even if stylesheet loading is delayed.
+  bar.style.position = 'fixed';
+  bar.style.inset = '0 0 auto 0';
+  bar.style.top = '0';
+  bar.style.bottom = 'auto';
+  bar.style.left = '0';
+  bar.style.right = '0';
+  bar.style.zIndex = '1200';
   bar.innerHTML = `
     <div class="edit-toolbar-left">
       <span class="edit-project-name">Editing: ${escapeHtmlAttr(title)}</span>
@@ -1070,6 +1106,8 @@ function updateToolbarStatus(): void {
   if (redoBtn) {
     redoBtn.disabled = false;
   }
+
+  updateToolbarLayoutMetrics();
 }
 
 /**

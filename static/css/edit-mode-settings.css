@@ -475,10 +475,12 @@
 .edit-inline-project-settings {
     margin: 0 auto 12px;
     width: min(100%, 1040px);
+    max-width: 100%;
     padding: 12px 16px;
     background: #171717;
     border: 1px solid #2b2b2b;
     border-radius: 10px;
+    overflow: hidden;
 }
 
 .edit-inline-project-settings-grid {
@@ -524,11 +526,13 @@
 
 .edit-hero-thumbnail-controls {
     width: min(100%, 1040px);
+    max-width: 100%;
     background: #171717;
     border: 1px solid #2b2b2b;
     border-radius: 10px;
     padding: 12px 16px;
     margin: 12px auto 0;
+    overflow: hidden;
 }
 
 .edit-hero-media-grid {
@@ -544,6 +548,7 @@
     border: 1px solid #252525;
     border-radius: 8px;
     padding: 12px;
+    min-width: 0;
 }
 
 .edit-hero-video-header,
@@ -579,6 +584,7 @@
     display: flex;
     gap: 12px;
     align-items: stretch;
+    min-width: 0;
 }
 
 .edit-hero-thumbnail-preview {
@@ -609,6 +615,8 @@
     border-radius: 6px;
     color: #cfcfcf;
     font-size: 13px;
+    min-width: 0;
+    text-overflow: ellipsis;
 }
 
 .edit-hero-thumbnail-input:focus {
@@ -631,6 +639,7 @@
     .edit-hero-thumbnail-controls {
         width: 100%;
         padding: 10px 12px;
+        border-radius: 9px;
     }
 
     .edit-hero-thumbnail-preview {
@@ -641,6 +650,9 @@
 @media (max-width: 480px) {
     .edit-inline-project-settings,
     .edit-hero-thumbnail-controls {
+        width: calc(100% - 8px);
+        margin-left: auto;
+        margin-right: auto;
         padding: 10px;
         border-radius: 8px;
     }
@@ -658,6 +670,7 @@
     .edit-hero-thumbnail-buttons {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
     }
 
     .edit-hero-thumbnail-buttons .edit-btn-small:last-child {

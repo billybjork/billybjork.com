@@ -104,13 +104,13 @@
 
 @media (max-width: 768px) {
     body.editing .project-item {
-        --project-shell-inline-padding: 0.35rem;
+        --project-shell-inline-padding: 0.3rem;
     }
 
     body.editing .project-item.active {
-        margin-bottom: 0.75rem;
-        padding: 0.6rem 0.45rem 0.75rem;
-        border-radius: 8px;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem 0.35rem 0.6rem;
+        border-radius: 7px;
     }
 
     body.editing .project-content {
@@ -118,12 +118,12 @@
     }
 
     .edit-mode-container {
-        padding-top: 106px;
+        padding-top: var(--edit-toolbar-offset, 98px);
     }
 
     .edit-mode-toolbar {
         gap: 6px;
-        padding: 8px;
+        padding: 7px 8px;
         align-items: center;
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -131,9 +131,13 @@
     }
 
     .edit-mode-toolbar-fixed {
+        inset: 0 0 auto 0 !important;
+        top: 0 !important;
+        bottom: auto !important;
         padding-top: 8px;
         padding-top: calc(constant(safe-area-inset-top) + 8px);
         padding-top: calc(env(safe-area-inset-top) + 8px);
+        padding-bottom: 7px;
         padding-left: 8px;
         padding-right: 8px;
     }
@@ -163,31 +167,31 @@
     }
 
     .edit-btn {
-        padding: 7px 9px;
-        font-size: 13px;
+        padding: 6px 8px;
+        font-size: 12px;
     }
 
     .edit-btn-icon {
-        width: 32px;
-        min-width: 32px;
-        height: 32px;
+        width: 30px;
+        min-width: 30px;
+        height: 30px;
         padding: 0;
     }
 
     .edit-btn-icon svg {
-        width: 15px;
-        height: 15px;
+        width: 14px;
+        height: 14px;
     }
 
     .edit-blocks-container {
-        gap: 11px;
+        gap: 9px;
     }
 
     .block-wrapper {
         gap: 6px;
-        padding: 8px;
-        padding-right: 34px;
-        padding-bottom: 32px;
+        padding: 7px;
+        padding-right: 32px;
+        padding-bottom: 29px;
     }
 
     .block-delete-btn {
@@ -205,8 +209,15 @@
     .row-action-btn,
     .merge-add-btn,
     .merge-columns-btn {
-        width: 28px;
-        height: 28px;
+        width: 30px;
+        height: 30px;
+    }
+
+    .row-action-btn,
+    .merge-columns-btn {
+        color: #9ca3af;
+        border-color: #3f3f46;
+        background: #171717;
     }
 
     .row-action-btn svg,
@@ -240,7 +251,7 @@
 
 @media (max-width: 460px) {
     .edit-mode-container {
-        padding-top: 112px;
+        padding-top: var(--edit-toolbar-offset, 104px);
     }
 
     .edit-project-name {
@@ -254,7 +265,7 @@
 
     .edit-btn {
         font-size: 12px;
-        padding: 7px 8px;
+        padding: 6px 7px;
     }
 
     .block-wrapper {

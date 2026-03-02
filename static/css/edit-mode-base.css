@@ -22,7 +22,7 @@
     --edit-line-space: 0.45rem;
     --edit-line-space-tight: 0.2rem;
     --edit-line-space-heading: 0.9rem;
-    padding-top: 76px;
+    padding-top: var(--edit-toolbar-offset, 76px);
 }
 
 body.editing {
@@ -53,18 +53,22 @@ body.modal-open {
 }
 
 .edit-mode-toolbar-fixed {
-    position: fixed;
-    top: 0;
-    bottom: auto;
-    left: 0;
-    right: 0;
+    position: fixed !important;
+    inset: 0 0 auto 0 !important;
+    top: 0 !important;
+    bottom: auto !important;
+    left: 0 !important;
+    right: 0 !important;
     margin: 0;
     width: 100%;
     max-width: none;
     transform: none;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
     border-radius: 0;
     border-left: none;
     border-right: none;
+    padding-bottom: 10px;
     padding-top: 10px;
     padding-top: calc(constant(safe-area-inset-top) + 10px);
     padding-top: calc(env(safe-area-inset-top) + 10px);
@@ -489,14 +493,16 @@ body.modal-open {
 }
 
 .merge-columns-btn svg {
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
     display: block;
     fill: none;
     stroke: currentColor;
-    stroke-width: 2;
+    stroke-width: 2.15;
     stroke-linecap: round;
     stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    shape-rendering: geometricPrecision;
     pointer-events: none;
 }
 
@@ -774,14 +780,16 @@ body.modal-open {
 }
 
 .row-action-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     display: block;
     fill: none;
     stroke: currentColor;
-    stroke-width: 2;
+    stroke-width: 2.15;
     stroke-linecap: round;
     stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    shape-rendering: geometricPrecision;
     pointer-events: none;
 }
 
