@@ -1,0 +1,396 @@
+/* Isolated styles for the /test point-cloud scene (templates/test.html). */
+    body {
+        background: #0a0a0a;
+        margin: 0;
+        overflow-x: hidden;
+    }
+
+    #main-header {
+        visibility: visible;
+        transition: opacity 0.28s ease, transform 0.28s ease, visibility 0s linear 0s;
+        will-change: opacity, transform;
+    }
+
+    body.pc-test-detail-mode #main-header {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+        visibility: hidden;
+        transition: opacity 0.28s ease, transform 0.28s ease, visibility 0s linear 0.28s;
+    }
+
+    /* When compact mode is active, collapse the header from layout entirely */
+    body.pc-test-detail-mode.pc-header-collapsed #main-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+    }
+
+    /* Remove main element padding in compact mode so project sits at viewport top */
+    body.pc-test-detail-mode.pc-header-collapsed main {
+        padding-top: 0;
+    }
+
+    #shared-depth-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 20;
+    }
+
+    .page-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    .page-container .spacer,
+    .page-container .pc-project {
+        transition: opacity 0.42s ease;
+    }
+
+    .page-container.pc-single-project-mode .spacer,
+    .page-container.pc-single-project-mode .pc-project:not(.pc-open) {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .pc-project.pc-fading-out {
+        position: fixed !important;
+        z-index: 15;
+        margin: 0 !important;
+        pointer-events: none;
+    }
+
+    .page-container.pc-single-project-mode .pc-project.pc-open {
+        opacity: 1;
+    }
+
+    .page-container.pc-single-project-compact .spacer,
+    .page-container.pc-single-project-compact .pc-project:not(.pc-open) {
+        display: none;
+    }
+
+    .page-container.pc-single-project-compact .pc-project.pc-open {
+        margin-bottom: 0;
+        padding-top: 24px; /* Slight padding above hero video */
+    }
+
+    .spacer {
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #333;
+        font-size: 1.2rem;
+    }
+
+    .spacer.top { color: #555; }
+    .spacer.bottom { color: #555; }
+
+    .pc-project {
+        width: 100%;
+        max-width: 920px;
+        margin: 0 auto 4.25rem;
+        opacity: 1;
+        transform: none;
+        position: relative;
+        z-index: 25;
+    }
+
+    .pc-project-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        cursor: pointer;
+    }
+
+    .pc-project-main {
+        position: relative;
+        z-index: 30;
+        max-width: 640px;
+        margin: 0.9rem auto 0;
+        display: none;
+        opacity: 0;
+        transform: translateY(0);
+        transition: opacity 0.28s ease;
+    }
+
+    .pc-project.pc-open .pc-project-main {
+        display: block;
+    }
+
+    .pc-project.pc-content-visible .pc-project-main {
+        opacity: 1;
+    }
+
+    .pc-project.pc-closing .pc-project-main {
+        opacity: 0;
+        transition: opacity 0.12s ease;
+    }
+
+    .pc-header-main {
+        min-width: 0;
+    }
+
+    .pc-thumbnail-container {
+        flex-shrink: 0;
+        width: 100%;
+        max-width: none;
+        aspect-ratio: 16 / 9;
+        background: transparent;
+        border-radius: 0;
+        overflow: visible;
+        position: relative;
+    }
+
+    .pc-thumbnail-container.transition-overlay {
+        position: fixed !important;
+        margin: 0 !important;
+        max-width: none !important;
+        z-index: 70;
+        pointer-events: none;
+        will-change: left, top, width, height, opacity;
+    }
+
+    .pc-thumbnail-container.thumb-hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .pc-project-main .pc-close-project {
+        z-index: 35;
+    }
+
+    .pc-project-title {
+        font-size: 1.1rem;
+        color: #fff;
+        margin: 0 0 0.25rem 0;
+        line-height: 1.15;
+    }
+
+    .pc-project-meta {
+        font-size: 0.85rem;
+        color: #666;
+    }
+
+    .pc-close-project {
+        font-size: 1.9rem;
+        border: none;
+        background: none;
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.95);
+        transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+    }
+
+    .pc-project.pc-open .pc-close-project {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scale(1);
+    }
+
+    .pc-close-project:hover {
+        color: #fff;
+    }
+
+    .pc-thumb-placeholder {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        pointer-events: none;
+    }
+
+    .pc-stage {
+        position: relative;
+        width: 100%;
+        max-width: 640px;
+        aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
+        margin: 0 auto;
+    }
+
+    .pc-project.pc-hero-expanded .pc-stage {
+        --pc-hero-max-height: calc(100vh - clamp(120px, 18vh, 180px));
+        width: min(100%, calc(var(--pc-hero-max-height) * var(--pc-stage-aspect-ratio, 1.7777777778)));
+        max-width: none;
+    }
+
+    .pc-hero-slot {
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        overflow: hidden;
+        background:
+            var(--fallback-poster, none) center / cover no-repeat,
+            #040404;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: none;
+    }
+
+    .pc-hero-slot.slot-visible {
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .pc-hero-slot > .video-container {
+        position: relative;
+        inset: 0;
+        margin: 0;
+        max-width: none;
+        min-height: 0;
+        background: transparent;
+    }
+
+    .pc-hero-slot > .video-container video {
+        width: 100%;
+        height: 100%;
+        max-height: none;
+        object-fit: contain;
+        padding: 0;
+        opacity: 0;
+        transform: none;
+        transition: none;
+    }
+
+    .pc-hero-slot.video-visible > .video-container video {
+        opacity: 1;
+    }
+
+    .pc-hero-slot.video-visible {
+        background: #040404;
+    }
+
+    .pc-project-details {
+        display: none;
+        opacity: 0;
+        transition: opacity 0.28s ease;
+        margin-top: 1rem;
+    }
+
+    .pc-project.pc-open .pc-project-details {
+        display: block;
+    }
+
+    .pc-project.pc-content-visible .pc-project-details {
+        opacity: 1;
+    }
+
+    .pc-project.pc-closing .pc-project-details {
+        opacity: 0;
+        transition: opacity 0.12s ease;
+    }
+
+    .pc-project-details .project-content {
+        overflow: visible;
+    }
+
+    .pc-project-details .video-container {
+        display: none;
+    }
+
+    /* Fixed controls */
+    .controls {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(0, 0, 0, 0.9);
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: monospace;
+        color: #fff;
+        z-index: 100;
+        font-size: 0.8rem;
+        max-height: 90vh;
+        overflow-y: auto;
+        transition: width 0.2s ease, padding 0.2s ease;
+    }
+
+    .controls.collapsed {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .controls-toggle {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: none;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        font-size: 1rem;
+        padding: 0.25rem;
+        line-height: 1;
+        transition: color 0.15s ease;
+    }
+
+    .controls-toggle:hover {
+        color: #fff;
+    }
+
+    .controls.collapsed .controls-toggle {
+        position: static;
+        display: block;
+        width: 100%;
+        padding: 0.75rem;
+        text-align: center;
+        color: #666;
+    }
+
+    .controls.collapsed .controls-toggle:hover {
+        color: #fff;
+    }
+
+    .controls-content {
+        padding-right: 1.5rem;
+    }
+
+    .controls.collapsed .controls-content {
+        display: none;
+    }
+
+    .controls label {
+        display: block;
+        margin-bottom: 0.75rem;
+    }
+
+    .controls input[type="range"] {
+        width: 120px;
+        margin-top: 0.25rem;
+        display: block;
+    }
+
+    .controls-section {
+        border-bottom: 1px solid #333;
+        padding-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .controls-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .controls-section strong {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+
+    body.no-webgl #shared-depth-canvas {
+        display: none;
+    }
+
+    body.no-webgl .pc-thumbnail-container {
+        background:
+            var(--fallback-poster, none) center / cover no-repeat,
+            radial-gradient(120% 100% at 30% 20%, rgba(90, 90, 90, 0.25), rgba(20, 20, 20, 0.95)),
+            #111;
+    }
