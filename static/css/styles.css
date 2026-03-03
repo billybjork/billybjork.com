@@ -690,10 +690,12 @@ footer {
     max-height: var(--video-max-height);
     margin: 0 auto;
     background-color: var(--secondary-color);
+    isolation: isolate;
 }
 
 .video-container video {
     display: block;
+    contain: layout;
     width: 100%;
     height: 100%;
     max-width: 100%;
