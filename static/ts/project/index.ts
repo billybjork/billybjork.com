@@ -126,9 +126,3 @@ function initSandboxes(): void {
 ProjectInteractions.init();
 ProjectLoader.init();
 initSandboxes();
-
-// Export for window globals
-export { ProjectLoader, ProjectInteractions, hydrateSandboxes, cleanupSandboxes };
-
-// Re-export types
-export type * from '../types/events';

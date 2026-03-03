@@ -5,12 +5,14 @@
  */
 
 import type { ProjectEventDetail, ProjectsLoadedEventDetail } from '../types/events';
+import { canPlayNativeHls } from '../core/hls';
 import { checkAndHighlightCode } from './code-highlighting';
-import { preloadHlsScript } from './interactions';
+import { preloadHlsScript } from './hero-player';
 
 // ========== STATE ==========
 
 let currentAbortController: AbortController | null = null;
+const HAS_NATIVE_HLS = canPlayNativeHls(document.createElement('video'));
 
 // ========== HELPERS ==========
 
@@ -64,7 +66,7 @@ function isProjectUrlSyncEnabled(): boolean {
 /**
  * Dispatch a custom event on the document body
  */
-export function dispatchEvent<T extends object>(eventName: string, detail: T = {} as T): void {
+function dispatchEvent<T extends object>(eventName: string, detail: T = {} as T): void {
   document.body.dispatchEvent(new CustomEvent(eventName, {
     bubbles: true,
     detail: detail
@@ -120,7 +122,7 @@ interface OpenProjectOptions {
 /**
  * Open a project by fetching its details
  */
-export async function openProject(slug: string, options: OpenProjectOptions = {}): Promise<void> {
+async function openProject(slug: string, options: OpenProjectOptions = {}): Promise<void> {
   const defaultPushUrl = isProjectUrlSyncEnabled();
   const { pushUrl = defaultPushUrl, smoothScroll = true } = options;
 
@@ -238,7 +240,7 @@ export async function closeProject(slug: string, options: CloseProjectOptions = 
 /**
  * Close all open projects
  */
-export function closeAllProjects(): void {
+function closeAllProjects(): void {
   const openProjects = document.querySelectorAll<HTMLElement>('.project-item.active');
   openProjects.forEach(projectItem => {
     const slug = projectItem.dataset.slug;
@@ -270,7 +272,7 @@ export function closeAllProjects(): void {
 /**
  * Load more projects for infinite scroll
  */
-export async function loadMoreProjects(sentinel: HTMLElement): Promise<void> {
+async function loadMoreProjects(sentinel: HTMLElement): Promise<void> {
   const page = parseInt(sentinel.dataset.page ?? '', 10);
   if (!page || sentinel.dataset.loading === 'true') return;
 
@@ -411,10 +413,12 @@ function handleProjectPointerDown(event: MouseEvent | TouchEvent): void {
   const projectHeader = target.closest<HTMLElement>('.project-header');
   const thumbnail = target.closest<HTMLElement>('.thumbnail');
 
-  if (projectHeader || thumbnail) {
-    // Start loading HLS.js early, before the click completes
-    preloadHlsScript();
-  }
+  if (!projectHeader && !thumbnail) return;
+  if (window.Hls) return;
+
+  if (HAS_NATIVE_HLS) return;
+
+  preloadHlsScript();
 }
 
 function initialize(): void {
@@ -449,7 +453,7 @@ function initialize(): void {
   loadCodeHighlightingIfNeeded(document.body);
 }
 
-export function init(): void {
+function init(): void {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initialize);
   } else {
@@ -460,11 +464,6 @@ export function init(): void {
 // ========== PUBLIC API ==========
 
 const ProjectLoader = {
-  openProject,
-  closeProject,
-  closeAllProjects,
-  loadMoreProjects,
-  dispatchEvent,
   init,
 };
 

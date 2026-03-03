@@ -5,11 +5,12 @@
 
 import type { ProjectEventDetail } from '../types/events';
 import {
-  DEFAULT_HLS_CONFIG,
-  canPlayNativeHls,
-  destroyHlsInstance,
-  loadHlsScript,
-} from '../core/hls';
+  cleanupActiveHeroPlayers as cleanupActiveHLSPlayers,
+  destroyHeroVideoPlayer as destroyHLSPlayer,
+  initializeLazyHeroVideos as initializeLazyVideos,
+  initializeOpenHeroVideo as handleInitialLoad,
+  setupHeroVideoPlayer as setupHLSPlayer,
+} from './hero-player';
 import { copyToClipboard, showNotification } from './clipboard';
 import { resolveHashTarget, scrollToHashTarget } from './hash-scroll';
 import {
@@ -169,513 +170,7 @@ function initializeLazyThumbnails(root: ParentNode = document): void {
 }
 
 // ========== HLS VIDEO PLAYER ==========
-
-const MOBILE_BREAKPOINT = 768;
-const HLS_LEVEL_ASPECT_DRIFT_TOLERANCE = 0.0015;
-const DEBUG_HLS = document.body.dataset.debugHls === 'true';
-const hlsSetupInFlight = new WeakMap<HTMLVideoElement, Promise<void>>();
-const hlsSetupCompleted = new WeakSet<HTMLVideoElement>();
-const hlsSetupCancel = new WeakMap<HTMLVideoElement, () => void>();
-
-function hlsDebug(...args: unknown[]): void {
-  if (DEBUG_HLS) {
-    console.log(...args);
-  }
-}
-
-function tryAutoplay(videoElement: HTMLVideoElement): void {
-  if (document.body.classList.contains('editing') || !videoElement.paused) {
-    return;
-  }
-  videoElement.play().catch(e => {
-    if (e.name !== 'AbortError') {
-      console.error('Autoplay failed:', e);
-    }
-  });
-}
-
-function ensureNativeVideoControls(videoElement: HTMLVideoElement): void {
-  videoElement.controls = true;
-  videoElement.setAttribute('controls', '');
-
-  // Clean up legacy custom-control markup if it exists in the DOM.
-  const container = getVideoContainer(videoElement);
-  if (!container) return;
-  container.classList.remove('has-video-controls');
-  container.querySelectorAll('.video-controls').forEach(control => control.remove());
-}
-
-function initializeOnMetadata(
-  videoElement: HTMLVideoElement,
-  onReady: () => void,
-  assignSource: () => void
-): void {
-  let handled = false;
-  const handleReady = () => {
-    if (handled) return;
-    handled = true;
-    videoElement.removeEventListener('loadedmetadata', handleReady);
-    onReady();
-  };
-
-  videoElement.addEventListener('loadedmetadata', handleReady, { once: true });
-  assignSource();
-
-  // Cached media can already have metadata by the time we finish assigning src.
-  if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
-    handleReady();
-  }
-}
-
-function getVideoContainer(videoElement: HTMLVideoElement): HTMLElement | null {
-  return videoElement.closest<HTMLElement>('.video-container');
-}
-
-function parsePositiveNumber(value: string | number | null | undefined): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = typeof value === 'number'
-    ? value
-    : Number.parseFloat(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function resolveVideoAspectRatio(videoElement: HTMLVideoElement): number | null {
-  const metadataWidth = parsePositiveNumber(videoElement.dataset.videoWidth);
-  const metadataHeight = parsePositiveNumber(videoElement.dataset.videoHeight);
-  if (metadataWidth && metadataHeight) {
-    return metadataWidth / metadataHeight;
-  }
-
-  const nativeWidth = videoElement.videoWidth;
-  const nativeHeight = videoElement.videoHeight;
-  if (nativeWidth > 0 && nativeHeight > 0) {
-    return nativeWidth / nativeHeight;
-  }
-
-  return null;
-}
-
-function updateVideoContainerAspectRatio(videoElement: HTMLVideoElement): void {
-  const container = getVideoContainer(videoElement);
-  if (!container) return;
-
-  const aspectRatio = resolveVideoAspectRatio(videoElement);
-  if (aspectRatio) {
-    container.style.setProperty('--video-aspect-ratio', aspectRatio.toString());
-  }
-}
-
-function bindVideoLayout(videoElement: HTMLVideoElement): void {
-  if (videoElement.videoLayoutCleanup) {
-    videoElement.videoLayoutCleanup();
-  }
-
-  const refreshLayout = () => updateVideoContainerAspectRatio(videoElement);
-
-  videoElement.addEventListener('loadedmetadata', refreshLayout);
-  videoElement.addEventListener('resize', refreshLayout);
-  refreshLayout();
-
-  videoElement.videoLayoutCleanup = () => {
-    videoElement.removeEventListener('loadedmetadata', refreshLayout);
-    videoElement.removeEventListener('resize', refreshLayout);
-  };
-}
-
-interface HlsLevelSelection {
-  index: number;
-  width: number | null;
-  height: number;
-  bitrate: number;
-  aspectDrift: number;
-}
-
-function selectStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): number | null {
-  const targetAspectRatio = resolveVideoAspectRatio(videoElement);
-  const containerRect = getVideoContainer(videoElement)?.getBoundingClientRect();
-  const targetRenderHeight = containerRect?.height ?? videoElement.clientHeight ?? 0;
-  if (targetRenderHeight <= 0) {
-    return null;
-  }
-
-  const levelSelections: HlsLevelSelection[] = hls.levels
-    .map((level, index) => {
-      const height = parsePositiveNumber(level.height);
-      if (!height) {
-        return null;
-      }
-
-      const width = parsePositiveNumber(level.width);
-      const aspectDrift = (targetAspectRatio && width)
-        ? Math.abs((width / height) - targetAspectRatio)
-        : 0;
-
-      return {
-        index,
-        width,
-        height,
-        bitrate: parsePositiveNumber(level.bitrate) ?? 0,
-        aspectDrift,
-      };
-    })
-    .filter((selection): selection is HlsLevelSelection => selection !== null);
-
-  if (!levelSelections.length) {
-    return null;
-  }
-
-  let candidates = levelSelections;
-  if (targetAspectRatio) {
-    const aspectMatched = levelSelections.filter(selection =>
-      selection.width !== null && selection.aspectDrift <= HLS_LEVEL_ASPECT_DRIFT_TOLERANCE
-    );
-    if (aspectMatched.length) {
-      candidates = aspectMatched;
-    }
-  }
-
-  const sorted = [...candidates].sort((a, b) => {
-    if (a.height !== b.height) return a.height - b.height;
-    return b.bitrate - a.bitrate;
-  });
-
-  const firstCoveringLevel = sorted.find(selection => selection.height >= (targetRenderHeight * 0.95));
-  if (firstCoveringLevel) {
-    return firstCoveringLevel.index;
-  }
-
-  return sorted[sorted.length - 1]?.index ?? null;
-}
-
-function applyStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): void {
-  const stableLevel = selectStableHlsLevel(hls, videoElement);
-  if (stableLevel === null) {
-    return;
-  }
-
-  const level = hls.levels[stableLevel];
-  hlsDebug('[HLS] Stable start level selected', {
-    level: stableLevel,
-    resolution: level ? `${level.width ?? '?'}x${level.height}` : 'unknown',
-    bitrate: level?.bitrate,
-  });
-
-  hls.startLevel = stableLevel;
-
-  // Narrow viewports are where first-segment ABR shifts were causing visible fit changes.
-  if (window.innerWidth <= MOBILE_BREAKPOINT) {
-    hls.loadLevel = stableLevel;
-    hls.nextLevel = stableLevel;
-    hls.currentLevel = stableLevel;
-  }
-}
-
-/**
- * Preload HLS.js script. Safe to call multiple times.
- * Called early (on mousedown/touchstart) to have HLS.js ready by click time.
- */
-export function preloadHlsScript(): Promise<void> {
-  return loadHlsScript();
-}
-
-/**
- * Sets up HLS video player for a given video element.
- */
-function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = false): Promise<void> {
-  hlsDebug('[HLS] setupHLSPlayer called', { autoplay });
-
-  if (hlsSetupCompleted.has(videoElement)) {
-    videoElement.dataset.loaded = 'true';
-    if (autoplay) {
-      tryAutoplay(videoElement);
-    }
-    return Promise.resolve();
-  }
-
-  const pendingSetup = hlsSetupInFlight.get(videoElement);
-  if (pendingSetup) {
-    if (autoplay) {
-      pendingSetup.then(() => tryAutoplay(videoElement)).catch(() => {});
-    }
-    return pendingSetup;
-  }
-
-  const setupPromise = new Promise<void>((resolve, reject) => {
-    let settled = false;
-    let cancelled = false;
-    const resolveOnce = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    const rejectOnce = (reason: unknown) => {
-      if (settled) return;
-      settled = true;
-      reject(reason);
-    };
-
-    const cancelSetup = () => {
-      cancelled = true;
-      resolveOnce();
-    };
-    hlsSetupCancel.set(videoElement, cancelSetup);
-
-    const streamUrl = videoElement.dataset.hlsUrl;
-    hlsDebug('[HLS] Stream URL:', streamUrl);
-    if (!streamUrl) {
-      console.error('No HLS URL provided for video element');
-      rejectOnce('No HLS URL provided');
-      return;
-    }
-
-    videoElement.classList.add('hls-video');
-    bindVideoLayout(videoElement);
-
-    let initialized = false;
-    const initializeVideo = () => {
-      if (cancelled) return;
-      if (initialized) return;
-      initialized = true;
-
-      updateVideoContainerAspectRatio(videoElement);
-      ensureNativeVideoControls(videoElement);
-
-      hlsSetupCompleted.add(videoElement);
-      videoElement.dataset.loaded = 'true';
-
-      if (document.body.classList.contains('editing')) {
-        videoElement.pause();
-        resolveOnce();
-        return;
-      }
-
-      if (autoplay) {
-        tryAutoplay(videoElement);
-      }
-      resolveOnce();
-    };
-
-    const canPlayNative = canPlayNativeHls(videoElement);
-    hlsDebug('[HLS] Native HLS support:', canPlayNative ? 'yes' : 'no');
-    hlsDebug('[HLS] HLS.js loaded:', !!window.Hls);
-    hlsDebug('[HLS] HLS.js supported:', window.Hls ? Hls.isSupported() : 'n/a');
-
-    const initializeHls = () => {
-      if (!window.Hls || !Hls.isSupported()) {
-        if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-          return;
-        }
-        console.error('HLS is not supported in this browser');
-        rejectOnce('HLS is not supported');
-        return;
-      }
-
-      if (videoElement.hlsInstance) {
-        console.warn('HLS instance already exists for this video element. Destroying existing instance.');
-        destroyHlsInstance(videoElement);
-      }
-
-      const hls = new Hls(DEFAULT_HLS_CONFIG);
-      videoElement.hlsInstance = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(videoElement);
-
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          applyStableHlsLevel(hls, videoElement);
-          hlsDebug('[HLS] Available quality levels:');
-          hls.levels.forEach((level, i) => {
-            hlsDebug(`  [${i}] ${level.width ?? '?'}x${level.height} @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
-          });
-          hlsDebug(`[HLS] Starting level: ${hls.startLevel} (auto: ${hls.autoLevelEnabled})`);
-          hlsDebug(`[HLS] Current level: ${hls.currentLevel}, Next level: ${hls.nextLevel}`);
-          initializeVideo();
-        });
-      });
-      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-        const levelData = data as { level: number };
-        const level = hls.levels[levelData.level];
-        if (level) {
-          hlsDebug(`[HLS] Switched to level ${levelData.level}: ${level.height}p @ ${(level.bitrate / 1000000).toFixed(1)} Mbps`);
-        }
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        const errorData = data as { fatal?: boolean; type?: string; details?: string };
-        if (errorData.fatal) {
-          switch (errorData.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.error('Fatal network error encountered, trying to recover');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.error('Fatal media error encountered, trying to recover');
-              hls.recoverMediaError();
-              break;
-            default:
-              console.error('Fatal error encountered, destroying HLS instance:', data);
-              hls.destroy();
-              videoElement.hlsInstance = null;
-              rejectOnce(data);
-              break;
-          }
-        } else {
-          if (errorData.details === 'bufferAppendError') {
-            console.warn('HLS.js bufferAppendError encountered and ignored:', data);
-            hls.recoverMediaError();
-          } else {
-            console.warn('HLS.js non-fatal error:', data);
-          }
-        }
-      });
-    };
-
-    if (window.Hls && Hls.isSupported()) {
-      hlsDebug('[HLS] Using HLS.js (already loaded)');
-      initializeHls();
-      return;
-    }
-
-    hlsDebug('[HLS] Loading HLS.js script...');
-    loadHlsScript()
-      .then(() => {
-        if (Hls.isSupported()) {
-          hlsDebug('[HLS] HLS.js loaded and supported, using HLS.js');
-          initializeHls();
-        } else if (canPlayNative) {
-          hlsDebug('[HLS] HLS.js not supported, falling back to native');
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-        } else {
-          console.error('HLS is not supported in this browser');
-          rejectOnce('HLS is not supported');
-        }
-      })
-      .catch(err => {
-        if (canPlayNative) {
-          hlsDebug('[HLS] HLS.js failed to load, falling back to native');
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-          return;
-        }
-        console.error('Failed to load HLS.js:', err);
-        rejectOnce(err);
-      });
-  });
-
-  hlsSetupInFlight.set(videoElement, setupPromise);
-  return setupPromise.finally(() => {
-    if (hlsSetupCancel.has(videoElement)) {
-      hlsSetupCancel.delete(videoElement);
-    }
-    hlsSetupInFlight.delete(videoElement);
-  });
-}
-
-/**
- * Destroys the HLS player instance and revokes the blob URL.
- */
-function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
-  const cancelSetup = hlsSetupCancel.get(videoElement);
-  if (cancelSetup) {
-    cancelSetup();
-    hlsSetupCancel.delete(videoElement);
-  }
-  hlsSetupInFlight.delete(videoElement);
-  hlsSetupCompleted.delete(videoElement);
-
-  if (videoElement.videoLayoutCleanup) {
-    videoElement.videoLayoutCleanup();
-    videoElement.videoLayoutCleanup = null;
-  }
-
-  destroyHlsInstance(videoElement);
-  delete videoElement.dataset.loaded;
-  if (videoElement.src && videoElement.src.startsWith('blob:')) {
-    const blobUrl = videoElement.src;
-    URL.revokeObjectURL(blobUrl);
-    videoElement.src = '';
-  }
-}
-
-// ========== PROJECT ITEM HANDLING ==========
-
-/**
- * Handles the opening or closing of project content.
- */
-async function handleProjectContent(
-  projectItem: HTMLElement,
-  smoothScroll: boolean = true
-): Promise<void> {
-  try {
-    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
-    const thumbnail = projectItem.querySelector<HTMLElement>('.thumbnail');
-
-    if (projectItem.classList.contains('active')) {
-      if (video) {
-        await setupHLSPlayer(video, true);
-      }
-
-      const projectHeader = projectItem.querySelector<HTMLElement>('.project-header');
-      if (projectHeader && smoothScroll) {
-        scrollToProjectHeader(projectHeader);
-      }
-    } else {
-      if (video) {
-        video.pause();
-        destroyHLSPlayer(video);
-      }
-      if (thumbnail) {
-        resetThumbnailPosition(thumbnail);
-      }
-    }
-
-    if (typeof updateThumbnails === 'function') {
-      updateThumbnails();
-    }
-  } catch (error) {
-    console.error('Error in handleProjectContent:', error);
-  }
-}
-
-/**
- * Closes all open projects by removing their content and cleaning up resources.
- */
-function closeAllOpenProjects(): void {
-  const openProjectItems = document.querySelectorAll<HTMLElement>('.project-item.active');
-  openProjectItems.forEach(projectItem => {
-    projectItem.classList.remove('active');
-
-    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
-    if (video) {
-      video.pause();
-      destroyHLSPlayer(video);
-    }
-
-    const projectDetails = projectItem.querySelector<HTMLElement>('.project-details');
-    if (projectDetails) {
-      projectDetails.innerHTML = '';
-    }
-
-    const thumbnail = projectItem.querySelector<HTMLElement>('.thumbnail');
-    if (thumbnail) {
-      resetThumbnailPosition(thumbnail);
-    }
-  });
-}
+// Hero/HLS player lifecycle is isolated in ./hero-player.
 
 // ========== ANIMATION LOOP FOR THUMBNAILS ==========
 
@@ -800,49 +295,8 @@ function initializeThumbnails(): void {
     });
   }
 
-  initializeLazyThumbnails();
   updateThumbnails();
   window.addEventListener('scroll', handleScroll);
-}
-
-/**
- * Initializes lazy loading for video elements within a given root.
- */
-function initializeLazyVideos(root: ParentNode = document): void {
-  const lazyVideos = root.querySelectorAll<HTMLVideoElement>('video.lazy-video');
-
-  if ('IntersectionObserver' in window) {
-    const videoObserver = new IntersectionObserver((entries, observer) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const video = entry.target as HTMLVideoElement;
-          if (video.dataset.loaded === 'true') {
-            observer.unobserve(video);
-            return;
-          }
-          setupHLSPlayer(video, false).catch(err => {
-            console.error('Failed to initialize HLS player for video:', err);
-          });
-          observer.unobserve(video);
-        }
-      });
-    }, {
-      rootMargin: '0px 0px 200px 0px',
-      threshold: 0.25
-    });
-
-    lazyVideos.forEach(video => {
-      if (!video.dataset.loaded) {
-        videoObserver.observe(video);
-      }
-    });
-  } else {
-    lazyVideos.forEach(video => {
-      setupHLSPlayer(video, false).catch(err => {
-        console.error('Failed to initialize HLS player for video:', err);
-      });
-    });
-  }
 }
 
 let inlineVideoObserver: IntersectionObserver | null = null;
@@ -922,37 +376,17 @@ function initializeLazyInlineVideos(root: ParentNode = document): void {
   });
 }
 
+function hydrateProjectMedia(root: ParentNode = document): void {
+  initializeLazyInlineVideos(root);
+  initializeLazyVideos(root);
+  initializeLazyThumbnails(root);
+  initializeLightboxMedia(root);
+  openExternalLinksInNewTab(root);
+}
+
 function initializeProjects(): void {
-  initializeLazyVideos();
-  initializeLazyInlineVideos();
-  initializeLazyThumbnails();
-  initializeLightboxMedia();
+  hydrateProjectMedia();
   handleInitialLoad();
-}
-
-function handleInitialLoad(): void {
-  const openVideo = document.querySelector<HTMLVideoElement>('.project-item.active video.lazy-video');
-  if (openVideo) {
-    setupHLSPlayer(openVideo, true).catch(err => {
-      console.error('Failed to initialize HLS player for initial open project:', err);
-    });
-  }
-}
-
-// ========== CLEANUP ==========
-
-function cleanupActiveHLSPlayers(): void {
-  const activeVideos = document.querySelectorAll<HTMLVideoElement>('video.hls-video');
-  activeVideos.forEach(video => {
-    destroyHLSPlayer(video);
-  });
-
-  const videosWithHlsInstance = document.querySelectorAll<HTMLVideoElement>('video');
-  videosWithHlsInstance.forEach(video => {
-    if (video.hlsInstance) {
-      destroyHLSPlayer(video);
-    }
-  });
 }
 
 // ========== PROJECT EVENT HANDLERS ==========
@@ -993,18 +427,14 @@ function handleProjectAfterSwap(event: CustomEvent<ProjectEventDetail>): void {
     }
   }
 
-  initializeLazyThumbnails(element);
-  initializeLazyVideos(element);
-  initializeLazyInlineVideos(element);
-  initializeLightboxMedia(element);
+  hydrateProjectMedia(element);
   updateThumbnails();
-  openExternalLinksInNewTab(element);
 }
 
 function handleProjectsLoaded(): void {
   const newProjectItems = document.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
   observeProjectItems(newProjectItems);
-  initializeLazyThumbnails();
+  hydrateProjectMedia();
   updateThumbnails();
 }
 
@@ -1250,37 +680,18 @@ function initializeAll(): void {
   initializeThumbnails();
   initializeProjects();
   initializeProjectObserver();
-  openExternalLinksInNewTab();
   window.addEventListener('beforeunload', cleanupActiveHLSPlayers);
 }
 
-export function init(): void {
+function init(): void {
   initializeAll();
   initializeEventListeners();
 
   window.addEventListener('load', () => scrollToHashTarget('auto'));
 }
 
-// Export for module usage
-export {
-  handleProjectContent,
-  closeAllOpenProjects,
-  cleanupActiveHLSPlayers,
-  copyToClipboard,
-  updateThumbnails,
-  setupHLSPlayer,
-  destroyHLSPlayer,
-};
-
 const ProjectInteractions = {
   init,
-  handleProjectContent,
-  closeAllOpenProjects,
-  cleanupActiveHLSPlayers,
-  copyToClipboard,
-  updateThumbnails,
-  setupHLSPlayer,
-  destroyHLSPlayer,
 };
 
 export default ProjectInteractions;
