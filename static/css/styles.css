@@ -590,19 +590,14 @@ footer {
 
 .project-details {
     opacity: 0;
-    max-height: 0;
     overflow: hidden;
-    transform: translateY(20px);
-    transition: 
-        opacity 0.3s var(--transition-ease),
-        max-height 0.3s var(--transition-ease),
-        transform 0.3s var(--transition-ease);
+    transition: opacity 0.2s var(--transition-ease);
 }
 
 .project-item.active .project-details {
     opacity: 1;
-    max-height: none;
-    transform: translateY(0);
+    /* iOS native scrubber thumb can paint outside the video box. */
+    overflow: visible;
 }
 
 .project-content {
@@ -703,11 +698,7 @@ footer {
     aspect-ratio: var(--video-aspect-ratio);
     max-height: var(--video-max-height);
     margin: 0 auto;
-    display: flex;
-    justify-content: center;
-    align-items: center;
     background-color: var(--secondary-color);
-    overflow: hidden;
 }
 
 .video-container video {
