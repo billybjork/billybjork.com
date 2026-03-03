@@ -143,6 +143,7 @@ let toolbar: HTMLElement | null = null;
 let editMode: EditModeType = null;
 let hiddenProjectControls: HTMLElement | null = null;
 let inlineProjectMetadataControls: HTMLElement | null = null;
+let projectTopControls: HTMLElement | null = null;
 let toolbarViewportEventsBound = false;
 
 // Auto-save state
@@ -355,23 +356,18 @@ function setupEditor(data: ProjectData | AboutData): void {
 
     const details = projectItem.querySelector<HTMLElement>('.project-details');
     const videoContainer = details?.querySelector<HTMLElement>('.video-container');
+    const insertionPoint = videoContainer ?? contentContainer;
 
     inlineProjectMetadataControls = createInlineProjectMetadataControls(project);
-    if (inlineProjectMetadataControls) {
-      if (videoContainer) {
-        videoContainer.before(inlineProjectMetadataControls);
-      } else {
-        contentContainer.before(inlineProjectMetadataControls);
-      }
-    }
-
     heroMediaControls = createHeroThumbnailControls(project);
-    if (videoContainer) {
-      videoContainer.before(heroMediaControls);
-    } else if (inlineProjectMetadataControls) {
-      inlineProjectMetadataControls.after(heroMediaControls);
-    } else {
-      contentContainer.before(heroMediaControls);
+
+    projectTopControls = createProjectTopControls({
+      metadataControls: inlineProjectMetadataControls,
+      heroControls: heroMediaControls,
+    });
+
+    if (projectTopControls) {
+      insertionPoint.before(projectTopControls);
     }
   }
 
@@ -614,7 +610,12 @@ export function cleanup(): void {
     hiddenProjectControls = null;
   }
 
-  // Remove hero media controls
+  if (projectTopControls) {
+    projectTopControls.remove();
+    projectTopControls = null;
+  }
+
+  // Remove inline top controls if they are still detached for any reason
   if (heroMediaControls) {
     heroMediaControls.remove();
     heroMediaControls = null;
@@ -3616,16 +3617,19 @@ function createInlineProjectMetadataControls(project: ProjectData): HTMLElement 
           placeholder="https://youtube.com/watch?v=..."
         >
       </div>
-    </div>
-    <div class="edit-form-row edit-inline-project-settings-flags">
-      <label class="edit-form-checkbox">
-        <input type="checkbox" id="inline-settings-draft" ${project.draft ? 'checked' : ''}>
-        <span>Draft</span>
-      </label>
-      <label class="edit-form-checkbox">
-        <input type="checkbox" id="inline-settings-pinned" ${project.pinned ? 'checked' : ''}>
-        <span>Pinned</span>
-      </label>
+      <fieldset class="edit-inline-project-settings-status">
+        <legend>Status</legend>
+        <div class="edit-inline-project-settings-flags">
+          <label class="edit-form-checkbox">
+            <input type="checkbox" id="inline-settings-draft" ${project.draft ? 'checked' : ''}>
+            <span>Draft</span>
+          </label>
+          <label class="edit-form-checkbox">
+            <input type="checkbox" id="inline-settings-pinned" ${project.pinned ? 'checked' : ''}>
+            <span>Pinned</span>
+          </label>
+        </div>
+      </fieldset>
     </div>
   `;
 
@@ -3655,6 +3659,34 @@ function createInlineProjectMetadataControls(project: ProjectData): HTMLElement 
   });
 
   return controls;
+}
+
+function createProjectTopControls({
+  metadataControls,
+  heroControls,
+}: {
+  metadataControls: HTMLElement | null;
+  heroControls: HTMLElement | null;
+}): HTMLElement | null {
+  if (!metadataControls && !heroControls) return null;
+
+  const wrapper = document.createElement('section');
+  wrapper.className = 'edit-inline-top-controls';
+  wrapper.innerHTML = `
+    <div class="edit-inline-top-controls-header">
+      <h3>Project Controls</h3>
+      <p>Edit URL, publishing state, and hero media in one place.</p>
+    </div>
+  `;
+
+  if (metadataControls) {
+    wrapper.appendChild(metadataControls);
+  }
+  if (heroControls) {
+    wrapper.appendChild(heroControls);
+  }
+
+  return wrapper;
 }
 
 function openHeroVideoEditor(file: File | null = null): void {

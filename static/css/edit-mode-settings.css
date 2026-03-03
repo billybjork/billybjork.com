@@ -472,21 +472,62 @@
     outline: none;
 }
 
-.edit-inline-project-settings {
+.edit-inline-top-controls {
     margin: 0 auto 12px;
     width: min(100%, 1040px);
     max-width: 100%;
-    padding: 12px 16px;
+    padding: 14px 16px;
     background: #171717;
     border: 1px solid #2b2b2b;
     border-radius: 10px;
     overflow: hidden;
 }
 
+.edit-inline-top-controls-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #2b2b2b;
+}
+
+.edit-inline-top-controls-header h3 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #e5e7eb;
+}
+
+.edit-inline-top-controls-header p {
+    margin: 0;
+    font-size: 12px;
+    color: #9ca3af;
+    line-height: 1.35;
+}
+
+.edit-inline-project-settings {
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 0 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+}
+
 .edit-inline-project-settings-grid {
     display: grid;
     gap: 12px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: end;
+}
+
+.edit-inline-project-settings .edit-form-group {
+    margin: 0;
 }
 
 .edit-inline-project-settings input[type="text"],
@@ -505,19 +546,44 @@
     outline: none;
 }
 
+.edit-inline-project-settings-status {
+    margin: 0;
+    min-width: 182px;
+    padding: 8px 10px 10px;
+    border: 1px solid #2f2f2f;
+    border-radius: 8px;
+    background: #101010;
+}
+
+.edit-inline-project-settings-status legend {
+    padding: 0 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9ca3af;
+}
+
 .edit-inline-project-settings-flags {
-    margin-top: 10px;
-    gap: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 2px 0 0;
 }
 
 .edit-inline-project-settings .edit-form-checkbox {
     margin: 0;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     cursor: pointer;
     color: #d1d5db;
-    font-size: 14px;
+    font-size: 13px;
+}
+
+.edit-inline-project-settings .edit-form-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
 }
 
 /* ========================================
@@ -525,14 +591,15 @@
    ======================================== */
 
 .edit-hero-thumbnail-controls {
-    width: min(100%, 1040px);
+    width: 100%;
     max-width: 100%;
-    background: #171717;
-    border: 1px solid #2b2b2b;
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin: 12px auto 0;
-    overflow: hidden;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 14px 0 0;
+    margin: 0;
+    border-top: 1px solid #2b2b2b;
+    overflow: visible;
 }
 
 .edit-hero-media-grid {
@@ -642,16 +709,29 @@
 }
 
 @media (max-width: 820px) {
+    .edit-inline-top-controls-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
     .edit-inline-project-settings-grid,
     .edit-hero-media-grid {
         grid-template-columns: 1fr;
     }
 
-    .edit-inline-project-settings,
-    .edit-hero-thumbnail-controls {
+    .edit-inline-top-controls {
         width: 100%;
         padding: 10px 12px;
         border-radius: 9px;
+    }
+
+    .edit-inline-project-settings {
+        padding-top: 12px;
+    }
+
+    .edit-inline-project-settings-status {
+        min-width: 0;
     }
 
     .edit-hero-thumbnail-preview {
@@ -660,13 +740,17 @@
 }
 
 @media (max-width: 480px) {
-    .edit-inline-project-settings,
-    .edit-hero-thumbnail-controls {
+    .edit-inline-top-controls {
         width: calc(100% - 8px);
         margin-left: auto;
         margin-right: auto;
         padding: 10px;
         border-radius: 8px;
+    }
+
+    .edit-inline-project-settings-flags {
+        flex-direction: column;
+        gap: 8px;
     }
 
     .edit-hero-thumbnail-content {
