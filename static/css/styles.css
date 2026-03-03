@@ -589,14 +589,10 @@ footer {
    ========================= */
 
 .project-details {
-    opacity: 0;
-    overflow: hidden;
-    transition: opacity 0.2s var(--transition-ease);
+    overflow: visible;
 }
 
 .project-item.active .project-details {
-    opacity: 1;
-    /* iOS native scrubber thumb can paint outside the video box. */
     overflow: visible;
 }
 

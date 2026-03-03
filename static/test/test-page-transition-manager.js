@@ -464,7 +464,7 @@
             }
         }
 
-        expandCompactModeForClose(ctx) {
+        expandCompactModeForClose(ctx, options = {}) {
             if (!this.listSceneEl || !ctx?.item) return;
             const hadCompact = this.listSceneEl.classList.contains('pc-single-project-compact')
                 || document.body.classList.contains('pc-header-collapsed');
@@ -472,16 +472,20 @@
 
             this.cancelManagedScrollTween();
             setScrollTopImmediate(getCurrentScrollY());
-            const beforeTop = ctx.item.getBoundingClientRect().top;
+            const requestedAnchorTop = Number(options.anchorTop);
+            const anchorTop = Number.isFinite(requestedAnchorTop)
+                ? requestedAnchorTop
+                : this.measureContainerOriginRect(ctx).top;
 
             this.listSceneEl.classList.remove('pc-single-project-compact');
             document.body.classList.remove('pc-header-collapsed');
 
-            const afterTop = ctx.item.getBoundingClientRect().top;
-            const delta = afterTop - beforeTop;
+            const afterTop = this.measureContainerOriginRect(ctx).top;
+            const delta = afterTop - anchorTop;
             if (Math.abs(delta) > 0.5) {
                 setScrollTopImmediate(getCurrentScrollY() + delta);
             }
+            bumpTransitionRectRefresh(260);
         }
 
         waitForCloseThumbnailReady(ctx, token, maxFrames = 6) {
@@ -756,7 +760,7 @@
             }
 
             if (prefersInstant) {
-                this.expandCompactModeForClose(ctx);
+                this.expandCompactModeForClose(ctx, { anchorTop: heroRect.top });
                 this.restoreContainer(ctx, false);
                 ctx.container.classList.remove('thumb-hidden');
                 this.setHeroSlotVisibility(ctx, false);
@@ -805,7 +809,7 @@
             this.animateMainFlowShift(ctx, closeDuration, token, () => {
                 ctx.item.classList.remove('pc-hero-expanded');
             });
-            this.expandCompactModeForClose(ctx);
+            this.expandCompactModeForClose(ctx, { anchorTop: heroRect.top });
             const targetRect = this.measureContainerOriginRect(ctx);
 
             this.promoteContainer(ctx);
