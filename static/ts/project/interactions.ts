@@ -174,10 +174,46 @@ function initializeLazyThumbnails(root: ParentNode = document): void {
 const MOBILE_BREAKPOINT = 768;
 const HLS_LEVEL_ASPECT_DRIFT_TOLERANCE = 0.0015;
 const DEBUG_HLS = document.body.dataset.debugHls === 'true';
+const hlsSetupInFlight = new WeakMap<HTMLVideoElement, Promise<void>>();
+const hlsSetupCompleted = new WeakSet<HTMLVideoElement>();
+const hlsSetupCancel = new WeakMap<HTMLVideoElement, () => void>();
 
 function hlsDebug(...args: unknown[]): void {
   if (DEBUG_HLS) {
     console.log(...args);
+  }
+}
+
+function tryAutoplay(videoElement: HTMLVideoElement): void {
+  if (document.body.classList.contains('editing') || !videoElement.paused) {
+    return;
+  }
+  videoElement.play().catch(e => {
+    if (e.name !== 'AbortError') {
+      console.error('Autoplay failed:', e);
+    }
+  });
+}
+
+function initializeOnMetadata(
+  videoElement: HTMLVideoElement,
+  onReady: () => void,
+  assignSource: () => void
+): void {
+  let handled = false;
+  const handleReady = () => {
+    if (handled) return;
+    handled = true;
+    videoElement.removeEventListener('loadedmetadata', handleReady);
+    onReady();
+  };
+
+  videoElement.addEventListener('loadedmetadata', handleReady, { once: true });
+  assignSource();
+
+  // Cached media can already have metadata by the time we finish assigning src.
+  if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+    handleReady();
   }
 }
 
@@ -337,40 +373,78 @@ export function preloadHlsScript(): Promise<void> {
  */
 function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = false): Promise<void> {
   hlsDebug('[HLS] setupHLSPlayer called', { autoplay });
-  videoElement.dataset.loaded = 'true';
-  return new Promise((resolve, reject) => {
+
+  if (hlsSetupCompleted.has(videoElement)) {
+    videoElement.dataset.loaded = 'true';
+    if (autoplay) {
+      tryAutoplay(videoElement);
+    }
+    return Promise.resolve();
+  }
+
+  const pendingSetup = hlsSetupInFlight.get(videoElement);
+  if (pendingSetup) {
+    if (autoplay) {
+      pendingSetup.then(() => tryAutoplay(videoElement)).catch(() => {});
+    }
+    return pendingSetup;
+  }
+
+  const setupPromise = new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let cancelled = false;
+    const resolveOnce = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    const rejectOnce = (reason: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(reason);
+    };
+
+    const cancelSetup = () => {
+      cancelled = true;
+      resolveOnce();
+    };
+    hlsSetupCancel.set(videoElement, cancelSetup);
+
     const streamUrl = videoElement.dataset.hlsUrl;
     hlsDebug('[HLS] Stream URL:', streamUrl);
     if (!streamUrl) {
       console.error('No HLS URL provided for video element');
-      reject('No HLS URL provided');
+      rejectOnce('No HLS URL provided');
       return;
     }
 
     videoElement.classList.add('hls-video');
     bindVideoLayout(videoElement);
 
+    let initialized = false;
     const initializeVideo = () => {
+      if (cancelled) return;
+      if (initialized) return;
+      initialized = true;
+
       updateVideoContainerAspectRatio(videoElement);
 
       // Initialize custom video controls
       initVideoControls(videoElement);
 
+      hlsSetupCompleted.add(videoElement);
+      videoElement.dataset.loaded = 'true';
+
       if (document.body.classList.contains('editing')) {
         videoElement.pause();
-        resolve();
+        resolveOnce();
         return;
       }
 
-      // If early play didn't work (no src yet), try again now that media is loaded
-      if (autoplay && videoElement.paused) {
-        videoElement.play().catch(e => {
-          if (e.name !== 'AbortError') {
-            console.error("Autoplay failed:", e);
-          }
-        });
+      if (autoplay) {
+        tryAutoplay(videoElement);
       }
-      resolve();
+      resolveOnce();
     };
 
     const canPlayNative = canPlayNativeHls(videoElement);
@@ -381,18 +455,16 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
     const initializeHls = () => {
       if (!window.Hls || !Hls.isSupported()) {
         if (canPlayNative) {
-          videoElement.src = streamUrl;
-          // Try to play immediately to preserve user gesture context
-          if (autoplay && !document.body.classList.contains('editing')) {
-            videoElement.play().catch(() => {
-              // Will retry after loadedmetadata
-            });
+          initializeOnMetadata(videoElement, initializeVideo, () => {
+            videoElement.src = streamUrl;
+          });
+          if (autoplay) {
+            tryAutoplay(videoElement);
           }
-          videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
           return;
         }
         console.error('HLS is not supported in this browser');
-        reject('HLS is not supported');
+        rejectOnce('HLS is not supported');
         return;
       }
 
@@ -441,7 +513,7 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
               console.error('Fatal error encountered, destroying HLS instance:', data);
               hls.destroy();
               videoElement.hlsInstance = null;
-              reject(data);
+              rejectOnce(data);
               break;
           }
         } else {
@@ -469,29 +541,39 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
           initializeHls();
         } else if (canPlayNative) {
           hlsDebug('[HLS] HLS.js not supported, falling back to native');
-          videoElement.src = streamUrl;
-          if (autoplay && !document.body.classList.contains('editing')) {
-            videoElement.play().catch(() => {});
+          initializeOnMetadata(videoElement, initializeVideo, () => {
+            videoElement.src = streamUrl;
+          });
+          if (autoplay) {
+            tryAutoplay(videoElement);
           }
-          videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
         } else {
           console.error('HLS is not supported in this browser');
-          reject('HLS is not supported');
+          rejectOnce('HLS is not supported');
         }
       })
       .catch(err => {
         if (canPlayNative) {
           hlsDebug('[HLS] HLS.js failed to load, falling back to native');
-          videoElement.src = streamUrl;
-          if (autoplay && !document.body.classList.contains('editing')) {
-            videoElement.play().catch(() => {});
+          initializeOnMetadata(videoElement, initializeVideo, () => {
+            videoElement.src = streamUrl;
+          });
+          if (autoplay) {
+            tryAutoplay(videoElement);
           }
-          videoElement.addEventListener('loadedmetadata', initializeVideo, { once: true });
           return;
         }
         console.error('Failed to load HLS.js:', err);
-        reject(err);
+        rejectOnce(err);
       });
+  });
+
+  hlsSetupInFlight.set(videoElement, setupPromise);
+  return setupPromise.finally(() => {
+    if (hlsSetupCancel.has(videoElement)) {
+      hlsSetupCancel.delete(videoElement);
+    }
+    hlsSetupInFlight.delete(videoElement);
   });
 }
 
@@ -499,6 +581,14 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
  * Destroys the HLS player instance and revokes the blob URL.
  */
 function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
+  const cancelSetup = hlsSetupCancel.get(videoElement);
+  if (cancelSetup) {
+    cancelSetup();
+    hlsSetupCancel.delete(videoElement);
+  }
+  hlsSetupInFlight.delete(videoElement);
+  hlsSetupCompleted.delete(videoElement);
+
   if (videoElement.videoLayoutCleanup) {
     videoElement.videoLayoutCleanup();
     videoElement.videoLayoutCleanup = null;
@@ -729,7 +819,6 @@ function initializeLazyVideos(root: ParentNode = document): void {
             console.error('Failed to initialize HLS player for video:', err);
           });
           observer.unobserve(video);
-          video.dataset.loaded = 'true';
         }
       });
     }, {
@@ -747,7 +836,6 @@ function initializeLazyVideos(root: ParentNode = document): void {
       setupHLSPlayer(video, false).catch(err => {
         console.error('Failed to initialize HLS player for video:', err);
       });
-      video.dataset.loaded = 'true';
     });
   }
 }
@@ -838,15 +926,11 @@ function initializeProjects(): void {
 }
 
 function handleInitialLoad(): void {
-  const openProjectItem = document.querySelector<HTMLElement>('.project-item.active');
-  if (openProjectItem) {
-    if (document.readyState === 'complete') {
-      handleProjectContent(openProjectItem, false);
-    } else {
-      window.addEventListener('load', () => {
-        handleProjectContent(openProjectItem, false);
-      });
-    }
+  const openVideo = document.querySelector<HTMLVideoElement>('.project-item.active video.lazy-video');
+  if (openVideo) {
+    setupHLSPlayer(openVideo, true).catch(err => {
+      console.error('Failed to initialize HLS player for initial open project:', err);
+    });
   }
 }
 
