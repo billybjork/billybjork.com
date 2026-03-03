@@ -109,7 +109,13 @@
             this.currentCoherence = isReducedMotion() ? 1 : 0;
             this.coherenceOverride = null;
             this.opacityOverride = null;
+            this.scatterBackBiasOverride = null;
+            this.zPushOverride = null;
+            this.scatterDepthBoostOverride = null;
             this.currentOpacityMultiplier = 1;
+            this.currentScatterBackBias = 0;
+            this.currentZPush = 0;
+            this.currentScatterDepthBoost = 0;
             this.motionFrozen = false;
             this.renderSuppressed = false;
             this.geometryKey = null;
@@ -163,6 +169,8 @@
                 sizeAttenuation: { value: config.sizeAttenuation },
                 edgeScatter: { value: config.edgeScatter },
                 edgeThreshold: { value: config.edgeThreshold },
+                scatterBackBias: { value: 0.0 },
+                scatterDepthBoost: { value: 0.0 },
                 time: { value: 0.0 },
                 opacity: { value: config.opacity },
                 depthOpacity: { value: config.depthOpacity },
@@ -281,7 +289,9 @@
                 this.coherenceOverride = null;
                 return;
             }
-            this.coherenceOverride = Math.max(0, Math.min(1, value));
+            // Allow limited overshoot during transition choreography so inactive
+            // thumbnails can scatter beyond the normal edge state.
+            this.coherenceOverride = Math.max(-1, Math.min(1, value));
         }
 
         setOpacityOverride(value) {
@@ -292,6 +302,30 @@
             this.opacityOverride = Math.max(0, Math.min(1, value));
         }
 
+        setScatterBackBiasOverride(value) {
+            if (value === null || value === undefined) {
+                this.scatterBackBiasOverride = null;
+                return;
+            }
+            this.scatterBackBiasOverride = Math.max(0, Math.min(1, value));
+        }
+
+        setZPushOverride(value) {
+            if (value === null || value === undefined) {
+                this.zPushOverride = null;
+                return;
+            }
+            this.zPushOverride = Math.max(-120, Math.min(40, value));
+        }
+
+        setScatterDepthBoostOverride(value) {
+            if (value === null || value === undefined) {
+                this.scatterDepthBoostOverride = null;
+                return;
+            }
+            this.scatterDepthBoostOverride = Math.max(0, Math.min(1, value));
+        }
+
         setMotionFrozen(frozen) {
             this.motionFrozen = !!frozen;
         }
@@ -299,7 +333,13 @@
         resetTransitionState() {
             this.coherenceOverride = null;
             this.opacityOverride = null;
+            this.scatterBackBiasOverride = null;
+            this.zPushOverride = null;
+            this.scatterDepthBoostOverride = null;
             this.currentOpacityMultiplier = 1;
+            this.currentScatterBackBias = 0;
+            this.currentZPush = 0;
+            this.currentScatterDepthBoost = 0;
             this.motionFrozen = false;
         }
 
@@ -357,7 +397,7 @@
             const scaleY = (height * CLOUD_FILL_FACTOR) / (PLANE_HEIGHT * pixelsPerWorld);
             const scaleZ = (scaleX + scaleY) * 0.5;
 
-            this.group.position.set(centerX, centerY, 0);
+            this.group.position.set(centerX, centerY, this.currentZPush);
             this.group.scale.set(scaleX, scaleY, scaleZ);
         }
 
@@ -419,21 +459,31 @@
             const coherenceLerp = isReducedMotion() ? 1 : (this.coherenceOverride !== null ? 0.22 : 0.1);
             this.currentCoherence += (targetCoherence - this.currentCoherence) * coherenceLerp;
 
-            // Interpolate parameters based on coherence
-            // coherence = 1 → center values (coherent)
-            // coherence = 0 → edge values (exploded)
+            // Interpolate parameters based on coherence.
+            // Keep depth/opacity in the normal [0,1] coherence band to avoid
+            // transition overdrive pulling clouds toward the camera.
+            const clampedCoherence = Math.max(0, Math.min(1, this.currentCoherence));
             const effectiveDepth = config.depthAmountCenter +
-                (config.depthAmount - config.depthAmountCenter) * (1 - this.currentCoherence);
+                (config.depthAmount - config.depthAmountCenter) * (1 - clampedCoherence);
             const effectiveScatter = config.edgeScatterCenter +
                 (config.edgeScatter - config.edgeScatterCenter) * (1 - this.currentCoherence);
             const baseOpacity = config.opacityEdge +
-                (config.opacity - config.opacityEdge) * this.currentCoherence;
+                (config.opacity - config.opacityEdge) * clampedCoherence;
 
             // Apply opacity override for fade transitions
             const targetOpacityMultiplier = this.opacityOverride !== null ? this.opacityOverride : 1;
             const opacityLerp = isReducedMotion() ? 1 : 0.15;
             this.currentOpacityMultiplier += (targetOpacityMultiplier - this.currentOpacityMultiplier) * opacityLerp;
             const effectiveOpacity = baseOpacity * this.currentOpacityMultiplier;
+            const targetScatterBackBias = this.scatterBackBiasOverride !== null ? this.scatterBackBiasOverride : 0;
+            const scatterBackBiasLerp = isReducedMotion() ? 1 : 0.14;
+            this.currentScatterBackBias += (targetScatterBackBias - this.currentScatterBackBias) * scatterBackBiasLerp;
+            const targetZPush = this.zPushOverride !== null ? this.zPushOverride : 0;
+            const zPushLerp = isReducedMotion() ? 1 : (this.zPushOverride !== null ? 0.3 : 0.16);
+            this.currentZPush += (targetZPush - this.currentZPush) * zPushLerp;
+            const targetScatterDepthBoost = this.scatterDepthBoostOverride !== null ? this.scatterDepthBoostOverride : 0;
+            const scatterDepthBoostLerp = isReducedMotion() ? 1 : (this.scatterDepthBoostOverride !== null ? 0.22 : 0.12);
+            this.currentScatterDepthBoost += (targetScatterDepthBoost - this.currentScatterDepthBoost) * scatterDepthBoostLerp;
 
             // =============================================
             // Camera positioning
@@ -480,6 +530,8 @@
             u.sizeAttenuation.value = config.sizeAttenuation;
             u.edgeScatter.value = effectiveScatter;
             u.edgeThreshold.value = config.edgeThreshold;
+            u.scatterBackBias.value = this.currentScatterBackBias;
+            u.scatterDepthBoost.value = this.currentScatterDepthBoost;
             u.time.value = time;
             u.opacity.value = effectiveOpacity;
             u.depthOpacity.value = config.depthOpacity;
@@ -496,6 +548,7 @@
             u.alphaClip.value = config.alphaClip;
             u.prepassRadius.value = config.prepassRadius;
             this.syncLayout(rect);
+            this.group.position.z = this.currentZPush;
             this.updateMotionTransform(effectiveDepth);
         }
     }

@@ -15,6 +15,8 @@
         uniform bool sizeAttenuation;
         uniform float edgeScatter;
         uniform float edgeThreshold;
+        uniform float scatterBackBias;
+        uniform float scatterDepthBoost;
         uniform float time;
 
         attribute vec2 pixelUV;
@@ -85,10 +87,15 @@
                 float noiseY = hash(pixelUV.yx + frameSeed * 0.1 + 100.0) * 2.0 - 1.0;
                 float noiseZ = hash(pixelUV * 2.0 + frameSeed * 0.1 + 200.0) * 2.0 - 1.0;
 
-                float scatterAmount = edgeFactor * edgeScatter;
+                float depthScatterFactor = mix(1.0, 0.4 + pow(depth, 1.45) * 1.9, scatterDepthBoost);
+                float scatterAmount = edgeFactor * edgeScatter * depthScatterFactor;
                 pos.x += noiseX * scatterAmount * 3.0;
                 pos.y += noiseY * scatterAmount * 2.0;
-                pos.z += noiseZ * scatterAmount * depthAmount * 0.3;
+                float depthZFactor = mix(1.0, 0.7 + pow(depth, 1.25) * 1.3, scatterDepthBoost);
+                float zScatterScale = scatterAmount * depthAmount * depthZFactor;
+                float randomZScatter = noiseZ * zScatterScale * 0.3 * (1.0 - scatterBackBias);
+                float backwardBias = abs(noiseZ) * zScatterScale * 1.25 * scatterBackBias;
+                pos.z += randomZScatter - backwardBias;
             }
 
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);

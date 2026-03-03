@@ -172,10 +172,69 @@
             this.listSceneEl.setAttribute('data-active-slug', slug);
             this.syncDetailModeClass(true);
 
-            // Fade out inactive thumbnails via WebGL
+            const token = Number.isFinite(options.token) ? options.token : this.transitionToken;
+            const prefersInstant = options.prefersInstant === true || isReducedMotion();
+            const inactiveExplodeCoherence = prefersInstant
+                ? 0
+                : Math.max(-1, Math.min(1, Number(options.inactiveExplodeCoherence) || -0.4));
+            const inactiveExplodeBackBias = prefersInstant
+                ? 0
+                : Math.max(0, Math.min(1, Number(options.inactiveExplodeBackBias) || 0.75));
+            const inactiveExplodeZPush = prefersInstant
+                ? 0
+                : Math.max(-80, Math.min(0, Number(options.inactiveExplodeZPush) || -18));
+            const inactiveExplodeScatterDepthBoost = prefersInstant
+                ? 0
+                : Math.max(0, Math.min(1, Number(options.inactiveExplodeScatterDepthBoost) || 0.65));
+            const inactiveTransitionDurationMs = prefersInstant
+                ? 0
+                : Math.max(0, Number(options.inactiveTransitionDurationMs) || 620);
+
+            // Dissipate inactive thumbnails via WebGL while the list collapses.
             this.contextBySlug.forEach((ctx, ctxSlug) => {
                 if (ctxSlug !== slug && ctx.thumbnail) {
-                    ctx.thumbnail.setOpacityOverride(0);
+                    if (inactiveTransitionDurationMs <= 0) {
+                        ctx.thumbnail.setCoherenceOverride(inactiveExplodeCoherence);
+                        ctx.thumbnail.setScatterBackBiasOverride(inactiveExplodeBackBias);
+                        ctx.thumbnail.setZPushOverride(inactiveExplodeZPush);
+                        ctx.thumbnail.setScatterDepthBoostOverride(inactiveExplodeScatterDepthBoost);
+                        ctx.thumbnail.setOpacityOverride(0);
+                        return;
+                    }
+                    const rect = ctx.thumbnail.cachedRect || ctx.container.getBoundingClientRect();
+                    const startCoherence = ctx.thumbnail.calculateNaturalCoherence(rect);
+                    ctx.thumbnail.setCoherenceOverride(startCoherence);
+                    ctx.thumbnail.setScatterBackBiasOverride(inactiveExplodeBackBias);
+                    ctx.thumbnail.setScatterDepthBoostOverride(0);
+                    ctx.thumbnail.setOpacityOverride(1);
+                    this.animateCoherence(
+                        ctx.thumbnail,
+                        inactiveExplodeCoherence,
+                        inactiveTransitionDurationMs,
+                        token,
+                        { easing: 'inOut' }
+                    );
+                    this.animateOpacity(
+                        ctx.thumbnail,
+                        0,
+                        inactiveTransitionDurationMs,
+                        token,
+                        { easing: 'inOut' }
+                    );
+                    this.animateZPush(
+                        ctx.thumbnail,
+                        inactiveExplodeZPush,
+                        inactiveTransitionDurationMs,
+                        token,
+                        { easing: 'out' }
+                    );
+                    this.animateScatterDepthBoost(
+                        ctx.thumbnail,
+                        inactiveExplodeScatterDepthBoost,
+                        inactiveTransitionDurationMs,
+                        token,
+                        { easing: 'out' }
+                    );
                 }
             });
 
@@ -372,6 +431,10 @@
             }
             document.body.classList.remove('pc-header-collapsed');
             this.syncDetailModeClass(false);
+            const keepOpacityOverrides = options.keepOpacityOverrides === true;
+            const keepScatterBackBiasOverrides = options.keepScatterBackBiasOverrides === true;
+            const keepZPushOverrides = options.keepZPushOverrides === true;
+            const keepScatterDepthBoostOverrides = options.keepScatterDepthBoostOverrides === true;
 
             // Reset opacity overrides and fixed positioning so inactive projects restore
             this.contextBySlug.forEach((ctx) => {
@@ -379,8 +442,17 @@
                 ctx.item.style.top = '';
                 ctx.item.style.left = '';
                 ctx.item.style.width = '';
-                if (ctx.thumbnail) {
+                if (ctx.thumbnail && !keepOpacityOverrides) {
                     ctx.thumbnail.setOpacityOverride(null);
+                }
+                if (ctx.thumbnail && !keepScatterBackBiasOverrides) {
+                    ctx.thumbnail.setScatterBackBiasOverride(null);
+                }
+                if (ctx.thumbnail && !keepZPushOverrides) {
+                    ctx.thumbnail.setZPushOverride(null);
+                }
+                if (ctx.thumbnail && !keepScatterDepthBoostOverrides) {
+                    ctx.thumbnail.setScatterDepthBoostOverride(null);
                 }
             });
 
@@ -476,6 +548,11 @@
             const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
 
             ctx.thumbnail.setRenderSuppressed(false);
+            ctx.thumbnail.setOpacityOverride(null);
+            ctx.thumbnail.setCoherenceOverride(null);
+            ctx.thumbnail.setScatterBackBiasOverride(null);
+            ctx.thumbnail.setZPushOverride(null);
+            ctx.thumbnail.setScatterDepthBoostOverride(null);
             // Fix inactive projects BEFORE pc-open is added to prevent layout shift.
             // When pc-open reveals the header, elements below would shift down.
             // By fixing them first, they stay at their current viewport positions.
@@ -531,6 +608,8 @@
 
             this.setSingleProjectMode(slug, sourceState, {
                 origin: openOrigin,
+                token,
+                prefersInstant,
             });
 
             if (!hasHeroVideo) {
@@ -759,10 +838,13 @@
             ctx.item.classList.remove('pc-open');
             this.resetProjectVisualState(ctx);
             ctx.closeButton.disabled = false;
+            const inactiveExplodeCoherence = -0.4;
+            const inactiveExplodeBackBias = 0.75;
+            const inactiveExplodeZPush = -18;
+            const inactiveExplodeScatterDepthBoost = 0.65;
 
-            // Release inactive projects from fixed positioning. Before making them
-            // visible, set coherence to 1 (flat) so they can smoothly animate to
-            // their natural 3D state as they fade in (prevents "pop" effect).
+            // Release inactive projects from fixed positioning. Start them in a
+            // scattered/transparent state and animate back to natural coherence.
             const otherThumbnails = [];
             this.contextBySlug.forEach((otherCtx, otherSlug) => {
                 if (otherSlug !== slug) {
@@ -771,10 +853,12 @@
                     otherCtx.item.style.left = '';
                     otherCtx.item.style.width = '';
                     if (otherCtx.thumbnail) {
-                        // Set coherence to flat before fading in
                         otherCtx.thumbnail.setMotionFrozen(false);
-                        otherCtx.thumbnail.setCoherenceOverride(1);
-                        otherCtx.thumbnail.setOpacityOverride(null);
+                        otherCtx.thumbnail.setCoherenceOverride(inactiveExplodeCoherence);
+                        otherCtx.thumbnail.setScatterBackBiasOverride(inactiveExplodeBackBias);
+                        otherCtx.thumbnail.setZPushOverride(inactiveExplodeZPush);
+                        otherCtx.thumbnail.setScatterDepthBoostOverride(inactiveExplodeScatterDepthBoost);
+                        otherCtx.thumbnail.setOpacityOverride(0);
                         otherThumbnails.push(otherCtx);
                     }
                 }
@@ -782,19 +866,25 @@
 
             // Keep rect sampling active through the entire inactive-thumb coherence
             // animation so override release uses up-to-date viewport positions.
-            bumpTransitionRectRefresh(520);
+            bumpTransitionRectRefresh(760);
 
-            // Animate other thumbnails' coherence to their natural values
-            const otherCoherencePromises = otherThumbnails.map((otherCtx) => {
+            // Animate other thumbnails to their natural coherence and opacity.
+            const otherRevealPromises = otherThumbnails.map((otherCtx) => {
                 const otherRect = otherCtx.container.getBoundingClientRect();
                 const otherNaturalCoherence = otherCtx.thumbnail.calculateNaturalCoherence(otherRect);
-                return this.animateCoherence(otherCtx.thumbnail, otherNaturalCoherence, 320, token);
+                return Promise.all([
+                    this.animateCoherence(otherCtx.thumbnail, otherNaturalCoherence, 540, token, { easing: 'inOut' }),
+                    this.animateOpacity(otherCtx.thumbnail, 1, 320, token, { easing: 'inOut' }),
+                    this.animateScatterBackBias(otherCtx.thumbnail, 0, 540, token, { easing: 'inOut' }),
+                    this.animateZPush(otherCtx.thumbnail, 0, 540, token, { easing: 'inOut' }),
+                    this.animateScatterDepthBoost(otherCtx.thumbnail, 0, 540, token, { easing: 'inOut' }),
+                ]);
             });
 
-            // Clear coherence overrides for other thumbnails after animation
+            // Clear coherence/opacity overrides for other thumbnails after animation
             // Use clearCoherenceOverrideSmoothly to sync currentCoherence with
             // the auto-calculated value first, preventing any visual shift
-            Promise.all(otherCoherencePromises).then(() => {
+            Promise.all(otherRevealPromises).then(() => {
                 if (!this.isTokenActive(token)) return;
                 // Force a rect refresh immediately before releasing overrides so
                 // coherence handoff and the next render frame read the same rect basis.
@@ -803,6 +893,10 @@
                 otherThumbnails.forEach((otherCtx) => {
                     const rect = otherCtx.thumbnail.cachedRect || otherCtx.container.getBoundingClientRect();
                     otherCtx.thumbnail.clearCoherenceOverrideSmoothly(rect);
+                    otherCtx.thumbnail.setOpacityOverride(null);
+                    otherCtx.thumbnail.setScatterBackBiasOverride(null);
+                    otherCtx.thumbnail.setZPushOverride(null);
+                    otherCtx.thumbnail.setScatterDepthBoostOverride(null);
                 });
             });
 
@@ -811,12 +905,21 @@
             // value, preventing any visual shift when override is removed.
             const finalRect = ctx.container.getBoundingClientRect();
             ctx.thumbnail.clearCoherenceOverrideSmoothly(finalRect);
+            ctx.thumbnail.setOpacityOverride(null);
+            ctx.thumbnail.setScatterBackBiasOverride(null);
+            ctx.thumbnail.setZPushOverride(null);
+            ctx.thumbnail.setScatterDepthBoostOverride(null);
             ctx.thumbnail.setMotionFrozen(false);
 
             if (!this.isTokenActive(token)) return;
             this.currentOpenSlug = null;
             this.destroyVideosExcept(null);
-            this.clearSingleProjectMode();
+            this.clearSingleProjectMode({
+                keepOpacityOverrides: true,
+                keepScatterBackBiasOverrides: true,
+                keepZPushOverrides: true,
+                keepScatterDepthBoostOverrides: true,
+            });
             if (shouldUpdateUrl) {
                 this.syncListUrlState(historyMode);
             }
@@ -1534,6 +1637,9 @@
 
             const easing = options.easing || 'out';
             const easeValue = (t) => {
+                if (easing === 'in') {
+                    return t * t * t;
+                }
                 if (easing === 'inOut') {
                     return t < 0.5
                         ? 4 * t * t * t
@@ -1557,6 +1663,178 @@
                         requestAnimationFrame(step);
                     } else {
                         thumbnail.setCoherenceOverride(targetValue);
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        animateOpacity(thumbnail, targetValue, durationMs, token, options = {}) {
+            if (durationMs <= 0 || isReducedMotion()) {
+                thumbnail.setOpacityOverride(targetValue);
+                return Promise.resolve();
+            }
+
+            const easing = options.easing || 'out';
+            const easeValue = (t) => {
+                if (easing === 'in') {
+                    return t * t * t;
+                }
+                if (easing === 'inOut') {
+                    return t < 0.5
+                        ? 4 * t * t * t
+                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                return 1 - Math.pow(1 - t, 3);
+            };
+            const startValue = thumbnail.opacityOverride !== null
+                ? thumbnail.opacityOverride
+                : thumbnail.currentOpacityMultiplier;
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = easeValue(t);
+                    const value = startValue + (targetValue - startValue) * eased;
+                    thumbnail.setOpacityOverride(value);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        thumbnail.setOpacityOverride(targetValue);
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        animateScatterBackBias(thumbnail, targetValue, durationMs, token, options = {}) {
+            if (durationMs <= 0 || isReducedMotion()) {
+                thumbnail.setScatterBackBiasOverride(targetValue);
+                return Promise.resolve();
+            }
+
+            const easing = options.easing || 'out';
+            const easeValue = (t) => {
+                if (easing === 'in') {
+                    return t * t * t;
+                }
+                if (easing === 'inOut') {
+                    return t < 0.5
+                        ? 4 * t * t * t
+                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                return 1 - Math.pow(1 - t, 3);
+            };
+            const startValue = thumbnail.scatterBackBiasOverride !== null
+                ? thumbnail.scatterBackBiasOverride
+                : thumbnail.currentScatterBackBias;
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = easeValue(t);
+                    const value = startValue + (targetValue - startValue) * eased;
+                    thumbnail.setScatterBackBiasOverride(value);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        thumbnail.setScatterBackBiasOverride(targetValue);
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        animateZPush(thumbnail, targetValue, durationMs, token, options = {}) {
+            if (durationMs <= 0 || isReducedMotion()) {
+                thumbnail.setZPushOverride(targetValue);
+                return Promise.resolve();
+            }
+
+            const easing = options.easing || 'out';
+            const easeValue = (t) => {
+                if (easing === 'in') {
+                    return t * t * t;
+                }
+                if (easing === 'inOut') {
+                    return t < 0.5
+                        ? 4 * t * t * t
+                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                return 1 - Math.pow(1 - t, 3);
+            };
+            const startValue = thumbnail.zPushOverride !== null
+                ? thumbnail.zPushOverride
+                : thumbnail.currentZPush;
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = easeValue(t);
+                    const value = startValue + (targetValue - startValue) * eased;
+                    thumbnail.setZPushOverride(value);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        thumbnail.setZPushOverride(targetValue);
+                        resolve();
+                    }
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
+        animateScatterDepthBoost(thumbnail, targetValue, durationMs, token, options = {}) {
+            if (durationMs <= 0 || isReducedMotion()) {
+                thumbnail.setScatterDepthBoostOverride(targetValue);
+                return Promise.resolve();
+            }
+
+            const easing = options.easing || 'out';
+            const easeValue = (t) => {
+                if (easing === 'in') {
+                    return t * t * t;
+                }
+                if (easing === 'inOut') {
+                    return t < 0.5
+                        ? 4 * t * t * t
+                        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+                }
+                return 1 - Math.pow(1 - t, 3);
+            };
+            const startValue = thumbnail.scatterDepthBoostOverride !== null
+                ? thumbnail.scatterDepthBoostOverride
+                : thumbnail.currentScatterDepthBoost;
+            return new Promise((resolve) => {
+                const start = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    const t = Math.min(1, (now - start) / durationMs);
+                    const eased = easeValue(t);
+                    const value = startValue + (targetValue - startValue) * eased;
+                    thumbnail.setScatterDepthBoostOverride(value);
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        thumbnail.setScatterDepthBoostOverride(targetValue);
                         resolve();
                     }
                 };
