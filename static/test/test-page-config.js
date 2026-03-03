@@ -25,6 +25,12 @@
         // Creative effects (these are the "edge" / exploded values)
         edgeScatter: 0.8,         // Scatter at edges (exploded) - high dispersion
         edgeThreshold: 0.15,
+        // Ambient motion (always-on subtle flow)
+        ambientWaveStrength: 0.22,
+        ambientWaveFrequency: 13.0,
+        ambientWaveSpeed: 0.7,
+        ambientWaveDepthInfluence: 0.085,
+        ambientWaveLateral: 0.25,
         dofEnable: false,
         dofFocal: 0.5,
         dofStrength: 1.0,

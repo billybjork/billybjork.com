@@ -171,6 +171,11 @@
                 edgeThreshold: { value: config.edgeThreshold },
                 scatterBackBias: { value: 0.0 },
                 scatterDepthBoost: { value: 0.0 },
+                ambientWaveStrength: { value: config.ambientWaveStrength },
+                ambientWaveFrequency: { value: config.ambientWaveFrequency },
+                ambientWaveSpeed: { value: config.ambientWaveSpeed },
+                ambientWaveDepthInfluence: { value: config.ambientWaveDepthInfluence },
+                ambientWaveLateral: { value: config.ambientWaveLateral },
                 time: { value: 0.0 },
                 opacity: { value: config.opacity },
                 depthOpacity: { value: config.depthOpacity },
@@ -506,6 +511,8 @@
                 (config.edgeScatter - config.edgeScatterCenter) * (1 - this.currentCoherence);
             const baseOpacity = config.opacityEdge +
                 (config.opacity - config.opacityEdge) * clampedCoherence;
+            const coherenceWaveScale = 0.45 + (1 - clampedCoherence) * 0.55;
+            const effectiveAmbientWave = config.ambientWaveStrength * coherenceWaveScale;
 
             // Apply opacity override for fade transitions
             const targetOpacityMultiplier = this.opacityOverride !== null ? this.opacityOverride : 1;
@@ -550,6 +557,11 @@
             u.edgeThreshold.value = config.edgeThreshold;
             u.scatterBackBias.value = this.currentScatterBackBias;
             u.scatterDepthBoost.value = this.currentScatterDepthBoost;
+            u.ambientWaveStrength.value = effectiveAmbientWave;
+            u.ambientWaveFrequency.value = config.ambientWaveFrequency;
+            u.ambientWaveSpeed.value = config.ambientWaveSpeed;
+            u.ambientWaveDepthInfluence.value = config.ambientWaveDepthInfluence;
+            u.ambientWaveLateral.value = config.ambientWaveLateral;
             u.time.value = time;
             u.opacity.value = effectiveOpacity;
             u.depthOpacity.value = config.depthOpacity;

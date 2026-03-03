@@ -17,6 +17,11 @@
         uniform float edgeThreshold;
         uniform float scatterBackBias;
         uniform float scatterDepthBoost;
+        uniform float ambientWaveStrength;
+        uniform float ambientWaveFrequency;
+        uniform float ambientWaveSpeed;
+        uniform float ambientWaveDepthInfluence;
+        uniform float ambientWaveLateral;
         uniform float time;
 
         attribute vec2 pixelUV;
@@ -79,6 +84,20 @@
             pos.x = (pixelUV.x - 0.5) * planeWidth;
             pos.y = (pixelUV.y - 0.5) * planeHeight;
             pos.z = depth * depthAmount;
+
+            if (ambientWaveStrength > 0.0) {
+                float waveTime = time * ambientWaveSpeed;
+                float waveA = sin(pixelUV.x * ambientWaveFrequency + waveTime + depth * 2.3);
+                float waveB = cos(pixelUV.y * ambientWaveFrequency * 0.82 - waveTime * 0.9 - depth * 1.6);
+                float swirl = sin((pixelUV.x + pixelUV.y) * ambientWaveFrequency * 0.55 + waveTime * 0.6);
+                float ripple = (waveA + waveB) * 0.35 + swirl * 0.3;
+
+                float depthWeight = mix(0.85, 1.15, depth);
+                float waveAmp = ambientWaveStrength * depthWeight;
+                pos.x += waveB * waveAmp * ambientWaveLateral;
+                pos.y += waveA * waveAmp * ambientWaveLateral * 0.78;
+                pos.z += ripple * waveAmp * depthAmount * ambientWaveDepthInfluence;
+            }
 
             if (edgeScatter > 0.0) {
                 float frameSeed = frameIndex;

@@ -280,7 +280,18 @@
 
     function syncMotionControlledInputs() {
         const disabled = prefersReducedMotion;
-        const ids = ['tilt-range', 'mouse-parallax', 'edge-scatter', 'depth-amount', 'opacity-edge'];
+        const ids = [
+            'tilt-range',
+            'mouse-parallax',
+            'edge-scatter',
+            'depth-amount',
+            'opacity-edge',
+            'ambient-wave-strength',
+            'ambient-wave-frequency',
+            'ambient-wave-speed',
+            'ambient-wave-depth-influence',
+            'ambient-wave-lateral',
+        ];
         ids.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.disabled = disabled;
@@ -307,6 +318,26 @@
         const opacityEdgeInput = document.getElementById('opacity-edge');
         if (opacityEdgeInput) opacityEdgeInput.value = String(config.opacityEdge);
         setGlobalStat('opacity-edge-val', config.opacityEdge.toFixed(2));
+
+        const ambientStrengthInput = document.getElementById('ambient-wave-strength');
+        if (ambientStrengthInput) ambientStrengthInput.value = String(config.ambientWaveStrength);
+        setGlobalStat('ambient-wave-strength-val', config.ambientWaveStrength.toFixed(2));
+
+        const ambientFrequencyInput = document.getElementById('ambient-wave-frequency');
+        if (ambientFrequencyInput) ambientFrequencyInput.value = String(config.ambientWaveFrequency);
+        setGlobalStat('ambient-wave-frequency-val', config.ambientWaveFrequency.toFixed(1));
+
+        const ambientSpeedInput = document.getElementById('ambient-wave-speed');
+        if (ambientSpeedInput) ambientSpeedInput.value = String(config.ambientWaveSpeed);
+        setGlobalStat('ambient-wave-speed-val', config.ambientWaveSpeed.toFixed(2));
+
+        const ambientDepthInput = document.getElementById('ambient-wave-depth-influence');
+        if (ambientDepthInput) ambientDepthInput.value = String(config.ambientWaveDepthInfluence);
+        setGlobalStat('ambient-wave-depth-influence-val', config.ambientWaveDepthInfluence.toFixed(3));
+
+        const ambientLateralInput = document.getElementById('ambient-wave-lateral');
+        if (ambientLateralInput) ambientLateralInput.value = String(config.ambientWaveLateral);
+        setGlobalStat('ambient-wave-lateral-val', config.ambientWaveLateral.toFixed(2));
     }
 
     function applyMotionPreference(isReduced) {
@@ -319,6 +350,7 @@
             config.edgeScatterCenter = 0;
             config.depthAmountCenter = defaultConfig.depthAmountCenter;
             config.depthAmount = defaultConfig.depthAmountCenter;
+            config.ambientWaveStrength = 0;
             config.opacityEdge = 1;
             animationSpeed = 0;
         } else {
@@ -328,6 +360,7 @@
             config.edgeScatterCenter = defaultConfig.edgeScatterCenter;
             config.depthAmount = defaultConfig.depthAmount;
             config.depthAmountCenter = defaultConfig.depthAmountCenter;
+            config.ambientWaveStrength = defaultConfig.ambientWaveStrength;
             config.opacityEdge = defaultConfig.opacityEdge;
         }
 
@@ -841,6 +874,31 @@
         on(document.getElementById('edge-threshold'), 'input', (e) => {
             config.edgeThreshold = parseFloat(e.target.value);
             document.getElementById('edge-thresh-val').textContent = config.edgeThreshold.toFixed(2);
+        });
+
+        on(document.getElementById('ambient-wave-strength'), 'input', (e) => {
+            config.ambientWaveStrength = parseFloat(e.target.value);
+            document.getElementById('ambient-wave-strength-val').textContent = config.ambientWaveStrength.toFixed(2);
+        });
+
+        on(document.getElementById('ambient-wave-frequency'), 'input', (e) => {
+            config.ambientWaveFrequency = parseFloat(e.target.value);
+            document.getElementById('ambient-wave-frequency-val').textContent = config.ambientWaveFrequency.toFixed(1);
+        });
+
+        on(document.getElementById('ambient-wave-speed'), 'input', (e) => {
+            config.ambientWaveSpeed = parseFloat(e.target.value);
+            document.getElementById('ambient-wave-speed-val').textContent = config.ambientWaveSpeed.toFixed(2);
+        });
+
+        on(document.getElementById('ambient-wave-depth-influence'), 'input', (e) => {
+            config.ambientWaveDepthInfluence = parseFloat(e.target.value);
+            document.getElementById('ambient-wave-depth-influence-val').textContent = config.ambientWaveDepthInfluence.toFixed(3);
+        });
+
+        on(document.getElementById('ambient-wave-lateral'), 'input', (e) => {
+            config.ambientWaveLateral = parseFloat(e.target.value);
+            document.getElementById('ambient-wave-lateral-val').textContent = config.ambientWaveLateral.toFixed(2);
         });
 
         on(document.getElementById('dof-enable'), 'change', (e) => {
