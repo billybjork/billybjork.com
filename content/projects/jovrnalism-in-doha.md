@@ -6,12 +6,13 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/jovrnalism_in_doha/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/jovrnalism-doha.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/jovrnalism-in-doha_1772496861.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/jovrnalism_in_doha_sprite_sheet.jpg
   video_width: 1920
   video_height: 1080
 youtube: https://www.youtube.com/watch?v=4aZAQdx51RI
 ---
+
 #### [www.jovrnalism.io](http://www.jovrnalism.io)
 
 #### Location:

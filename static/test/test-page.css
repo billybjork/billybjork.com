@@ -76,7 +76,6 @@
 
     .page-container.pc-single-project-compact .pc-project.pc-open {
         margin-bottom: 0;
-        padding-top: 24px; /* Slight padding above hero video */
     }
 
     .spacer {
@@ -92,6 +91,7 @@
     .spacer.bottom { color: #555; }
 
     .pc-project {
+        --pc-stage-toolbar-height: 0px;
         width: 100%;
         max-width: 920px;
         margin: 0 auto 4.25rem;
@@ -99,6 +99,11 @@
         transform: none;
         position: relative;
         z-index: 25;
+    }
+
+    .pc-project.pc-hero-expanded,
+    .pc-project.pc-closing {
+        --pc-stage-toolbar-height: clamp(2.6rem, 5.5vh, 3.35rem);
     }
 
     .pc-project-header {
@@ -137,6 +142,24 @@
         min-width: 0;
     }
 
+    .pc-stage-toolbar {
+        width: 100%;
+        max-width: 640px;
+        margin: 0 auto;
+        height: var(--pc-stage-toolbar-height);
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.18s ease;
+    }
+
+    .page-container.pc-single-project-compact .pc-project.pc-open .pc-stage-toolbar {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
     .pc-thumbnail-container {
         flex-shrink: 0;
         width: 100%;
@@ -162,7 +185,7 @@
         pointer-events: none;
     }
 
-    .pc-project-main .pc-close-project {
+    .pc-stage-toolbar .pc-close-project {
         z-index: 35;
     }
 
@@ -179,21 +202,31 @@
     }
 
     .pc-close-project {
+        width: clamp(2rem, 2.8vw, 2.5rem);
+        height: clamp(2rem, 2.8vw, 2.5rem);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        padding: 0;
         font-size: 1.9rem;
         border: none;
         background: none;
         color: rgba(255, 255, 255, 0.8);
         cursor: pointer;
         opacity: 0;
+        visibility: hidden;
         pointer-events: none;
         transform: scale(0.95);
-        transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease;
+        transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease, visibility 0s linear 0.2s;
     }
 
-    .pc-project.pc-open .pc-close-project {
+    .page-container.pc-single-project-compact .pc-project.pc-open .pc-close-project {
         opacity: 1;
+        visibility: visible;
         pointer-events: auto;
         transform: scale(1);
+        transition-delay: 0s;
     }
 
     .pc-close-project:hover {
@@ -215,7 +248,7 @@
     }
 
     .pc-project.pc-hero-expanded .pc-stage {
-        --pc-hero-max-height: calc(100vh - clamp(120px, 18vh, 180px));
+        --pc-hero-max-height: calc(100vh - clamp(120px, 18vh, 180px) - var(--pc-stage-toolbar-height));
         width: min(100%, calc(var(--pc-hero-max-height) * var(--pc-stage-aspect-ratio, 1.7777777778)));
         max-width: none;
     }

@@ -6,11 +6,12 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/PuntaMita-TheLostTapes/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/PuntaMita_TheLostTapes_thumb.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/punta-mita-the-lost-tapes_1772496932.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/PM-TheLostTapes_sprite_sheet.jpg
   video_width: 1080
   video_height: 608
 ---
+
 Punta Mita, 2022
 
 #### Featuring:

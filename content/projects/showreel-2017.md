@@ -6,9 +6,10 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/showreel_2017/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/showreel-2017.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/showreel-2017_1772496953.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/showreel-2017_sprite_sheet.jpg
   video_width: 1920
   video_height: 1080
 ---
+
 alt-J - "In Cold Blood"

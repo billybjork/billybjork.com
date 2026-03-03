@@ -20,7 +20,6 @@ import {
   openVideoLightbox,
 } from './lightbox';
 import { closeProject as closeProjectBySlug } from './loader';
-import { initVideoControls, destroyVideoControls } from './video-controls';
 
 // ========== UTILITY FUNCTIONS ==========
 
@@ -193,6 +192,17 @@ function tryAutoplay(videoElement: HTMLVideoElement): void {
       console.error('Autoplay failed:', e);
     }
   });
+}
+
+function ensureNativeVideoControls(videoElement: HTMLVideoElement): void {
+  videoElement.controls = true;
+  videoElement.setAttribute('controls', '');
+
+  // Clean up legacy custom-control markup if it exists in the DOM.
+  const container = getVideoContainer(videoElement);
+  if (!container) return;
+  container.classList.remove('has-video-controls');
+  container.querySelectorAll('.video-controls').forEach(control => control.remove());
 }
 
 function initializeOnMetadata(
@@ -428,9 +438,7 @@ function setupHLSPlayer(videoElement: HTMLVideoElement, autoplay: boolean = fals
       initialized = true;
 
       updateVideoContainerAspectRatio(videoElement);
-
-      // Initialize custom video controls
-      initVideoControls(videoElement);
+      ensureNativeVideoControls(videoElement);
 
       hlsSetupCompleted.add(videoElement);
       videoElement.dataset.loaded = 'true';
@@ -593,9 +601,6 @@ function destroyHLSPlayer(videoElement: HTMLVideoElement): void {
     videoElement.videoLayoutCleanup();
     videoElement.videoLayoutCleanup = null;
   }
-
-  // Clean up video controls
-  destroyVideoControls(videoElement);
 
   destroyHlsInstance(videoElement);
   delete videoElement.dataset.loaded;

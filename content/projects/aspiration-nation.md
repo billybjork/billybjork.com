@@ -6,12 +6,13 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/b-roll_/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/b-roll.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/aspiration-nation_1772496794.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/b-roll_sprite_sheet.jpg
   video_width: 1920
   video_height: 1080
 youtube: https://www.youtube.com/watch?v=Zfj1FB_02Ho
 ---
+
 Boarding, donut eating, and pizza making in SLC.
 
 #### Video by:

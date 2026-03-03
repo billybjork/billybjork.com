@@ -25,6 +25,9 @@
             {% if project.video_link %}
             data-hls-url="{{ project.video_link }}"
             {% endif %}>
+            <div class="pc-stage-toolbar">
+                <button class="pc-close-project" aria-label="Close project">&times;</button>
+            </div>
             <div class="pc-stage">
                 <div
                     class="pc-thumbnail-container"
@@ -47,7 +50,6 @@
                         <h2 class="pc-project-title">{{ project.name }}</h2>
                         <div class="pc-project-meta">{{ project.formatted_date }}</div>
                     </div>
-                    <button class="pc-close-project" aria-label="Close project">&times;</button>
                 </header>
                 <section id="details-{{ project.slug }}" class="pc-project-details" hidden></section>
             </div>

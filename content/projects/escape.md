@@ -6,12 +6,13 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/ESCAPE/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/escape.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/escape_1772496833.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/escape_sprite_sheet.jpg
   video_width: 1080
   video_height: 608
 youtube: https://youtu.be/yD7w3N8KDWw?si=JKx_iZZTacB3fcjZ
 ---
+
 #### Featuring:
 - Nick Belbas
 - Lukas Caye

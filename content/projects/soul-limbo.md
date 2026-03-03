@@ -6,12 +6,13 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/soul-limbo/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/soul-limbo.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/soul-limbo_1772496964.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/soul-limbo_sprite_sheet.jpg
   video_width: 720
   video_height: 540
 youtube: https://www.youtube.com/watch?v=QuLvYAK1oFU
 ---
+
 San Francisco in Super 8 
 
 Chinon 30R XL   

@@ -6,12 +6,13 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/holidaze/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/holidaze.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/holidaze_1772496847.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/holidaze-1_sprite_sheet.jpg
   video_width: 1280
   video_height: 720
 youtube: https://www.youtube.com/watch?v=ZWihGjosWhQ
 ---
+
 Got the gang back together for some laps over holiday break. 
 
 Featuring Walker Murphy, Sam Stillman, Eli Lamm, Nick Belbas, Lukas Caye, Will Betts, Billy Bjork, Adam Vick, and Evan Severson. 

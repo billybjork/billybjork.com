@@ -6,11 +6,12 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/minnesota_inboard_experience/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/minnesota-inboard-experience.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/minnesota-inboard-experience_1772496912.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/minnesota_inboard_experience_sprite_sheet.jpg
   video_width: 1920
   video_height: 1080
 ---
+
 #### [www.mninboard.com](https://mninboard.com/)
 
 Awarded "Video of the Year" at the 2017 Malibu Boats awards banquet for retailers.

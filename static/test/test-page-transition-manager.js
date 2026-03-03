@@ -511,7 +511,7 @@
             }
 
             if (shouldScrollToProject) {
-                const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset - 24;
+                const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset;
                 if (prefersInstant) {
                     setScrollTopImmediate(projectTop);
                 } else {
@@ -734,7 +734,9 @@
             const naturalCoherence = ctx.thumbnail.calculateNaturalCoherence(targetRect);
 
             // Animate rect and coherence in parallel (mirroring the open transition)
-            const rectPromise = this.animateRect(ctx.container, heroRect, targetRect, closeDuration, token);
+            const rectPromise = this.animateRect(ctx.container, heroRect, targetRect, closeDuration, token, {
+                getTargetRect: () => this.measureContainerOriginRect(ctx),
+            });
             const coherencePromise = this.animateCoherence(ctx.thumbnail, naturalCoherence, closeDuration, token);
             await Promise.all([rectPromise, coherencePromise]);
 
@@ -1407,6 +1409,23 @@
         }
 
         measureContainerOriginRect(ctx) {
+            const isPromoted = this.promotedStates.has(ctx.slug)
+                || ctx.container.classList.contains('transition-overlay');
+            if (isPromoted) {
+                const promotedStage = ctx.item.querySelector('.pc-stage');
+                if (promotedStage) {
+                    const promotedStageRect = promotedStage.getBoundingClientRect();
+                    if (promotedStageRect.width > 0 && promotedStageRect.height > 0) {
+                        return new DOMRect(
+                            promotedStageRect.left,
+                            promotedStageRect.top,
+                            promotedStageRect.width,
+                            promotedStageRect.height
+                        );
+                    }
+                }
+            }
+
             const rect = ctx.container.getBoundingClientRect();
             if (rect.width > 0 && rect.height > 0) {
                 return rect;

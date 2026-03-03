@@ -6,12 +6,13 @@ pinned: false
 draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/gladius_james_-__we_all_got_issues_/master.m3u8
-  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/we-all-got-issues.webp
+  thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/gladius-james-we-all-got-issues_1772496840.webp
   spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/gladius_james_-__we_all_got_issues__sprite_sheet.jpg
   video_width: 1080
   video_height: 810
 youtube: https://www.youtube.com/watch?v=BeTRELKcHdw
 ---
+
 Official music video for Gladius James' "We All Got Issues" 
 
 Created by Billy Bjork & Tyler Macey.

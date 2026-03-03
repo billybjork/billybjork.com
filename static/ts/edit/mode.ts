@@ -367,7 +367,7 @@ function setupEditor(data: ProjectData | AboutData): void {
 
     heroMediaControls = createHeroThumbnailControls(project);
     if (videoContainer) {
-      videoContainer.after(heroMediaControls);
+      videoContainer.before(heroMediaControls);
     } else if (inlineProjectMetadataControls) {
       inlineProjectMetadataControls.after(heroMediaControls);
     } else {
@@ -3699,10 +3699,6 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
           <button type="button" class="edit-btn-small" data-action="update-sprite">Update Sprite</button>
           <button type="button" class="edit-btn-small" data-action="replace-video">Replace</button>
         </div>
-        <p class="edit-hero-thumbnail-note">Hero poster is auto-generated from frame 0 of the hero video.</p>
-        <p class="edit-hero-thumbnail-note edit-hero-thumbnail-note--subtle">
-          <span class="edit-hero-poster-status"></span>
-        </p>
         <input type="file" class="edit-hero-video-file" accept="video/*" style="display: none;">
       </div>
       <div class="edit-hero-thumbnail-panel">
@@ -3722,7 +3718,6 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
             <div class="edit-hero-thumbnail-buttons">
               <button type="button" class="edit-btn-small" data-action="upload">Upload Override</button>
               <button type="button" class="edit-btn-small" data-action="capture">Capture Frame</button>
-              <button type="button" class="edit-btn-small" data-action="use-first-frame">Use Hero First Frame</button>
               <button type="button" class="edit-btn-small" data-action="clear" style="${currentOgOverride ? '' : 'display:none'}">Clear Override</button>
             </div>
             <input type="file" class="edit-hero-thumbnail-file" accept="image/*" style="display: none;">
@@ -3733,7 +3728,6 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   `;
 
   const statusEl = controls.querySelector('.edit-hero-video-status') as HTMLElement;
-  const posterStatusEl = controls.querySelector('.edit-hero-poster-status') as HTMLElement;
   const updateSpriteBtn = controls.querySelector('[data-action="update-sprite"]') as HTMLButtonElement;
   const replaceBtn = controls.querySelector('[data-action="replace-video"]') as HTMLButtonElement;
   const videoFileInput = controls.querySelector('.edit-hero-video-file') as HTMLInputElement;
@@ -3741,7 +3735,6 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   const preview = controls.querySelector('.edit-hero-thumbnail-preview') as HTMLImageElement;
   const uploadBtn = controls.querySelector('[data-action="upload"]') as HTMLButtonElement;
   const captureBtn = controls.querySelector('[data-action="capture"]') as HTMLButtonElement;
-  const useFirstFrameBtn = controls.querySelector('[data-action="use-first-frame"]') as HTMLButtonElement;
   const clearBtn = controls.querySelector('[data-action="clear"]') as HTMLButtonElement;
   const fileInput = controls.querySelector('.edit-hero-thumbnail-file') as HTMLInputElement;
 
@@ -3765,18 +3758,12 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   const refreshState = (): void => {
     const project = getEditableProjectData();
     const hls = project?.video?.hls?.trim() || '';
-    const poster = project?.video?.thumbnail?.trim() || '';
     const ogOverride = project?.og_image?.trim() || '';
     const hasHls = hls.length > 0;
-    const hasPoster = poster.length > 0;
     statusEl.textContent = hasHls ? `Current: ${hls.split('/').pop()}` : 'No hero video yet';
-    posterStatusEl.textContent = hasPoster
-      ? `Poster: ${poster.split('/').pop()}`
-      : 'Poster: available after hero video processing';
     updateSpriteBtn.disabled = !hasHls;
     replaceBtn.textContent = hasHls ? 'Replace' : 'Upload Hero Video';
     captureBtn.disabled = !hasHls;
-    useFirstFrameBtn.disabled = !hasPoster;
     clearBtn.style.display = ogOverride ? '' : 'none';
     renderOgPreviewFromProject();
   };
@@ -3880,12 +3867,6 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
       captureBtn.textContent = 'Capture Frame';
       refreshState();
     }
-  });
-
-  useFirstFrameBtn.addEventListener('click', () => {
-    syncOgOverride(null);
-    showNotification('OG image now follows the hero first-frame poster.', 'success');
-    refreshState();
   });
 
   clearBtn.addEventListener('click', () => {
