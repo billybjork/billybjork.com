@@ -167,8 +167,8 @@ const dragState: DragState = {
   isDragging: false,
 };
 
-// Hero thumbnail controls element (injected when edit mode activates for a project with hero video)
-let heroThumbnailControls: HTMLElement | null = null;
+// Hero media controls element (injected when edit mode activates for project edit mode)
+let heroMediaControls: HTMLElement | null = null;
 let inlineToolbar: HTMLElement | null = null;
 let inlineToolbarContext: InlineToolbarContext | null = null;
 let inlineToolbarEventsBound = false;
@@ -365,13 +365,13 @@ function setupEditor(data: ProjectData | AboutData): void {
       }
     }
 
-    heroThumbnailControls = createHeroThumbnailControls(project);
+    heroMediaControls = createHeroThumbnailControls(project);
     if (videoContainer) {
-      videoContainer.after(heroThumbnailControls);
+      videoContainer.after(heroMediaControls);
     } else if (inlineProjectMetadataControls) {
-      inlineProjectMetadataControls.after(heroThumbnailControls);
+      inlineProjectMetadataControls.after(heroMediaControls);
     } else {
-      contentContainer.before(heroThumbnailControls);
+      contentContainer.before(heroMediaControls);
     }
   }
 
@@ -416,6 +416,7 @@ function buildProjectSavePayload(markdown: string, options: { force?: boolean } 
     pinned: project.pinned ?? false,
     draft: project.draft ?? false,
     youtube: project.youtube || '',
+    og_image: project.og_image || null,
     video: project.video ?? {},
     markdown,
   };
@@ -613,10 +614,10 @@ export function cleanup(): void {
     hiddenProjectControls = null;
   }
 
-  // Remove hero thumbnail controls
-  if (heroThumbnailControls) {
-    heroThumbnailControls.remove();
-    heroThumbnailControls = null;
+  // Remove hero media controls
+  if (heroMediaControls) {
+    heroMediaControls.remove();
+    heroMediaControls = null;
   }
   if (inlineProjectMetadataControls) {
     inlineProjectMetadataControls.remove();
@@ -3674,7 +3675,7 @@ function openHeroVideoEditor(file: File | null = null): void {
         }
       }
       project.video = { ...videoData };
-      (heroThumbnailControls as HeroMediaControlsElement | null)?.refreshState?.();
+      (heroMediaControls as HeroMediaControlsElement | null)?.refreshState?.();
       markDirty();
     },
   });
@@ -3686,7 +3687,7 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   const controls = document.createElement('div') as HeroMediaControlsElement;
   controls.className = 'edit-hero-thumbnail-controls';
 
-  const currentThumbnail = data.video?.thumbnail || '';
+  const currentOgOverride = data.og_image || '';
   controls.innerHTML = `
     <div class="edit-hero-media-grid">
       <div class="edit-hero-video-panel">
@@ -3698,23 +3699,31 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
           <button type="button" class="edit-btn-small" data-action="update-sprite">Update Sprite</button>
           <button type="button" class="edit-btn-small" data-action="replace-video">Replace</button>
         </div>
+        <p class="edit-hero-thumbnail-note">Hero poster is auto-generated from frame 0 of the hero video.</p>
+        <p class="edit-hero-thumbnail-note edit-hero-thumbnail-note--subtle">
+          <span class="edit-hero-poster-status"></span>
+        </p>
         <input type="file" class="edit-hero-video-file" accept="video/*" style="display: none;">
       </div>
       <div class="edit-hero-thumbnail-panel">
         <div class="edit-hero-thumbnail-header">
-          <span class="edit-hero-panel-label">Thumbnail</span>
+          <span class="edit-hero-panel-label">OG Image (Social Share)</span>
         </div>
         <div class="edit-hero-thumbnail-content">
-          <img class="edit-hero-thumbnail-preview" src="${escapeHtmlAttr(currentThumbnail)}"
-              alt="Thumbnail" style="${currentThumbnail ? '' : 'display:none'}">
+          <img class="edit-hero-thumbnail-preview" src="${escapeHtmlAttr(currentOgOverride)}"
+              alt="OG image preview" style="${currentOgOverride ? '' : 'display:none'}">
           <div class="edit-hero-thumbnail-actions">
             <input type="url" class="edit-hero-thumbnail-input"
-                placeholder="Thumbnail image URL..."
-                value="${escapeHtmlAttr(currentThumbnail)}">
+                placeholder="Optional OG override URL..."
+                value="${escapeHtmlAttr(currentOgOverride)}">
+            <p class="edit-hero-thumbnail-note">
+              Leave blank to use hero poster first, then sprite sheet as fallback.
+            </p>
             <div class="edit-hero-thumbnail-buttons">
-              <button type="button" class="edit-btn-small" data-action="upload">Upload</button>
-              <button type="button" class="edit-btn-small" data-action="capture">Use current frame</button>
-              <button type="button" class="edit-btn-small" data-action="clear" style="${currentThumbnail ? '' : 'display:none'}">Clear</button>
+              <button type="button" class="edit-btn-small" data-action="upload">Upload Override</button>
+              <button type="button" class="edit-btn-small" data-action="capture">Capture Frame</button>
+              <button type="button" class="edit-btn-small" data-action="use-first-frame">Use Hero First Frame</button>
+              <button type="button" class="edit-btn-small" data-action="clear" style="${currentOgOverride ? '' : 'display:none'}">Clear Override</button>
             </div>
             <input type="file" class="edit-hero-thumbnail-file" accept="image/*" style="display: none;">
           </div>
@@ -3724,6 +3733,7 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   `;
 
   const statusEl = controls.querySelector('.edit-hero-video-status') as HTMLElement;
+  const posterStatusEl = controls.querySelector('.edit-hero-poster-status') as HTMLElement;
   const updateSpriteBtn = controls.querySelector('[data-action="update-sprite"]') as HTMLButtonElement;
   const replaceBtn = controls.querySelector('[data-action="replace-video"]') as HTMLButtonElement;
   const videoFileInput = controls.querySelector('.edit-hero-video-file') as HTMLInputElement;
@@ -3731,52 +3741,60 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   const preview = controls.querySelector('.edit-hero-thumbnail-preview') as HTMLImageElement;
   const uploadBtn = controls.querySelector('[data-action="upload"]') as HTMLButtonElement;
   const captureBtn = controls.querySelector('[data-action="capture"]') as HTMLButtonElement;
+  const useFirstFrameBtn = controls.querySelector('[data-action="use-first-frame"]') as HTMLButtonElement;
   const clearBtn = controls.querySelector('[data-action="clear"]') as HTMLButtonElement;
   const fileInput = controls.querySelector('.edit-hero-thumbnail-file') as HTMLInputElement;
 
-  const renderThumbnailFromProject = (): void => {
+  const renderOgPreviewFromProject = (): void => {
     const project = getEditableProjectData();
-    const thumbnail = project?.video?.thumbnail?.trim() || '';
-    input.value = thumbnail;
-    if (thumbnail) {
-      preview.src = thumbnail;
+    const ogOverride = project?.og_image?.trim() || '';
+    const fallback = project?.video?.thumbnail?.trim() || project?.video?.spriteSheet?.trim() || '';
+    const previewUrl = ogOverride || fallback;
+
+    input.value = ogOverride;
+    if (previewUrl) {
+      preview.src = previewUrl;
       preview.style.display = '';
-      clearBtn.style.display = '';
     } else {
       preview.style.display = 'none';
-      clearBtn.style.display = 'none';
     }
+
+    clearBtn.style.display = ogOverride ? '' : 'none';
   };
 
   const refreshState = (): void => {
     const project = getEditableProjectData();
     const hls = project?.video?.hls?.trim() || '';
+    const poster = project?.video?.thumbnail?.trim() || '';
+    const ogOverride = project?.og_image?.trim() || '';
     const hasHls = hls.length > 0;
+    const hasPoster = poster.length > 0;
     statusEl.textContent = hasHls ? `Current: ${hls.split('/').pop()}` : 'No hero video yet';
+    posterStatusEl.textContent = hasPoster
+      ? `Poster: ${poster.split('/').pop()}`
+      : 'Poster: available after hero video processing';
     updateSpriteBtn.disabled = !hasHls;
     replaceBtn.textContent = hasHls ? 'Replace' : 'Upload Hero Video';
     captureBtn.disabled = !hasHls;
-    renderThumbnailFromProject();
+    useFirstFrameBtn.disabled = !hasPoster;
+    clearBtn.style.display = ogOverride ? '' : 'none';
+    renderOgPreviewFromProject();
   };
   controls.refreshState = refreshState;
   refreshState();
 
-  const syncThumbnail = (url: string | null): void => {
+  const syncOgOverride = (url: string | null): void => {
     const project = getEditableProjectData();
     if (!project) return;
 
-    if (!project.video) {
-      project.video = {};
-    }
-
     const nextUrl = url || undefined;
-    const oldThumbnail = project.video.thumbnail;
-    if (oldThumbnail && oldThumbnail !== nextUrl) {
-      addCleanupCandidateUrl(cleanupCandidateUrls, oldThumbnail);
+    const oldOgImage = project.og_image;
+    if (oldOgImage && oldOgImage !== nextUrl) {
+      addCleanupCandidateUrl(cleanupCandidateUrls, oldOgImage);
     }
-    project.video.thumbnail = nextUrl;
+    project.og_image = nextUrl;
     markDirty();
-    renderThumbnailFromProject();
+    renderOgPreviewFromProject();
   };
 
   updateSpriteBtn.addEventListener('click', () => {
@@ -3802,10 +3820,10 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   });
 
   input.addEventListener('change', () => {
-    syncThumbnail(input.value.trim() || null);
+    syncOgOverride(input.value.trim() || null);
   });
   input.addEventListener('blur', () => {
-    syncThumbnail(input.value.trim() || null);
+    syncOgOverride(input.value.trim() || null);
   });
 
   uploadBtn.addEventListener('click', () => fileInput.click());
@@ -3822,15 +3840,15 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
     try {
       uploadBtn.disabled = true;
       uploadBtn.textContent = 'Uploading...';
-      showNotification('Uploading thumbnail...', 'info');
+      showNotification('Uploading OG image override...', 'info');
       const url = await uploadPosterForVideo(file);
-      syncThumbnail(url);
-      showNotification('Thumbnail uploaded!', 'success');
+      syncOgOverride(url);
+      showNotification('OG image override uploaded!', 'success');
     } catch (error) {
       showNotification(`Upload failed: ${(error as Error).message}`, 'error');
     } finally {
       uploadBtn.disabled = false;
-      uploadBtn.textContent = 'Upload';
+      uploadBtn.textContent = 'Upload Override';
       fileInput.value = '';
     }
   });
@@ -3853,20 +3871,27 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
       captureBtn.disabled = true;
       captureBtn.textContent = 'Capturing...';
       const url = await capturePosterFromVideo(video);
-      syncThumbnail(url);
-      showNotification('Thumbnail captured!', 'success');
+      syncOgOverride(url);
+      showNotification('OG image override captured!', 'success');
     } catch (error) {
       showNotification(`Capture failed: ${(error as Error).message}`, 'error');
     } finally {
       captureBtn.disabled = false;
-      captureBtn.textContent = 'Use current frame';
+      captureBtn.textContent = 'Capture Frame';
       refreshState();
     }
   });
 
+  useFirstFrameBtn.addEventListener('click', () => {
+    syncOgOverride(null);
+    showNotification('OG image now follows the hero first-frame poster.', 'success');
+    refreshState();
+  });
+
   clearBtn.addEventListener('click', () => {
-    syncThumbnail(null);
-    showNotification('Thumbnail cleared', 'info');
+    syncOgOverride(null);
+    showNotification('OG image override cleared', 'info');
+    refreshState();
   });
 
   return controls;

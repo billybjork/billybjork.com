@@ -126,6 +126,7 @@ export function buildProjectVideoViewMarkup({
         </div>
       </div>
       <div class="edit-hero-timeline-loading" hidden>Refining timeline preview...</div>
+      <p class="edit-hero-thumbnail-note">Hero poster is always frame 0. Sprite range only affects the sprite sheet.</p>
       <div class="edit-hero-time-display">
         <span class="edit-hero-current-time">0:00</span>
         <span class="edit-hero-sprite-info">Sprite: 0:00 - 0:03 (3.0s)</span>

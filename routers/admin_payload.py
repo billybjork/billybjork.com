@@ -62,6 +62,12 @@ def build_project_frontmatter(
     if normalized_video:
         frontmatter["video"] = normalized_video
 
+    og_image = data.get("og_image")
+    if isinstance(og_image, str):
+        normalized_og_image = og_image.strip()
+        if normalized_og_image:
+            frontmatter["og_image"] = normalized_og_image
+
     youtube = data.get("youtube")
     if youtube:
         frontmatter["youtube"] = youtube
@@ -69,13 +75,19 @@ def build_project_frontmatter(
     return frontmatter, normalized_video
 
 
-def collect_asset_refs(markdown_content: str, video: Optional[dict[str, Any]] = None) -> set[str]:
+def collect_asset_refs(
+    markdown_content: str,
+    video: Optional[dict[str, Any]] = None,
+    og_image: Optional[str] = None,
+) -> set[str]:
     refs = extract_cloudfront_urls(markdown_content or "")
     if isinstance(video, dict):
         for key in ("hls", "thumbnail", "spriteSheet"):
             value = video.get(key)
             if isinstance(value, str) and value:
                 refs.add(value)
+    if isinstance(og_image, str) and og_image.strip():
+        refs.add(og_image.strip())
     return refs
 
 

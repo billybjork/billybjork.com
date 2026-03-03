@@ -139,9 +139,10 @@ slug: project-slug
 date: 2024-01-15
 draft: false
 pinned: false
+og_image: https://cdn.example.com/images/custom-og.webp # optional override
 video:
   hls: https://cdn.example.com/videos/slug/master.m3u8
-  thumbnail: https://cdn.example.com/videos/slug/thumb.webp
+  thumbnail: https://cdn.example.com/videos/slug/thumb.webp # hero poster (always frame 0)
   spriteSheet: https://cdn.example.com/videos/slug/sprite.jpg
 youtube: https://youtube.com/watch?v=...
 ---
@@ -157,7 +158,7 @@ All media is processed server-side and uploaded to S3/CloudFront.
 |------|-----------|--------|
 | Images | Resize (max 2000px), convert | WebP @ 80% |
 | Content videos | Compress | MP4 @ 720p, crf 28 |
-| Hero videos | Full pipeline | HLS adaptive + sprite sheet + thumbnail |
+| Hero videos | Full pipeline | HLS adaptive + sprite sheet + first-frame poster |
 
 Canonical S3 prefixes used by edit mode:
 
@@ -167,6 +168,23 @@ Canonical S3 prefixes used by edit mode:
 - `images/thumbnails/`
 - `videos/{slug}/`
 - `videos_mp4/`
+
+### Hero Poster and OG Behavior
+
+- `video.thumbnail` is the hero poster and is always generated from frame `0`.
+- `og_image` is optional and independent from hero poster generation.
+- OG resolution priority is:
+  1. `og_image` (if set)
+  2. `video.thumbnail`
+  3. `video.spriteSheet`
+
+### One-off Poster Regeneration
+
+To regenerate hero posters from frame `0` for all hero-video projects and clean up replaced orphaned assets:
+
+```bash
+uv run python tools/regenerate_hero_posters_first_frame.py --apply --cleanup-orphans
+```
 
 ## Static Asset Caching
 

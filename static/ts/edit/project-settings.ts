@@ -37,6 +37,7 @@ interface ProjectData {
   slug: string;
   date: string;
   youtube?: string | null;
+  og_image?: string | null;
   draft?: boolean;
   pinned?: boolean;
   video?: VideoData;
@@ -1481,6 +1482,7 @@ const ProjectSettings: ProjectSettingsState & {
       original_slug: this.projectSlug,
       date: formData.get('date'),
       youtube: formData.get('youtube') || null,
+      og_image: this.projectData?.og_image || null,
       draft: formData.get('draft') === 'on',
       pinned: formData.get('pinned') === 'on',
       video: this.projectData?.video,

@@ -573,6 +573,18 @@
     word-break: break-all;
 }
 
+.edit-hero-thumbnail-note {
+    margin: 10px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #a3a3a3;
+}
+
+.edit-hero-thumbnail-note--subtle {
+    margin-top: 6px;
+    color: #848484;
+}
+
 .edit-hero-video-buttons,
 .edit-hero-thumbnail-buttons {
     display: flex;

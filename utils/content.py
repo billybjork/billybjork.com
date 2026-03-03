@@ -448,6 +448,7 @@ def load_project(
         'is_draft': frontmatter.get('draft', False),
         'pinned': frontmatter.get('pinned', False),
         'youtube_link': frontmatter.get('youtube'),
+        'og_image': frontmatter.get('og_image'),
         'html_content': html_content,
         'markdown_content': markdown_content,
         'revision': parsed.revision if include_revision else None,
@@ -763,14 +764,15 @@ class ProjectInfo:
     video_width: Optional[int] = None
     video_height: Optional[int] = None
     youtube_link: Optional[str] = None
+    og_image: Optional[str] = None
     formatted_date: str = field(default="", init=False)
     og_image_link: Optional[str] = field(default=None, init=False)
 
     def __post_init__(self):
         self.id = hash(self.slug)
         self.formatted_date = format_date(self.creation_date)
-        # Compute og_image_link with fallback chain: thumbnail → spriteSheet
-        og_image = self.thumbnail_link or self.sprite_sheet_link
+        # Compute og_image_link with fallback chain: explicit og_image -> thumbnail -> spriteSheet
+        og_image = self.og_image or self.thumbnail_link or self.sprite_sheet_link
         if og_image and not og_image.startswith(('http://', 'https://')):
             # Resolve relative URL to absolute
             from utils.s3 import CLOUDFRONT_DOMAIN
@@ -799,4 +801,5 @@ class ProjectInfo:
             video_width=data.get("video_width"),
             video_height=data.get("video_height"),
             youtube_link=data.get("youtube_link"),
+            og_image=data.get("og_image"),
         )

@@ -657,7 +657,8 @@ def process_hero_video(
         generate_thumbnail(
             video_path,
             thumb_path,
-            time=trim_start + sprite_start
+            # Hero poster is always the first frame of the hero video.
+            time=trim_start,
         )
 
         thumbnail_key = hero_thumbnail_key(project_slug, version)
@@ -728,10 +729,11 @@ def generate_sprite_and_thumbnail(
     progress_callback=None,
 ) -> dict:
     """
-    Generate sprite sheet and thumbnail, upload to S3.
+    Generate sprite sheet and hero poster thumbnail, upload to S3.
 
     This is called after the user confirms their sprite range selection.
     Can run independently of HLS generation.
+    Thumbnail extraction is deterministic from frame 0 (not sprite_start).
 
     Args:
         video_path: Path to source video
@@ -780,7 +782,8 @@ def generate_sprite_and_thumbnail(
         generate_thumbnail(
             video_path,
             thumb_path,
-            time=sprite_start
+            # Hero poster is always the first frame.
+            time=0,
         )
 
         # Upload thumbnail with versioned filename

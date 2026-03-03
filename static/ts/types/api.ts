@@ -23,6 +23,7 @@ export interface ProjectData {
   pinned: boolean;
   draft: boolean;
   youtube?: string;
+  og_image?: string;
   video?: VideoData;
   markdown: string;
   html?: string;

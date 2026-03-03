@@ -96,6 +96,7 @@ async def get_project(slug: str):
         "pinned": project_data.get("pinned", False),
         "draft": project_data.get("is_draft", False),
         "youtube": project_data.get("youtube_link"),
+        "og_image": project_data.get("og_image"),
         "video": {
             "hls": project_data.get("video_link"),
             "thumbnail": project_data.get("thumbnail_link"),
@@ -161,7 +162,16 @@ async def save_project_endpoint(request: Request):
         "thumbnail": old_project.get("thumbnail_link"),
         "spriteSheet": old_project.get("sprite_sheet_link"),
     }
-    old_refs = collect_asset_refs(old_project.get("markdown_content", ""), old_video)
+    old_refs = collect_asset_refs(
+        old_project.get("markdown_content", ""),
+        old_video,
+        old_project.get("og_image"),
+    )
+
+    # Preserve og_image when older clients omit the field in save payloads.
+    if "og_image" not in data and old_project.get("og_image"):
+        data = dict(data)
+        data["og_image"] = old_project.get("og_image")
 
     frontmatter, video = build_project_frontmatter(data, slug)
 
@@ -176,7 +186,7 @@ async def save_project_endpoint(request: Request):
         await asyncio.to_thread(delete_project, original_slug)
 
     # Cleanup orphaned assets
-    new_refs = collect_asset_refs(markdown_content, video)
+    new_refs = collect_asset_refs(markdown_content, video, frontmatter.get("og_image"))
     removed_urls = old_refs - new_refs
     cleanup_candidates = collect_cleanup_candidates(data) - new_refs
     cleanup_urls = removed_urls | cleanup_candidates
@@ -223,6 +233,10 @@ async def create_project(request: Request):
         "draft": data.get("draft", False),
     }
 
+    og_image = data.get("og_image")
+    if isinstance(og_image, str) and og_image.strip():
+        frontmatter["og_image"] = og_image.strip()
+
     markdown_content = data.get("markdown", "")
     await asyncio.to_thread(save_project, slug, frontmatter, markdown_content)
 
@@ -241,7 +255,11 @@ async def delete_project_endpoint(slug: str):
         "thumbnail": project.get("thumbnail_link"),
         "spriteSheet": project.get("sprite_sheet_link"),
     }
-    project_refs = collect_asset_refs(project.get("markdown_content", ""), project_video)
+    project_refs = collect_asset_refs(
+        project.get("markdown_content", ""),
+        project_video,
+        project.get("og_image"),
+    )
 
     # Delete the project file first
     await asyncio.to_thread(delete_project, slug)
@@ -642,13 +660,13 @@ async def get_hls_progress(session_id: str):
 
 @router.post("/generate-sprite-sheet")
 async def generate_sprite_sheet_endpoint(request: Request):
-    """Generate sprite sheet and thumbnail after user confirms selection.
+    """Generate sprite sheet and hero poster after user confirms selection.
 
     Called after user has selected their sprite range. HLS encoding should
     already be complete or in progress from the initial thumbnail extraction.
 
     If HLS is still processing, this endpoint waits for it to complete
-    before returning the combined result.
+    before returning the combined result. Hero poster is always frame 0.
     """
     form = await request.form()
     temp_id = form.get("temp_id")
