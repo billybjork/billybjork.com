@@ -313,11 +313,9 @@ footer {
 @keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(30px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -345,7 +343,6 @@ footer {
 /* Override animation */
 .project-item.no-fade {
     opacity: 1;
-    transform: translateY(0);
     transition: none;
 }
 
@@ -383,7 +380,6 @@ footer {
     --project-shell-inline-padding: 0;
     --project-close-inline-offset: var(--spacing-medium);
     opacity: 0;
-    transform: translateY(20px);
     position: relative;
     width: 100%;
     display: flex;
@@ -398,7 +394,6 @@ footer {
         background-color 0.3s var(--transition-ease), 
         border-radius 0.3s var(--transition-ease), 
         box-shadow 0.3s var(--transition-ease),
-        transform 0.3s var(--transition-ease),
         opacity 0.3s var(--transition-ease);
     @media (max-width: 768px) {
             --project-shell-inline-padding: var(--project-mobile-inline-padding);
@@ -412,6 +407,7 @@ footer {
 }
 
 .project-item.active {
+    transform: none;
     overflow: visible;
     background-color: var(--secondary-color);
     border-radius: 12px;
