@@ -165,8 +165,8 @@ async function openProject(slug: string, options: OpenProjectOptions = {}): Prom
       isOpen: true
     });
 
-    detailsContainer.innerHTML = html;
     projectItem.classList.add('active');
+    detailsContainer.innerHTML = html;
 
     if (pushUrl) {
       const stateUrl = buildUrl(`/${slug}`);
@@ -183,6 +183,9 @@ async function openProject(slug: string, options: OpenProjectOptions = {}): Prom
     loadCodeHighlightingIfNeeded(detailsContainer);
 
   } catch (error) {
+    projectItem.classList.remove('active');
+    detailsContainer.innerHTML = '';
+
     if (error instanceof Error && error.name === 'AbortError') {
       return;
     }

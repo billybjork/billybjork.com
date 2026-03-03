@@ -388,7 +388,7 @@ footer {
     border-radius: 8px;
     padding: 1rem;
     background-color: transparent;
-    overflow: hidden;
+    overflow: visible;
     max-width: 70vw;
     transition: 
         background-color 0.3s var(--transition-ease), 
@@ -465,7 +465,6 @@ footer {
 
 .project-name, 
 .project-date {
-    will-change: transform, opacity;
     transition: 
         transform 0.3s ease-in-out,
         opacity 0.3s ease-in-out;
@@ -486,7 +485,7 @@ footer {
 }
 
 .project-date {
-    transform: translateZ(0) scale(0.7) translateY(10px); /* Slightly slide down */
+    transform: scale(0.7) translateY(10px); /* Slightly slide down */
     transform-origin: left center;
     backface-visibility: hidden;
 }
@@ -593,7 +592,7 @@ footer {
 }
 
 .project-content {
-    overflow: hidden;
+    overflow: visible;
     padding-inline: var(--project-shell-inline-padding);
 }
 
