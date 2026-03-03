@@ -908,7 +908,7 @@
                 });
             });
 
-            // Clear main thumbnail's coherence override and unfreeze motion.
+            // Clear main thumbnail transition overrides.
             // Use smooth clearing to sync currentCoherence with auto-calculated
             // value, preventing any visual shift when override is removed.
             const finalRect = ctx.thumbnail.cachedRect || ctx.container.getBoundingClientRect();
@@ -918,7 +918,6 @@
             ctx.thumbnail.setScatterBackBiasOverride(null);
             ctx.thumbnail.setZPushOverride(null);
             ctx.thumbnail.setScatterDepthBoostOverride(null);
-            ctx.thumbnail.setMotionFrozen(false);
 
             if (!this.isTokenActive(token)) return;
             this.currentOpenSlug = null;
@@ -1552,6 +1551,19 @@
             const isPromoted = this.promotedStates.has(ctx.slug)
                 || ctx.container.classList.contains('transition-overlay');
             if (isPromoted) {
+                const promoted = this.promotedStates.get(ctx.slug);
+                const placeholder = promoted?.placeholder;
+                if (placeholder) {
+                    const placeholderRect = placeholder.getBoundingClientRect();
+                    if (placeholderRect.width > 0 && placeholderRect.height > 0) {
+                        return new DOMRect(
+                            placeholderRect.left,
+                            placeholderRect.top,
+                            placeholderRect.width,
+                            placeholderRect.height
+                        );
+                    }
+                }
                 const promotedStage = ctx.item.querySelector('.pc-stage');
                 if (promotedStage) {
                     const promotedStageRect = promotedStage.getBoundingClientRect();
