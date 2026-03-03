@@ -139,6 +139,7 @@
 
         resetProjectVisualState(ctx) {
             this.stopMainFlowShift(ctx);
+            this.clearPinnedCloseButton(ctx);
             ctx.item.classList.remove('pc-has-hero-video');
             ctx.item.classList.remove('pc-hero-expanded');
             ctx.item.classList.remove('pc-closing');
@@ -664,6 +665,7 @@
                 ? ctx.heroSlot.getBoundingClientRect()
                 : ctx.container.getBoundingClientRect();
             ctx.item.classList.add('pc-closing');
+            this.pinCloseButton(ctx);
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
@@ -702,6 +704,7 @@
             await this.animateCoherence(ctx.thumbnail, 1, 120, token);
             if (!this.isTokenActive(token)) {
                 ctx.item.classList.remove('pc-closing');
+                this.clearPinnedCloseButton(ctx);
                 ctx.closeButton.disabled = false;
                 return;
             }
@@ -709,6 +712,7 @@
             await thumbReadyPromise;
             if (!this.isTokenActive(token)) {
                 ctx.item.classList.remove('pc-closing');
+                this.clearPinnedCloseButton(ctx);
                 ctx.closeButton.disabled = false;
                 return;
             }
@@ -742,6 +746,7 @@
 
             if (!this.isTokenActive(token)) {
                 ctx.item.classList.remove('pc-closing');
+                this.clearPinnedCloseButton(ctx);
                 ctx.closeButton.disabled = false;
                 return;
             }
@@ -1406,6 +1411,29 @@
 
             main.style.transition = `transform ${durationMs}ms cubic-bezier(0.22, 1, 0.36, 1)`;
             main.style.transform = 'translateY(0)';
+        }
+
+        pinCloseButton(ctx) {
+            const button = ctx?.closeButton;
+            if (!button) return;
+            const rect = button.getBoundingClientRect();
+            if (rect.width < 1 || rect.height < 1) return;
+
+            button.classList.add('pc-close-pinned');
+            button.style.left = `${rect.left}px`;
+            button.style.top = `${rect.top}px`;
+            button.style.width = `${rect.width}px`;
+            button.style.height = `${rect.height}px`;
+        }
+
+        clearPinnedCloseButton(ctx) {
+            const button = ctx?.closeButton;
+            if (!button) return;
+            button.classList.remove('pc-close-pinned');
+            button.style.left = '';
+            button.style.top = '';
+            button.style.width = '';
+            button.style.height = '';
         }
 
         measureContainerOriginRect(ctx) {
