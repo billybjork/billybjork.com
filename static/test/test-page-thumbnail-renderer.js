@@ -330,6 +330,43 @@
             this.motionFrozen = !!frozen;
         }
 
+        getMotionTargets(respectFreeze = true) {
+            const scrollTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
+
+            // Use global mouse position (or device orientation on mobile)
+            const inputState = getInputState();
+            let inputX = inputState.globalMouseX;
+            let inputY = -inputState.globalMouseY; // Invert Y for natural feel
+
+            if (inputState.hasDeviceOrientation) {
+                inputX = inputState.deviceX;
+                inputY = inputState.deviceY;
+            }
+
+            let targetPanX = inputX * config.mouseParallax;
+            let targetPanY = inputY * config.mouseParallax * 0.6;
+            let targetTilt = scrollTilt;
+
+            if (respectFreeze && this.motionFrozen) {
+                targetPanX = 0;
+                targetPanY = 0;
+                targetTilt = 0;
+            }
+
+            return { targetPanX, targetPanY, targetTilt };
+        }
+
+        snapMotionToCurrentTargets(rect, options = {}) {
+            if (rect) {
+                this.updateViewportPosition(rect);
+            }
+            const respectFreeze = options.respectFreeze !== false;
+            const { targetPanX, targetPanY, targetTilt } = this.getMotionTargets(respectFreeze);
+            this.currentTilt = targetTilt;
+            this.currentPanX = targetPanX;
+            this.currentPanY = targetPanY;
+        }
+
         resetTransitionState() {
             this.coherenceOverride = null;
             this.opacityOverride = null;
@@ -488,29 +525,10 @@
             // =============================================
             // Camera positioning
             // =============================================
-            const scrollTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
-
-            // Use global mouse position (or device orientation on mobile)
-            const inputState = getInputState();
-            let inputX = inputState.globalMouseX;
-            let inputY = -inputState.globalMouseY; // Invert Y for natural feel
-
-            if (inputState.hasDeviceOrientation) {
-                inputX = inputState.deviceX;
-                inputY = inputState.deviceY;
-            }
-
-            let targetPanX = inputX * config.mouseParallax;
-            let targetPanY = inputY * config.mouseParallax * 0.6;
-            let targetTilt = scrollTilt;
             // Keep camera motion freeze explicitly controlled. Coherence overrides
             // should not implicitly zero tilt/pan, otherwise clearing override
             // causes a visible end-of-transition camera snap.
-            if (this.motionFrozen) {
-                targetPanX = 0;
-                targetPanY = 0;
-                targetTilt = 0;
-            }
+            const { targetPanX, targetPanY, targetTilt } = this.getMotionTargets(true);
 
             // Smooth interpolation - faster response for mouse, slower for scroll tilt
             const tiltLerp = isReducedMotion() ? 1 : (this.motionFrozen ? 0.25 : 0.12);

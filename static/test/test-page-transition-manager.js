@@ -796,6 +796,9 @@
                 return;
             }
             this.setHeroSlotVisibility(ctx, false);
+            // Unfreeze camera motion before the morph-back timeline so tilt/pan
+            // can settle during the close transition rather than after it.
+            ctx.thumbnail.setMotionFrozen(false);
 
             // Collapse stage sizing before measuring target so close animates to the true thumbnail footprint.
             const closeDuration = 420;
@@ -892,6 +895,7 @@
                 refreshRenderableThumbnails();
                 otherThumbnails.forEach((otherCtx) => {
                     const rect = otherCtx.thumbnail.cachedRect || otherCtx.container.getBoundingClientRect();
+                    otherCtx.thumbnail.snapMotionToCurrentTargets(rect, { respectFreeze: false });
                     otherCtx.thumbnail.clearCoherenceOverrideSmoothly(rect);
                     otherCtx.thumbnail.setOpacityOverride(null);
                     otherCtx.thumbnail.setScatterBackBiasOverride(null);
@@ -903,7 +907,8 @@
             // Clear main thumbnail's coherence override and unfreeze motion.
             // Use smooth clearing to sync currentCoherence with auto-calculated
             // value, preventing any visual shift when override is removed.
-            const finalRect = ctx.container.getBoundingClientRect();
+            const finalRect = ctx.thumbnail.cachedRect || ctx.container.getBoundingClientRect();
+            ctx.thumbnail.snapMotionToCurrentTargets(finalRect, { respectFreeze: false });
             ctx.thumbnail.clearCoherenceOverrideSmoothly(finalRect);
             ctx.thumbnail.setOpacityOverride(null);
             ctx.thumbnail.setScatterBackBiasOverride(null);
@@ -1632,6 +1637,7 @@
         animateCoherence(thumbnail, targetValue, durationMs, token, options = {}) {
             if (durationMs <= 0 || isReducedMotion()) {
                 thumbnail.setCoherenceOverride(targetValue);
+                thumbnail.currentCoherence = targetValue;
                 return Promise.resolve();
             }
 
@@ -1659,10 +1665,12 @@
                     const eased = easeValue(t);
                     const value = startValue + (targetValue - startValue) * eased;
                     thumbnail.setCoherenceOverride(value);
+                    thumbnail.currentCoherence = value;
                     if (t < 1) {
                         requestAnimationFrame(step);
                     } else {
                         thumbnail.setCoherenceOverride(targetValue);
+                        thumbnail.currentCoherence = targetValue;
                         resolve();
                     }
                 };
@@ -1673,6 +1681,7 @@
         animateOpacity(thumbnail, targetValue, durationMs, token, options = {}) {
             if (durationMs <= 0 || isReducedMotion()) {
                 thumbnail.setOpacityOverride(targetValue);
+                thumbnail.currentOpacityMultiplier = targetValue;
                 return Promise.resolve();
             }
 
@@ -1702,10 +1711,12 @@
                     const eased = easeValue(t);
                     const value = startValue + (targetValue - startValue) * eased;
                     thumbnail.setOpacityOverride(value);
+                    thumbnail.currentOpacityMultiplier = value;
                     if (t < 1) {
                         requestAnimationFrame(step);
                     } else {
                         thumbnail.setOpacityOverride(targetValue);
+                        thumbnail.currentOpacityMultiplier = targetValue;
                         resolve();
                     }
                 };
@@ -1716,6 +1727,7 @@
         animateScatterBackBias(thumbnail, targetValue, durationMs, token, options = {}) {
             if (durationMs <= 0 || isReducedMotion()) {
                 thumbnail.setScatterBackBiasOverride(targetValue);
+                thumbnail.currentScatterBackBias = targetValue;
                 return Promise.resolve();
             }
 
@@ -1745,10 +1757,12 @@
                     const eased = easeValue(t);
                     const value = startValue + (targetValue - startValue) * eased;
                     thumbnail.setScatterBackBiasOverride(value);
+                    thumbnail.currentScatterBackBias = value;
                     if (t < 1) {
                         requestAnimationFrame(step);
                     } else {
                         thumbnail.setScatterBackBiasOverride(targetValue);
+                        thumbnail.currentScatterBackBias = targetValue;
                         resolve();
                     }
                 };
@@ -1759,6 +1773,7 @@
         animateZPush(thumbnail, targetValue, durationMs, token, options = {}) {
             if (durationMs <= 0 || isReducedMotion()) {
                 thumbnail.setZPushOverride(targetValue);
+                thumbnail.currentZPush = targetValue;
                 return Promise.resolve();
             }
 
@@ -1788,10 +1803,12 @@
                     const eased = easeValue(t);
                     const value = startValue + (targetValue - startValue) * eased;
                     thumbnail.setZPushOverride(value);
+                    thumbnail.currentZPush = value;
                     if (t < 1) {
                         requestAnimationFrame(step);
                     } else {
                         thumbnail.setZPushOverride(targetValue);
+                        thumbnail.currentZPush = targetValue;
                         resolve();
                     }
                 };
@@ -1802,6 +1819,7 @@
         animateScatterDepthBoost(thumbnail, targetValue, durationMs, token, options = {}) {
             if (durationMs <= 0 || isReducedMotion()) {
                 thumbnail.setScatterDepthBoostOverride(targetValue);
+                thumbnail.currentScatterDepthBoost = targetValue;
                 return Promise.resolve();
             }
 
@@ -1831,10 +1849,12 @@
                     const eased = easeValue(t);
                     const value = startValue + (targetValue - startValue) * eased;
                     thumbnail.setScatterDepthBoostOverride(value);
+                    thumbnail.currentScatterDepthBoost = value;
                     if (t < 1) {
                         requestAnimationFrame(step);
                     } else {
                         thumbnail.setScatterDepthBoostOverride(targetValue);
+                        thumbnail.currentScatterDepthBoost = targetValue;
                         resolve();
                     }
                 };

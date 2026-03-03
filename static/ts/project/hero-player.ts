@@ -262,18 +262,18 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
     };
 
     const canPlayNative = canPlayNativeHls(videoElement);
+    if (canPlayNative) {
+      initializeOnMetadata(videoElement, initializeVideo, () => {
+        videoElement.src = streamUrl;
+      });
+      if (autoplay) {
+        tryAutoplay(videoElement);
+      }
+      return;
+    }
 
     const initializeHls = () => {
       if (!window.Hls || !Hls.isSupported()) {
-        if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-          return;
-        }
         console.error('HLS is not supported in this browser');
         rejectOnce('HLS is not supported');
         return;
@@ -334,28 +334,12 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
       .then(() => {
         if (Hls.isSupported()) {
           initializeHls();
-        } else if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
         } else {
           console.error('HLS is not supported in this browser');
           rejectOnce('HLS is not supported');
         }
       })
       .catch(err => {
-        if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-          return;
-        }
         console.error('Failed to load HLS.js:', err);
         rejectOnce(err);
       });
