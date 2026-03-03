@@ -703,15 +703,6 @@ footer {
     object-fit: contain;
 }
 
-/* Debug toggles for isolating iOS/WebKit control rendering */
-.video-debug-no-contain .video-container {
-    isolation: auto;
-}
-
-.video-debug-no-contain .video-container video {
-    contain: none;
-}
-
 @supports (-webkit-touch-callout: none) {
     .video-container {
         isolation: auto;

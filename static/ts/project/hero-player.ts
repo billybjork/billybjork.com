@@ -7,141 +7,12 @@ import {
 
 const MOBILE_BREAKPOINT = 768;
 const HLS_LEVEL_ASPECT_DRIFT_TOLERANCE = 0.0015;
-const DEFAULT_DEBUG_MP4_URL = 'https://d17y8p6t5eu2ht.cloudfront.net/videos_mp4/it_feels_like_it\'s_working.mp4';
 
 const hlsSetupInFlight = new WeakMap<HTMLVideoElement, Promise<void>>();
 const hlsSetupCompleted = new WeakSet<HTMLVideoElement>();
 const hlsSetupCancel = new WeakMap<HTMLVideoElement, () => void>();
 
 let heroVideoObserver: IntersectionObserver | null = null;
-let debugBodyClassApplied = false;
-
-interface VideoDebugConfig {
-  enabled: boolean;
-  logState: boolean;
-  noContain: boolean;
-  mp4Url: string | null;
-}
-
-const videoDebugConfig: VideoDebugConfig = (() => {
-  if (typeof window === 'undefined') {
-    return {
-      enabled: false,
-      logState: false,
-      noContain: false,
-      mp4Url: null,
-    };
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  const logState = params.get('video_debug') === '1';
-  const noContain = params.get('video_debug_no_contain') === '1';
-  const mp4Param = params.get('video_debug_mp4');
-  const mp4Url = mp4Param
-    ? (mp4Param === '1' ? DEFAULT_DEBUG_MP4_URL : mp4Param)
-    : null;
-  const enabled = logState || noContain || !!mp4Url;
-
-  return {
-    enabled,
-    logState,
-    noContain,
-    mp4Url,
-  };
-})();
-
-function applyVideoDebugBodyClasses(): void {
-  if (!videoDebugConfig.enabled || debugBodyClassApplied) {
-    return;
-  }
-
-  const apply = () => {
-    if (!document.body) return;
-    document.body.classList.add('video-debug');
-    if (videoDebugConfig.noContain) {
-      document.body.classList.add('video-debug-no-contain');
-    }
-    debugBodyClassApplied = true;
-  };
-
-  if (document.body) {
-    apply();
-  } else {
-    window.addEventListener('DOMContentLoaded', apply, { once: true });
-  }
-}
-
-function formatTimeRanges(ranges: TimeRanges): Array<{ start: number; end: number }> {
-  const formatted: Array<{ start: number; end: number }> = [];
-  for (let index = 0; index < ranges.length; index += 1) {
-    formatted.push({
-      start: ranges.start(index),
-      end: ranges.end(index),
-    });
-  }
-  return formatted;
-}
-
-function logVideoState(videoElement: HTMLVideoElement, label: string): void {
-  if (!videoDebugConfig.logState) {
-    return;
-  }
-
-  const state = {
-    label,
-    currentSrc: videoElement.currentSrc,
-    src: videoElement.src,
-    readyState: videoElement.readyState,
-    networkState: videoElement.networkState,
-    paused: videoElement.paused,
-    controls: videoElement.controls,
-    playsInline: videoElement.playsInline,
-    muted: videoElement.muted,
-    autoplay: videoElement.autoplay,
-    preload: videoElement.preload,
-    duration: videoElement.duration,
-    currentTime: videoElement.currentTime,
-    seekable: formatTimeRanges(videoElement.seekable),
-    buffered: formatTimeRanges(videoElement.buffered),
-    videoWidth: videoElement.videoWidth,
-    videoHeight: videoElement.videoHeight,
-  };
-
-  // eslint-disable-next-line no-console
-  console.info('[video-debug]', state);
-}
-
-function bindVideoDebugListeners(videoElement: HTMLVideoElement): void {
-  if (!videoDebugConfig.logState) {
-    return;
-  }
-
-  if (videoElement.dataset.videoDebugBound === 'true') {
-    return;
-  }
-  videoElement.dataset.videoDebugBound = 'true';
-
-  const log = (label: string) => logVideoState(videoElement, label);
-  const events = [
-    'loadedmetadata',
-    'durationchange',
-    'canplay',
-    'canplaythrough',
-    'timeupdate',
-    'seeking',
-    'seeked',
-    'pause',
-    'play',
-    'error',
-    'emptied',
-  ];
-
-  events.forEach(eventName => {
-    videoElement.addEventListener(eventName, () => log(eventName));
-  });
-
-  log('init');
-}
 
 function parsePositiveNumber(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
@@ -328,9 +199,6 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
     return Promise.resolve();
   }
 
-  applyVideoDebugBodyClasses();
-  bindVideoDebugListeners(videoElement);
-
   const pendingSetup = hlsSetupInFlight.get(videoElement);
   if (pendingSetup) {
     if (autoplay) {
@@ -359,7 +227,7 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
     };
     hlsSetupCancel.set(videoElement, cancelSetup);
 
-    const streamUrl = videoDebugConfig.mp4Url ?? videoElement.dataset.hlsUrl;
+    const streamUrl = videoElement.dataset.hlsUrl;
     if (!streamUrl) {
       console.error('No HLS URL provided for video element');
       rejectOnce('No HLS URL provided');
@@ -394,17 +262,6 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
     };
 
     const canPlayNative = canPlayNativeHls(videoElement);
-    if (videoDebugConfig.mp4Url) {
-      initializeOnMetadata(videoElement, initializeVideo, () => {
-        videoElement.src = streamUrl;
-      });
-      if (autoplay) {
-        tryAutoplay(videoElement);
-      }
-      logVideoState(videoElement, 'mp4-override');
-      return;
-    }
-
     if (canPlayNative) {
       initializeOnMetadata(videoElement, initializeVideo, () => {
         videoElement.src = streamUrl;
