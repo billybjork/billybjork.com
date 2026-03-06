@@ -117,10 +117,14 @@ interface HlsLevelSelection {
 function selectStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): number | null {
   const targetAspectRatio = resolveVideoAspectRatio(videoElement);
   const containerRect = getVideoContainer(videoElement)?.getBoundingClientRect();
+  const targetRenderWidth = containerRect?.width ?? videoElement.clientWidth ?? 0;
   const targetRenderHeight = containerRect?.height ?? videoElement.clientHeight ?? 0;
-  if (targetRenderHeight <= 0) {
+  if (targetRenderWidth <= 0 || targetRenderHeight <= 0) {
     return null;
   }
+  const devicePixelRatio = Math.max(1, window.devicePixelRatio || 1);
+  const targetPixelWidth = targetRenderWidth * devicePixelRatio;
+  const targetPixelHeight = targetRenderHeight * devicePixelRatio;
 
   const levelSelections: HlsLevelSelection[] = hls.levels
     .map((level, index) => {
@@ -163,9 +167,19 @@ function selectStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): number 
     return b.bitrate - a.bitrate;
   });
 
-  const firstCoveringLevel = sorted.find(selection => selection.height >= (targetRenderHeight * 0.95));
-  if (firstCoveringLevel) {
-    return firstCoveringLevel.index;
+  const firstCoveringDimensions = sorted.find(selection => {
+    if (selection.width === null) {
+      return false;
+    }
+    return selection.width >= (targetPixelWidth * 0.95) && selection.height >= (targetPixelHeight * 0.95);
+  });
+  if (firstCoveringDimensions) {
+    return firstCoveringDimensions.index;
+  }
+
+  const firstCoveringHeight = sorted.find(selection => selection.height >= (targetPixelHeight * 0.95));
+  if (firstCoveringHeight) {
+    return firstCoveringHeight.index;
   }
 
   return sorted[sorted.length - 1]?.index ?? null;
@@ -262,18 +276,18 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
     };
 
     const canPlayNative = canPlayNativeHls(videoElement);
-    if (canPlayNative) {
-      initializeOnMetadata(videoElement, initializeVideo, () => {
-        videoElement.src = streamUrl;
-      });
-      if (autoplay) {
-        tryAutoplay(videoElement);
-      }
-      return;
-    }
 
     const initializeHls = () => {
       if (!window.Hls || !Hls.isSupported()) {
+        if (canPlayNative) {
+          initializeOnMetadata(videoElement, initializeVideo, () => {
+            videoElement.src = streamUrl;
+          });
+          if (autoplay) {
+            tryAutoplay(videoElement);
+          }
+          return;
+        }
         console.error('HLS is not supported in this browser');
         rejectOnce('HLS is not supported');
         return;
@@ -334,12 +348,28 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
       .then(() => {
         if (Hls.isSupported()) {
           initializeHls();
+        } else if (canPlayNative) {
+          initializeOnMetadata(videoElement, initializeVideo, () => {
+            videoElement.src = streamUrl;
+          });
+          if (autoplay) {
+            tryAutoplay(videoElement);
+          }
         } else {
           console.error('HLS is not supported in this browser');
           rejectOnce('HLS is not supported');
         }
       })
       .catch(err => {
+        if (canPlayNative) {
+          initializeOnMetadata(videoElement, initializeVideo, () => {
+            videoElement.src = streamUrl;
+          });
+          if (autoplay) {
+            tryAutoplay(videoElement);
+          }
+          return;
+        }
         console.error('Failed to load HLS.js:', err);
         rejectOnce(err);
       });

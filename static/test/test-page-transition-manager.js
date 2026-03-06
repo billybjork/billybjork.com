@@ -2147,8 +2147,7 @@
                         return;
                     }
                     const hls = new Hls({
-                        abrEwmaDefaultEstimate: 1800000,
-                        startLevel: 0,
+                        abrEwmaDefaultEstimate: 5000000,
                         capLevelToPlayerSize: true,
                     });
 
