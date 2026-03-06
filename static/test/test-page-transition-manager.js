@@ -12,6 +12,7 @@
             bumpTransitionRectRefresh,
             refreshRenderableThumbnails,
             isReducedMotion,
+            isDebugEnabled,
         } = deps;
 
     class ProjectTransitionManager {
@@ -21,11 +22,9 @@
             this.mainFlowCleanupBySlug = new Map();
             this.currentOpenSlug = null;
             this.openSession = null;
-            this.singleProjectCompactTimer = null;
-            this.compactStabilizeRafId = null;
-            this.compactStabilizeTimeoutId = null;
             this.scrollTweenRafId = null;
             this.scrollTweenTarget = null;
+            this.scrollTweenResolve = null;
             this.transitionToken = 0;
             this.transitionInFlight = false;
             this.fetchController = null;
@@ -41,6 +40,10 @@
             this.initialProjectSlug = this.listSceneEl?.dataset.initialProjectSlug || '';
             this.initialProjectDirectEntry = this.listSceneEl?.dataset.initialProjectDirectEntry === 'true';
             this.projectQueryParam = 'project';
+            this.transitionPhase = 'idle';
+            this.transitionStartTime = 0;
+            this.phaseStartTime = 0;
+            this.debugEnabled = typeof isDebugEnabled === 'function' && isDebugEnabled();
             this.boundCaptureClick = this.handleCaptureClick.bind(this);
             this.boundKeyDown = this.handleKeyDown.bind(this);
             this.boundPrefetchIntent = this.handlePrefetchIntent.bind(this);
@@ -87,15 +90,13 @@
             this.contextBySlug.clear();
             this.currentOpenSlug = null;
             this.openSession = null;
-            this.cancelSingleProjectCompactCommit();
-            this.cancelCompactTopStabilization();
             this.cancelManagedScrollTween();
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
                 this.listSceneEl.classList.remove('pc-single-project-compact');
-                this.listSceneEl.classList.remove('pc-single-project-no-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
+            document.body.classList.remove('pc-header-collapsed');
             this.syncDetailModeClass(false);
             this.transitionInFlight = false;
         }
@@ -147,7 +148,6 @@
             ctx.item.classList.remove('pc-has-hero-video');
             ctx.item.classList.remove('pc-hero-expanded');
             ctx.item.classList.remove('pc-closing');
-            ctx.item.classList.remove('pc-fading-out');
             ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
             ctx.item.style.top = '';
             ctx.item.style.left = '';
@@ -156,6 +156,60 @@
 
         syncDetailModeClass(isDetailOpen) {
             document.body.classList.toggle('pc-test-detail-mode', !!isDetailOpen);
+        }
+
+        debugRect(rect) {
+            if (!rect) return null;
+            return {
+                top: Number(rect.top.toFixed(2)),
+                left: Number(rect.left.toFixed(2)),
+                width: Number(rect.width.toFixed(2)),
+                height: Number(rect.height.toFixed(2)),
+                bottom: Number(rect.bottom.toFixed(2)),
+                right: Number(rect.right.toFixed(2)),
+            };
+        }
+
+        readViewportMetrics() {
+            const viewport = window.visualViewport;
+            return {
+                scrollY: Number(getCurrentScrollY().toFixed(2)),
+                innerWidth: window.innerWidth,
+                innerHeight: window.innerHeight,
+                viewportWidth: Number((viewport?.width ?? window.innerWidth).toFixed(2)),
+                viewportHeight: Number((viewport?.height ?? window.innerHeight).toFixed(2)),
+                viewportOffsetTop: Number((viewport?.offsetTop ?? 0).toFixed(2)),
+                viewportOffsetLeft: Number((viewport?.offsetLeft ?? 0).toFixed(2)),
+                viewportScale: Number((viewport?.scale ?? 1).toFixed(3)),
+            };
+        }
+
+        debugLog(eventName, payload = {}) {
+            if (!this.debugEnabled) return;
+            const now = performance.now();
+            const transitionElapsed = this.transitionStartTime > 0
+                ? Number((now - this.transitionStartTime).toFixed(2))
+                : 0;
+            const phaseElapsed = this.phaseStartTime > 0
+                ? Number((now - this.phaseStartTime).toFixed(2))
+                : 0;
+            console.log('[pc-transition]', eventName, {
+                token: this.transitionToken,
+                phase: this.transitionPhase,
+                transitionElapsedMs: transitionElapsed,
+                phaseElapsedMs: phaseElapsed,
+                ...payload,
+            });
+        }
+
+        setPhase(nextPhase, token, payload = {}) {
+            if (!this.isTokenActive(token)) return;
+            this.transitionPhase = nextPhase;
+            this.phaseStartTime = performance.now();
+            this.debugLog('phase', {
+                nextPhase,
+                ...payload,
+            });
         }
 
         captureListSourceState(ctx) {
@@ -169,12 +223,11 @@
             if (!this.listSceneEl) return;
             const context = this.contextBySlug.get(slug);
             if (!context) return;
-            this.cancelSingleProjectCompactCommit();
 
             this.listSceneEl.classList.remove('pc-single-project-compact');
-            this.listSceneEl.classList.remove('pc-single-project-no-compact');
             this.listSceneEl.classList.add('pc-single-project-mode');
             this.listSceneEl.setAttribute('data-active-slug', slug);
+            document.body.classList.remove('pc-header-collapsed');
             this.syncDetailModeClass(true);
 
             const token = Number.isFinite(options.token) ? options.token : this.transitionToken;
@@ -251,134 +304,106 @@
             };
         }
 
-        fixInactiveProjectsInPlace(activeSlug) {
-            // Fix inactive projects BELOW the active one in place BEFORE any layout
-            // changes (pc-open, hero expansion). This prevents visible shifts when
-            // the active project's header appears or hero expands.
-            // Projects above will scroll out of view and fade via CSS normally.
-            const activeCtx = this.contextBySlug.get(activeSlug);
-            if (!activeCtx) return;
-            const activeTop = activeCtx.item.getBoundingClientRect().top;
-
-            // If scroll tween is already running (rare), account for remaining scroll
-            // to place elements at their final positions
-            const currentScroll = getCurrentScrollY();
-            const scrollRemaining = this.scrollTweenTarget !== null
-                ? this.scrollTweenTarget - currentScroll
-                : 0;
-
-            // FIRST PASS: Capture all rects before any layout changes
-            // This is critical because adding position:fixed removes elements from
-            // document flow, which would shift subsequent elements up
-            const projectsToFix = [];
-            this.contextBySlug.forEach((ctx, ctxSlug) => {
-                if (ctxSlug !== activeSlug) {
-                    const rect = ctx.item.getBoundingClientRect();
-                    if (rect.top > activeTop) {
-                        projectsToFix.push({ ctx, rect });
-                    }
-                }
-            });
-
-            // SECOND PASS: Apply fixed positioning with captured rects
-            // Subtract scrollRemaining to place at final scroll position
-            for (const { ctx, rect } of projectsToFix) {
-                ctx.item.style.top = `${rect.top - scrollRemaining}px`;
-                ctx.item.style.left = `${rect.left}px`;
-                ctx.item.style.width = `${rect.width}px`;
-                ctx.item.classList.add('pc-fading-out');
-            }
-        }
-
-        cancelSingleProjectCompactCommit() {
-            if (this.singleProjectCompactTimer === null) return;
-            clearTimeout(this.singleProjectCompactTimer);
-            this.singleProjectCompactTimer = null;
-        }
-
-        cancelCompactTopStabilization() {
-            if (this.compactStabilizeRafId !== null) {
-                cancelAnimationFrame(this.compactStabilizeRafId);
-                this.compactStabilizeRafId = null;
-            }
-            if (this.compactStabilizeTimeoutId !== null) {
-                clearTimeout(this.compactStabilizeTimeoutId);
-                this.compactStabilizeTimeoutId = null;
-            }
-        }
-
-        getVisualViewportOffsetTop() {
-            const offsetTop = window.visualViewport?.offsetTop;
-            return Number.isFinite(offsetTop) ? offsetTop : 0;
-        }
-
-        measureStableViewportTop(element) {
+        readStableViewportTop(element) {
             if (!element) return 0;
             const rect = element.getBoundingClientRect();
-            return rect.top - this.getVisualViewportOffsetTop();
+            const offsetTop = window.visualViewport?.offsetTop;
+            return rect.top - (Number.isFinite(offsetTop) ? offsetTop : 0);
         }
 
-        isTouchLikeDevice() {
-            return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        waitForAnimationFrames(frameCount = 1, token = this.transitionToken) {
+            const steps = Math.max(1, Number(frameCount) || 1);
+            return new Promise((resolve) => {
+                let remaining = steps;
+                const tick = () => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    remaining -= 1;
+                    if (remaining <= 0) {
+                        resolve();
+                        return;
+                    }
+                    requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            });
         }
 
-        shouldUseLayoutCompaction(options = {}) {
-            // On touch devices in list-origin opens, keep layout stable and avoid
-            // compaction/removal from flow. This removes iOS-specific viewport and
-            // async scroll compensation drift at compact-commit time.
-            const origin = options.origin || this.openSession?.origin || 'list';
-            if (origin === 'list' && this.isTouchLikeDevice()) {
-                return false;
+        async applyAnchoredLayoutMutation(slug, token, mutateLayout, options = {}) {
+            const context = this.contextBySlug.get(slug);
+            if (!context || typeof mutateLayout !== 'function') {
+                if (typeof mutateLayout === 'function') mutateLayout();
+                return;
             }
-            return true;
-        }
 
-        stabilizeCompactAnchorTop(slug, token, anchorTop, options = {}) {
-            if (!Number.isFinite(anchorTop)) return;
-            const maxFrames = Math.max(1, Number(options.maxFrames) || 1);
-            const delayedCheckMs = Math.max(0, Number(options.delayedCheckMs) || 0);
-            let frameCount = 0;
+            const reason = options.reason || 'layout-mutation';
+            const maxFrames = Math.max(1, Number(options.maxFrames) || 8);
+            const anchorTop = this.readStableViewportTop(context.item);
+            const startScrollY = getCurrentScrollY();
+            const corrections = [];
 
-            const applyCorrection = () => {
-                if (!this.isTokenActive(token) || this.currentOpenSlug !== slug) {
-                    return false;
-                }
-                const context = this.contextBySlug.get(slug);
-                if (!context) return false;
-                const currentTop = this.measureStableViewportTop(context.item);
+            mutateLayout();
+            markRectsNeedUpdate();
+            refreshRenderableThumbnails();
+
+            for (let frame = 0; frame < maxFrames; frame += 1) {
+                await this.waitForAnimationFrames(1, token);
+                if (!this.isTokenActive(token)) return;
+                const currentTop = this.readStableViewportTop(context.item);
                 const delta = currentTop - anchorTop;
-                if (Math.abs(delta) > 0.5) {
-                    setScrollTopImmediate(getCurrentScrollY() + delta);
-                    return true;
+                if (Math.abs(delta) <= 0.5) {
+                    if (frame >= 1) break;
+                    continue;
                 }
-                return false;
-            };
-
-            const step = () => {
-                const didAdjust = applyCorrection();
-                frameCount += 1;
-                if (didAdjust && frameCount < maxFrames) {
-                    this.compactStabilizeRafId = requestAnimationFrame(step);
-                    return;
-                }
-                this.compactStabilizeRafId = null;
-            };
-
-            this.cancelCompactTopStabilization();
-            this.compactStabilizeRafId = requestAnimationFrame(step);
-            if (delayedCheckMs > 0) {
-                this.compactStabilizeTimeoutId = window.setTimeout(() => {
-                    this.compactStabilizeTimeoutId = null;
-                    applyCorrection();
-                }, delayedCheckMs);
+                const nextScroll = getCurrentScrollY() + delta;
+                setScrollTopImmediate(nextScroll);
+                corrections.push({
+                    frame,
+                    delta: Number(delta.toFixed(3)),
+                    nextScrollY: Number(nextScroll.toFixed(2)),
+                });
             }
+
+            this.debugLog('anchor-layout-mutation', {
+                slug,
+                reason,
+                fromScrollY: Number(startScrollY.toFixed(2)),
+                toScrollY: Number(getCurrentScrollY().toFixed(2)),
+                anchorTop: Number(anchorTop.toFixed(3)),
+                corrections,
+                viewport: this.readViewportMetrics(),
+            });
+        }
+
+        async setCompactionState(slug, shouldCompact, token, reason) {
+            if (!this.listSceneEl) return;
+            const compactEnabled = this.listSceneEl.classList.contains('pc-single-project-compact');
+            if (compactEnabled === shouldCompact) return;
+
+            await this.applyAnchoredLayoutMutation(slug, token, () => {
+                this.listSceneEl.classList.toggle('pc-single-project-compact', shouldCompact);
+                document.body.classList.toggle('pc-header-collapsed', shouldCompact);
+            }, {
+                reason,
+                maxFrames: shouldCompact ? 10 : 8,
+            });
+
+            bumpTransitionRectRefresh(320);
         }
 
         cancelManagedScrollTween() {
-            if (this.scrollTweenRafId === null) return;
-            cancelAnimationFrame(this.scrollTweenRafId);
-            this.scrollTweenRafId = null;
+            if (this.scrollTweenRafId !== null) {
+                cancelAnimationFrame(this.scrollTweenRafId);
+                this.scrollTweenRafId = null;
+            }
             this.scrollTweenTarget = null;
+            if (typeof this.scrollTweenResolve === 'function') {
+                const resolve = this.scrollTweenResolve;
+                this.scrollTweenResolve = null;
+                resolve();
+            }
         }
 
         startManagedScrollTween(targetTop, durationMs, token) {
@@ -391,134 +416,37 @@
             if (Math.abs(delta) < 0.5 || durationMs <= 0) {
                 setScrollTopImmediate(clampedTarget);
                 this.scrollTweenTarget = null;
-                return;
+                return Promise.resolve();
             }
 
-            const startTime = performance.now();
-
-            const step = (now) => {
-                if (!this.isTokenActive(token)) {
-                    this.scrollTweenRafId = null;
-                    this.scrollTweenTarget = null;
-                    return;
-                }
-
-                const t = Math.min(1, (now - startTime) / durationMs);
-                const eased = 1 - Math.pow(1 - t, 3);
-                setScrollTopImmediate(startY + delta * eased);
-
-                if (t < 1) {
-                    this.scrollTweenRafId = requestAnimationFrame(step);
-                    return;
-                }
-
-                this.scrollTweenRafId = null;
-                this.scrollTweenTarget = null;
-            };
-
-            this.scrollTweenRafId = requestAnimationFrame(step);
-        }
-
-        scheduleSingleProjectCompact(slug, options = {}) {
-            if (!this.listSceneEl) return;
-            const context = this.contextBySlug.get(slug);
-            if (!context) return;
-            this.cancelSingleProjectCompactCommit();
-            this.cancelCompactTopStabilization();
-            const token = Number.isFinite(options.token) ? options.token : this.transitionToken;
-            const shouldCompactLayout = this.shouldUseLayoutCompaction(options);
-
-            const delayMs = Math.max(0, Number(options.delayMs) || 0);
-            const applyCompact = () => {
-                if (this.currentOpenSlug !== slug || !this.isTokenActive(token)) return;
-                const shouldCompensate = options.compensate !== false && (options.origin || this.openSession?.origin) === 'list';
-                if (!shouldCompactLayout) {
-                    this.listSceneEl.classList.remove('pc-single-project-compact');
-                    this.listSceneEl.classList.add('pc-single-project-no-compact');
-                    document.body.classList.remove('pc-header-collapsed');
-                    return;
-                }
-                const anchorTop = shouldCompensate ? this.measureStableViewportTop(context.item) : 0;
-                this.cancelManagedScrollTween();
-                if (shouldCompensate) {
-                    // Cancel any in-flight smooth scroll before layout compaction.
-                    setScrollTopImmediate(getCurrentScrollY());
-                    const scrollYBefore = getCurrentScrollY();
-                    const removedAbove = this.measureCompactRemovedHeightAbove(context);
-                    if (removedAbove > 0.5) {
-                        setScrollTopImmediate(scrollYBefore - removedAbove);
+            return new Promise((resolve) => {
+                this.scrollTweenResolve = resolve;
+                const startTime = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        this.cancelManagedScrollTween();
+                        return;
                     }
-                }
-                this.listSceneEl.classList.add('pc-single-project-compact');
-                this.listSceneEl.classList.remove('pc-single-project-no-compact');
-                document.body.classList.add('pc-header-collapsed');
-                if (shouldCompensate) {
-                    this.stabilizeCompactAnchorTop(slug, token, anchorTop, {
-                        maxFrames: this.isTouchLikeDevice() ? 6 : 3,
-                        delayedCheckMs: this.isTouchLikeDevice() ? 180 : 0,
-                    });
-                }
-            };
 
-            if (delayMs === 0) {
-                applyCompact();
-                return;
-            }
+                    const t = Math.min(1, (now - startTime) / durationMs);
+                    const eased = 1 - Math.pow(1 - t, 3);
+                    setScrollTopImmediate(startY + delta * eased);
 
-            this.singleProjectCompactTimer = window.setTimeout(() => {
-                this.singleProjectCompactTimer = null;
-                applyCompact();
-            }, delayMs);
-        }
+                    if (t < 1) {
+                        this.scrollTweenRafId = requestAnimationFrame(step);
+                        return;
+                    }
 
-        measureCompactRemovedHeightAbove(context) {
-            if (!this.listSceneEl || !context?.item) return 0;
-            let removedHeight = 0;
-
-            // Include main header height since it will be collapsed
-            const mainHeader = document.getElementById('main-header');
-            if (mainHeader) {
-                removedHeight += this.getElementOuterHeight(mainHeader);
-            }
-
-            // Include main element's top padding since it will be removed
-            const mainEl = document.querySelector('main');
-            if (mainEl) {
-                const mainStyle = window.getComputedStyle(mainEl);
-                removedHeight += Number.parseFloat(mainStyle.paddingTop || '0') || 0;
-            }
-
-            const children = Array.from(this.listSceneEl.children);
-            for (const child of children) {
-                if (!(child instanceof HTMLElement)) continue;
-                if (child === context.item) break;
-
-                // Skip fixed-positioned elements (they don't affect document flow)
-                if (child.classList.contains('pc-fading-out')) continue;
-
-                if (child.classList.contains('spacer') || child.classList.contains('pc-project')) {
-                    removedHeight += this.getElementOuterHeight(child);
-                }
-            }
-            return removedHeight;
-        }
-
-        getElementOuterHeight(element) {
-            if (!element) return 0;
-            const rect = element.getBoundingClientRect();
-            const style = window.getComputedStyle(element);
-            const marginTop = Number.parseFloat(style.marginTop || '0') || 0;
-            const marginBottom = Number.parseFloat(style.marginBottom || '0') || 0;
-            return rect.height + marginTop + marginBottom;
+                    this.cancelManagedScrollTween();
+                };
+                this.scrollTweenRafId = requestAnimationFrame(step);
+            });
         }
 
         clearSingleProjectMode(options = {}) {
-            this.cancelSingleProjectCompactCommit();
-            this.cancelCompactTopStabilization();
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
                 this.listSceneEl.classList.remove('pc-single-project-compact');
-                this.listSceneEl.classList.remove('pc-single-project-no-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
             document.body.classList.remove('pc-header-collapsed');
@@ -530,7 +458,6 @@
 
             // Reset opacity overrides and fixed positioning so inactive projects restore
             this.contextBySlug.forEach((ctx) => {
-                ctx.item.classList.remove('pc-fading-out');
                 ctx.item.style.top = '';
                 ctx.item.style.left = '';
                 ctx.item.style.width = '';
@@ -554,31 +481,6 @@
             if (!options.keepSession) {
                 this.openSession = null;
             }
-        }
-
-        expandCompactModeForClose(ctx, options = {}) {
-            if (!this.listSceneEl || !ctx?.item) return;
-            const hadCompact = this.listSceneEl.classList.contains('pc-single-project-compact')
-                || document.body.classList.contains('pc-header-collapsed');
-            if (!hadCompact) return;
-
-            this.cancelCompactTopStabilization();
-            this.cancelManagedScrollTween();
-            setScrollTopImmediate(getCurrentScrollY());
-            const requestedAnchorTop = Number(options.anchorTop);
-            const anchorTop = Number.isFinite(requestedAnchorTop)
-                ? requestedAnchorTop
-                : this.measureContainerOriginRect(ctx).top;
-
-            this.listSceneEl.classList.remove('pc-single-project-compact');
-            document.body.classList.remove('pc-header-collapsed');
-
-            const afterTop = this.measureContainerOriginRect(ctx).top;
-            const delta = afterTop - anchorTop;
-            if (Math.abs(delta) > 0.5) {
-                setScrollTopImmediate(getCurrentScrollY() + delta);
-            }
-            bumpTransitionRectRefresh(260);
         }
 
         waitForCloseThumbnailReady(ctx, token, maxFrames = 6) {
@@ -640,6 +542,14 @@
             const sourceState = openOrigin === 'list' ? this.captureListSourceState(ctx) : null;
             const prefersInstant = isReducedMotion() || options.instant === true;
             const shouldScrollToProject = options.skipScroll !== true;
+            this.setPhase('open.prepare', token, { slug, origin: openOrigin, prefersInstant });
+            this.debugLog('open-source-state', {
+                slug,
+                sourceRect: this.debugRect(sourceState?.sourceRect || null),
+                sourceScrollY: sourceState?.sourceScrollY ?? null,
+                viewport: this.readViewportMetrics(),
+            });
+
             this.destroyVideosExcept(slug);
             this.destroyVideoInContext(ctx);
             const detailsHtmlPromise = this.fetchProjectDetailsHTML(slug, token);
@@ -650,10 +560,6 @@
             ctx.thumbnail.setScatterBackBiasOverride(null);
             ctx.thumbnail.setZPushOverride(null);
             ctx.thumbnail.setScatterDepthBoostOverride(null);
-            // Fix inactive projects BEFORE pc-open is added to prevent layout shift.
-            // When pc-open reveals the header, elements below would shift down.
-            // By fixing them first, they stay at their current viewport positions.
-            this.fixInactiveProjectsInPlace(slug);
             ctx.item.classList.add('pc-open');
             ctx.item.classList.remove('pc-content-visible');
             this.resetProjectVisualState(ctx);
@@ -685,15 +591,6 @@
                 this.syncStageAspectRatioFromHero(ctx);
             }
 
-            if (shouldScrollToProject) {
-                const projectTop = ctx.item.getBoundingClientRect().top + window.pageYOffset;
-                if (prefersInstant) {
-                    setScrollTopImmediate(projectTop);
-                } else {
-                    this.startManagedScrollTween(projectTop, 620, token);
-                }
-            }
-
             // For animated hero path, ensure a paint occurs at opacity: 1 before
             // triggering the CSS transition to opacity: 0. Without this, the reflow
             // caused by getBoundingClientRect() later would compute opacity: 0 before
@@ -703,14 +600,59 @@
                 if (!this.isTokenActive(token)) return;
             }
 
+            this.setPhase('open.detail-mode', token, { slug });
             this.setSingleProjectMode(slug, sourceState, {
                 origin: openOrigin,
                 token,
                 prefersInstant,
             });
 
+            let heroMorphStartRect = null;
+            if (hasHeroVideo && !prefersInstant) {
+                heroMorphStartRect = ctx.container.getBoundingClientRect();
+                this.promoteContainer(ctx);
+                this.setContainerRect(ctx.container, heroMorphStartRect);
+                this.debugLog('open-precompact-start-rect', {
+                    slug,
+                    startRect: this.debugRect(heroMorphStartRect),
+                    viewport: this.readViewportMetrics(),
+                });
+            }
+
+            await this.setCompactionState(slug, true, token, 'open-compact');
+            if (!this.isTokenActive(token)) {
+                if (heroMorphStartRect) {
+                    this.restoreContainer(ctx, false);
+                }
+                return;
+            }
+
+            const scrollOpenProjectIntoView = (durationMs) => {
+                if (!shouldScrollToProject) {
+                    return Promise.resolve();
+                }
+                const targetTop = getCurrentScrollY() + ctx.item.getBoundingClientRect().top;
+                this.debugLog('open-scroll-target', {
+                    slug,
+                    durationMs,
+                    targetTop: Number(targetTop.toFixed(2)),
+                    viewport: this.readViewportMetrics(),
+                });
+                if (prefersInstant || durationMs <= 0) {
+                    setScrollTopImmediate(targetTop);
+                    return Promise.resolve();
+                }
+                return this.startManagedScrollTween(targetTop, durationMs, token);
+            };
+
             if (!hasHeroVideo) {
-                await this.animateCoherence(ctx.thumbnail, 1, prefersInstant ? 0 : 320, token, { easing: 'inOut' });
+                this.setPhase('open.no-hero', token, { slug });
+                const noHeroDuration = prefersInstant ? 0 : 320;
+                const noHeroScrollPromise = scrollOpenProjectIntoView(noHeroDuration);
+                await Promise.all([
+                    this.animateCoherence(ctx.thumbnail, 1, noHeroDuration, token, { easing: 'inOut' }),
+                    noHeroScrollPromise,
+                ]);
                 if (!this.isTokenActive(token)) return;
 
                 requestAnimationFrame(() => {
@@ -722,19 +664,18 @@
                 ctx.thumbnail.resetTransitionState();
                 ctx.thumbnail.setRenderSuppressed(false);
                 this.setHeroSlotVisibility(ctx, false);
-                this.scheduleSingleProjectCompact(slug, {
-                    origin: openOrigin,
-                    delayMs: prefersInstant ? 0 : 450,
-                    token,
-                });
                 if (shouldUpdateUrl) {
                     this.syncOpenUrlState(slug, openOrigin, historyMode);
                 }
+                this.setPhase('open.complete', token, { slug, hasHeroVideo: false });
                 return;
             }
 
             if (prefersInstant) {
+                this.setPhase('open.hero-instant', token, { slug });
                 const heroVideo = ctx.heroSlot.querySelector('video');
+                await scrollOpenProjectIntoView(0);
+                if (!this.isTokenActive(token)) return;
                 ctx.item.classList.add('pc-hero-expanded');
                 this.setHeroSlotVisibility(ctx, true);
                 ctx.thumbnail.setCoherenceOverride(1);
@@ -744,11 +685,6 @@
                 ctx.closeButton.disabled = false;
                 this.currentOpenSlug = slug;
                 ctx.thumbnail.resetTransitionState();
-                this.scheduleSingleProjectCompact(slug, {
-                    origin: openOrigin,
-                    delayMs: 0,
-                    token,
-                });
                 if (shouldUpdateUrl) {
                     this.syncOpenUrlState(slug, openOrigin, historyMode);
                 }
@@ -763,17 +699,19 @@
                         })
                         .catch(() => {});
                 }
+                this.setPhase('open.complete', token, { slug, hasHeroVideo: true, instant: true });
                 return;
             }
 
+            this.setPhase('open.hero-morph', token, { slug });
             const heroVideo = ctx.heroSlot.querySelector('video');
             const heroVideoReadyPromise = heroVideo
                 ? this.prepareHeroVideoReady(heroVideo, ctx, token)
                 : Promise.resolve(false);
 
             const morphDuration = 640;
-            const startRect = ctx.container.getBoundingClientRect();
-            this.promoteContainer(ctx);
+            const openScrollPromise = scrollOpenProjectIntoView(morphDuration);
+            const startRect = heroMorphStartRect || ctx.container.getBoundingClientRect();
             this.setContainerRect(ctx.container, startRect);
             this.animateMainFlowShift(ctx, morphDuration, token, () => {
                 ctx.item.classList.add('pc-hero-expanded');
@@ -781,13 +719,19 @@
 
             const targetRect = ctx.heroSlot.getBoundingClientRect();
             const hasTarget = targetRect.width > 0 && targetRect.height > 0;
+            this.debugLog('open-morph-rects', {
+                slug,
+                startRect: this.debugRect(startRect),
+                targetRect: this.debugRect(targetRect),
+                viewport: this.readViewportMetrics(),
+            });
             const flattenPromise = this.animateCoherence(ctx.thumbnail, 1, morphDuration, token, { easing: 'inOut' });
             const rectPromise = hasTarget
                 ? this.animateRect(ctx.container, startRect, targetRect, morphDuration, token, {
                     getTargetRect: () => ctx.heroSlot.getBoundingClientRect(),
                 })
                 : Promise.resolve();
-            await Promise.all([flattenPromise, rectPromise]);
+            await Promise.all([flattenPromise, rectPromise, openScrollPromise]);
             if (!this.isTokenActive(token)) return;
 
             const videoIsReady = await heroVideoReadyPromise;
@@ -812,14 +756,10 @@
 
             ctx.closeButton.disabled = false;
             this.currentOpenSlug = slug;
-            this.scheduleSingleProjectCompact(slug, {
-                origin: openOrigin,
-                delayMs: prefersInstant ? 0 : 450,
-                token,
-            });
             if (shouldUpdateUrl) {
                 this.syncOpenUrlState(slug, openOrigin, historyMode);
             }
+            this.setPhase('open.complete', token, { slug, hasHeroVideo: true, instant: false });
         }
 
         async closeProject(slug, options = {}) {
@@ -838,6 +778,7 @@
 
             const token = this.beginTransition();
             const prefersInstant = isReducedMotion() || options.instant === true;
+            this.setPhase('close.prepare', token, { slug, prefersInstant });
             ctx.closeButton.disabled = true;
             const hadHeroVideo = ctx.item.classList.contains('pc-has-hero-video');
             const heroRect = hadHeroVideo
@@ -856,7 +797,8 @@
             }
 
             if (prefersInstant) {
-                this.expandCompactModeForClose(ctx, { anchorTop: heroRect.top });
+                await this.setCompactionState(slug, false, token, 'close-instant-expand');
+                if (!this.isTokenActive(token)) return;
                 this.restoreContainer(ctx, false);
                 ctx.container.classList.remove('thumb-hidden');
                 this.setHeroSlotVisibility(ctx, false);
@@ -876,9 +818,11 @@
                 if (shouldUpdateUrl) {
                     this.syncListUrlState(historyMode);
                 }
+                this.setPhase('close.complete', token, { slug, instant: true });
                 return;
             }
 
+            this.setPhase('close-prime-thumb', token, { slug });
             ctx.thumbnail.setCoherenceOverride(1);
             await this.animateCoherence(ctx.thumbnail, 1, 120, token);
             if (!this.isTokenActive(token)) {
@@ -905,8 +849,20 @@
             this.animateMainFlowShift(ctx, closeDuration, token, () => {
                 ctx.item.classList.remove('pc-hero-expanded');
             });
-            this.expandCompactModeForClose(ctx, { anchorTop: heroRect.top });
+            await this.setCompactionState(slug, false, token, 'close-expand');
+            if (!this.isTokenActive(token)) {
+                ctx.item.classList.remove('pc-closing');
+                this.clearPinnedCloseButton(ctx);
+                ctx.closeButton.disabled = false;
+                return;
+            }
             const targetRect = this.measureContainerOriginRect(ctx);
+            this.debugLog('close-morph-rects', {
+                slug,
+                heroRect: this.debugRect(heroRect),
+                targetRect: this.debugRect(targetRect),
+                viewport: this.readViewportMetrics(),
+            });
 
             this.promoteContainer(ctx);
             this.setContainerRect(ctx.container, heroRect);
@@ -951,10 +907,6 @@
             const otherThumbnails = [];
             this.contextBySlug.forEach((otherCtx, otherSlug) => {
                 if (otherSlug !== slug) {
-                    otherCtx.item.classList.remove('pc-fading-out');
-                    otherCtx.item.style.top = '';
-                    otherCtx.item.style.left = '';
-                    otherCtx.item.style.width = '';
                     if (otherCtx.thumbnail) {
                         otherCtx.thumbnail.setMotionFrozen(false);
                         otherCtx.thumbnail.setCoherenceOverride(inactiveExplodeCoherence);
@@ -1027,6 +979,7 @@
             if (shouldUpdateUrl) {
                 this.syncListUrlState(historyMode);
             }
+            this.setPhase('close.complete', token, { slug, instant: false });
         }
 
         handleCaptureClick(event) {
@@ -1087,9 +1040,11 @@
         beginTransition() {
             this.transitionToken += 1;
             this.abortPendingFetch();
-            this.cancelSingleProjectCompactCommit();
-            this.cancelCompactTopStabilization();
             this.cancelManagedScrollTween();
+            this.transitionStartTime = performance.now();
+            this.phaseStartTime = this.transitionStartTime;
+            this.transitionPhase = 'begin';
+            this.debugLog('transition-begin', { viewport: this.readViewportMetrics() });
             return this.transitionToken;
         }
 

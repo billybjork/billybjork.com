@@ -59,18 +59,6 @@
         pointer-events: none;
     }
 
-    .page-container.pc-single-project-no-compact .spacer,
-    .page-container.pc-single-project-no-compact .pc-project:not(.pc-open) {
-        visibility: hidden;
-    }
-
-    .pc-project.pc-fading-out {
-        position: fixed !important;
-        z-index: 15;
-        margin: 0 !important;
-        pointer-events: none;
-    }
-
     .page-container.pc-single-project-mode .pc-project.pc-open {
         opacity: 1;
     }
@@ -162,7 +150,6 @@
     }
 
     .page-container.pc-single-project-compact .pc-project.pc-open .pc-stage-toolbar,
-    .page-container.pc-single-project-no-compact .pc-project.pc-open .pc-stage-toolbar,
     .pc-project.pc-has-hero-video.pc-content-visible .pc-stage-toolbar {
         opacity: 1;
         pointer-events: auto;
@@ -230,7 +217,6 @@
     }
 
     .page-container.pc-single-project-compact .pc-project.pc-open .pc-close-project,
-    .page-container.pc-single-project-no-compact .pc-project.pc-open .pc-close-project,
     .pc-project.pc-has-hero-video.pc-content-visible .pc-close-project {
         opacity: 1;
         visibility: visible;

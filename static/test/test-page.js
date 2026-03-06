@@ -426,6 +426,37 @@
         activateNoWebGLFallback,
     } = thumbnailRendererRuntime;
 
+    function readTransitionDebugEnabled() {
+        const query = new URLSearchParams(window.location.search);
+        const queryValue = query.get('pc_transition_debug');
+        const normalizeFlag = (value) => {
+            if (value === null || value === undefined) return null;
+            const normalized = String(value).trim().toLowerCase();
+            if (!normalized) return null;
+            if (normalized === '0' || normalized === 'false' || normalized === 'off' || normalized === 'no') {
+                return false;
+            }
+            return true;
+        };
+
+        try {
+            const queryFlag = normalizeFlag(queryValue);
+            if (queryFlag !== null) {
+                if (queryFlag) {
+                    window.localStorage.setItem('pc_transition_debug', '1');
+                } else {
+                    window.localStorage.removeItem('pc_transition_debug');
+                }
+                return queryFlag;
+            }
+            return window.localStorage.getItem('pc_transition_debug') === '1';
+        } catch {
+            return normalizeFlag(queryValue) === true;
+        }
+    }
+
+    const transitionDebugEnabled = readTransitionDebugEnabled();
+
     const transitionRuntime = transitionManagerModule.create({
         addManagedEventListener,
         thumbnailBySlug,
@@ -437,6 +468,7 @@
         bumpTransitionRectRefresh,
         refreshRenderableThumbnails,
         isReducedMotion: () => prefersReducedMotion,
+        isDebugEnabled: () => transitionDebugEnabled,
     });
 
     const { ProjectTransitionManager } = transitionRuntime;
