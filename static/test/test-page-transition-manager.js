@@ -97,6 +97,7 @@
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
             document.body.classList.remove('pc-header-collapsed');
+            document.body.classList.remove('pc-header-prehidden');
             this.syncDetailModeClass(false);
             this.transitionInFlight = false;
         }
@@ -228,6 +229,8 @@
             this.listSceneEl.classList.add('pc-single-project-mode');
             this.listSceneEl.setAttribute('data-active-slug', slug);
             document.body.classList.remove('pc-header-collapsed');
+            // Prevent any header/nav flash when entering detail mode before compaction commits.
+            document.body.classList.add('pc-header-prehidden');
             this.syncDetailModeClass(true);
 
             const token = Number.isFinite(options.token) ? options.token : this.transitionToken;
@@ -331,6 +334,26 @@
             });
         }
 
+        waitForDuration(durationMs = 0, token = this.transitionToken) {
+            const totalMs = Math.max(0, Number(durationMs) || 0);
+            if (totalMs <= 0) return Promise.resolve();
+            return new Promise((resolve) => {
+                const startedAt = performance.now();
+                const step = (now) => {
+                    if (!this.isTokenActive(token)) {
+                        resolve();
+                        return;
+                    }
+                    if ((now - startedAt) >= totalMs) {
+                        resolve();
+                        return;
+                    }
+                    requestAnimationFrame(step);
+                };
+                requestAnimationFrame(step);
+            });
+        }
+
         async applyAnchoredLayoutMutation(slug, token, mutateLayout, options = {}) {
             const context = this.contextBySlug.get(slug);
             if (!context || typeof mutateLayout !== 'function') {
@@ -380,7 +403,23 @@
         async setCompactionState(slug, shouldCompact, token, reason) {
             if (!this.listSceneEl) return;
             const compactEnabled = this.listSceneEl.classList.contains('pc-single-project-compact');
-            if (compactEnabled === shouldCompact) return;
+            if (compactEnabled === shouldCompact) {
+                this.debugLog('compaction-skip', {
+                    slug,
+                    reason,
+                    shouldCompact,
+                    compactEnabled,
+                });
+                return;
+            }
+
+            this.debugLog('compaction-start', {
+                slug,
+                reason,
+                shouldCompact,
+                compactEnabled,
+                viewport: this.readViewportMetrics(),
+            });
 
             await this.applyAnchoredLayoutMutation(slug, token, () => {
                 this.listSceneEl.classList.toggle('pc-single-project-compact', shouldCompact);
@@ -389,8 +428,16 @@
                 reason,
                 maxFrames: shouldCompact ? 10 : 8,
             });
+            if (!this.isTokenActive(token)) return;
 
             bumpTransitionRectRefresh(320);
+            this.debugLog('compaction-complete', {
+                slug,
+                reason,
+                shouldCompact,
+                compactEnabled: this.listSceneEl.classList.contains('pc-single-project-compact'),
+                viewport: this.readViewportMetrics(),
+            });
         }
 
         cancelManagedScrollTween() {
@@ -450,6 +497,7 @@
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
             document.body.classList.remove('pc-header-collapsed');
+            document.body.classList.remove('pc-header-prehidden');
             this.syncDetailModeClass(false);
             const keepOpacityOverrides = options.keepOpacityOverrides === true;
             const keepScatterBackBiasOverrides = options.keepScatterBackBiasOverrides === true;
@@ -619,14 +667,6 @@
                 });
             }
 
-            await this.setCompactionState(slug, true, token, 'open-compact');
-            if (!this.isTokenActive(token)) {
-                if (heroMorphStartRect) {
-                    this.restoreContainer(ctx, false);
-                }
-                return;
-            }
-
             const scrollOpenProjectIntoView = (durationMs) => {
                 if (!shouldScrollToProject) {
                     return Promise.resolve();
@@ -645,13 +685,32 @@
                 return this.startManagedScrollTween(targetTop, durationMs, token);
             };
 
+            const compactionLeadInNoHeroMs = prefersInstant ? 0 : 170;
+            const compactionLeadInHeroMs = prefersInstant ? 0 : 220;
+            const commitOpenCompaction = (leadInMs, reason) => {
+                const delayMs = Math.max(0, Number(leadInMs) || 0);
+                this.debugLog('open-compaction-queued', {
+                    slug,
+                    reason,
+                    leadInMs: delayMs,
+                });
+                // Keep one continuous visual motion: start fade/morph first, then
+                // compact once the transition is already in flight.
+                return this.waitForDuration(delayMs, token).then(async () => {
+                    if (!this.isTokenActive(token)) return;
+                    await this.setCompactionState(slug, true, token, reason);
+                });
+            };
+
             if (!hasHeroVideo) {
                 this.setPhase('open.no-hero', token, { slug });
                 const noHeroDuration = prefersInstant ? 0 : 320;
                 const noHeroScrollPromise = scrollOpenProjectIntoView(noHeroDuration);
+                const noHeroCompactionPromise = commitOpenCompaction(compactionLeadInNoHeroMs, 'open-compact-no-hero');
                 await Promise.all([
                     this.animateCoherence(ctx.thumbnail, 1, noHeroDuration, token, { easing: 'inOut' }),
                     noHeroScrollPromise,
+                    noHeroCompactionPromise,
                 ]);
                 if (!this.isTokenActive(token)) return;
 
@@ -674,7 +733,10 @@
             if (prefersInstant) {
                 this.setPhase('open.hero-instant', token, { slug });
                 const heroVideo = ctx.heroSlot.querySelector('video');
-                await scrollOpenProjectIntoView(0);
+                await Promise.all([
+                    scrollOpenProjectIntoView(0),
+                    commitOpenCompaction(0, 'open-compact-hero-instant'),
+                ]);
                 if (!this.isTokenActive(token)) return;
                 ctx.item.classList.add('pc-hero-expanded');
                 this.setHeroSlotVisibility(ctx, true);
@@ -711,6 +773,7 @@
 
             const morphDuration = 640;
             const openScrollPromise = scrollOpenProjectIntoView(morphDuration);
+            const openCompactionPromise = commitOpenCompaction(compactionLeadInHeroMs, 'open-compact-hero-morph');
             const startRect = heroMorphStartRect || ctx.container.getBoundingClientRect();
             this.setContainerRect(ctx.container, startRect);
             this.animateMainFlowShift(ctx, morphDuration, token, () => {
@@ -731,7 +794,7 @@
                     getTargetRect: () => ctx.heroSlot.getBoundingClientRect(),
                 })
                 : Promise.resolve();
-            await Promise.all([flattenPromise, rectPromise, openScrollPromise]);
+            await Promise.all([flattenPromise, rectPromise, openScrollPromise, openCompactionPromise]);
             if (!this.isTokenActive(token)) return;
 
             const videoIsReady = await heroVideoReadyPromise;

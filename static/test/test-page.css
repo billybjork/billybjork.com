@@ -19,6 +19,15 @@
         transition: opacity 0.28s ease, transform 0.28s ease, visibility 0s linear 0.28s;
     }
 
+    /* Immediate hide used during transition handoff before compact mode commits. */
+    body.pc-test-detail-mode.pc-header-prehidden #main-header {
+        opacity: 0;
+        transform: translateY(-10px);
+        pointer-events: none;
+        visibility: hidden;
+        transition: none;
+    }
+
     /* When compact mode is active, collapse the header from layout entirely */
     body.pc-test-detail-mode.pc-header-collapsed #main-header {
         position: absolute;
