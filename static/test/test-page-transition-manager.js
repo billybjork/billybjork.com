@@ -93,6 +93,7 @@
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
                 this.listSceneEl.classList.remove('pc-single-project-compact');
+                this.listSceneEl.classList.remove('pc-single-project-no-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
             this.syncDetailModeClass(false);
@@ -171,6 +172,7 @@
             this.cancelSingleProjectCompactCommit();
 
             this.listSceneEl.classList.remove('pc-single-project-compact');
+            this.listSceneEl.classList.remove('pc-single-project-no-compact');
             this.listSceneEl.classList.add('pc-single-project-mode');
             this.listSceneEl.setAttribute('data-active-slug', slug);
             this.syncDetailModeClass(true);
@@ -320,6 +322,17 @@
             return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         }
 
+        shouldUseLayoutCompaction(options = {}) {
+            // On touch devices in list-origin opens, keep layout stable and avoid
+            // compaction/removal from flow. This removes iOS-specific viewport and
+            // async scroll compensation drift at compact-commit time.
+            const origin = options.origin || this.openSession?.origin || 'list';
+            if (origin === 'list' && this.isTouchLikeDevice()) {
+                return false;
+            }
+            return true;
+        }
+
         stabilizeCompactAnchorTop(slug, token, anchorTop, options = {}) {
             if (!Number.isFinite(anchorTop)) return;
             const maxFrames = Math.max(1, Number(options.maxFrames) || 1);
@@ -413,11 +426,18 @@
             this.cancelSingleProjectCompactCommit();
             this.cancelCompactTopStabilization();
             const token = Number.isFinite(options.token) ? options.token : this.transitionToken;
+            const shouldCompactLayout = this.shouldUseLayoutCompaction(options);
 
             const delayMs = Math.max(0, Number(options.delayMs) || 0);
             const applyCompact = () => {
                 if (this.currentOpenSlug !== slug || !this.isTokenActive(token)) return;
                 const shouldCompensate = options.compensate !== false && (options.origin || this.openSession?.origin) === 'list';
+                if (!shouldCompactLayout) {
+                    this.listSceneEl.classList.remove('pc-single-project-compact');
+                    this.listSceneEl.classList.add('pc-single-project-no-compact');
+                    document.body.classList.remove('pc-header-collapsed');
+                    return;
+                }
                 const anchorTop = shouldCompensate ? this.measureStableViewportTop(context.item) : 0;
                 this.cancelManagedScrollTween();
                 if (shouldCompensate) {
@@ -430,6 +450,7 @@
                     }
                 }
                 this.listSceneEl.classList.add('pc-single-project-compact');
+                this.listSceneEl.classList.remove('pc-single-project-no-compact');
                 document.body.classList.add('pc-header-collapsed');
                 if (shouldCompensate) {
                     this.stabilizeCompactAnchorTop(slug, token, anchorTop, {
@@ -497,6 +518,7 @@
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
                 this.listSceneEl.classList.remove('pc-single-project-compact');
+                this.listSceneEl.classList.remove('pc-single-project-no-compact');
                 this.listSceneEl.removeAttribute('data-active-slug');
             }
             document.body.classList.remove('pc-header-collapsed');
