@@ -37,6 +37,7 @@
         inset: 0;
         width: 100vw;
         height: 100vh;
+        height: 100svh;
         pointer-events: none;
         z-index: 20;
     }
@@ -80,6 +81,7 @@
 
     .spacer {
         height: 100vh;
+        height: 100svh;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -256,6 +258,7 @@
 
     .pc-project.pc-hero-expanded .pc-stage {
         --pc-hero-max-height: calc(100vh - clamp(120px, 18vh, 180px) - var(--pc-stage-toolbar-height));
+        --pc-hero-max-height: calc(100svh - clamp(120px, 18vh, 180px) - var(--pc-stage-toolbar-height));
         width: min(100%, calc(var(--pc-hero-max-height) * var(--pc-stage-aspect-ratio, 1.7777777778)));
         max-width: none;
     }

@@ -22,6 +22,8 @@
             this.currentOpenSlug = null;
             this.openSession = null;
             this.singleProjectCompactTimer = null;
+            this.compactStabilizeRafId = null;
+            this.compactStabilizeTimeoutId = null;
             this.scrollTweenRafId = null;
             this.scrollTweenTarget = null;
             this.transitionToken = 0;
@@ -86,6 +88,7 @@
             this.currentOpenSlug = null;
             this.openSession = null;
             this.cancelSingleProjectCompactCommit();
+            this.cancelCompactTopStabilization();
             this.cancelManagedScrollTween();
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
@@ -291,6 +294,73 @@
             this.singleProjectCompactTimer = null;
         }
 
+        cancelCompactTopStabilization() {
+            if (this.compactStabilizeRafId !== null) {
+                cancelAnimationFrame(this.compactStabilizeRafId);
+                this.compactStabilizeRafId = null;
+            }
+            if (this.compactStabilizeTimeoutId !== null) {
+                clearTimeout(this.compactStabilizeTimeoutId);
+                this.compactStabilizeTimeoutId = null;
+            }
+        }
+
+        getVisualViewportOffsetTop() {
+            const offsetTop = window.visualViewport?.offsetTop;
+            return Number.isFinite(offsetTop) ? offsetTop : 0;
+        }
+
+        measureStableViewportTop(element) {
+            if (!element) return 0;
+            const rect = element.getBoundingClientRect();
+            return rect.top - this.getVisualViewportOffsetTop();
+        }
+
+        isTouchLikeDevice() {
+            return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        }
+
+        stabilizeCompactAnchorTop(slug, token, anchorTop, options = {}) {
+            if (!Number.isFinite(anchorTop)) return;
+            const maxFrames = Math.max(1, Number(options.maxFrames) || 1);
+            const delayedCheckMs = Math.max(0, Number(options.delayedCheckMs) || 0);
+            let frameCount = 0;
+
+            const applyCorrection = () => {
+                if (!this.isTokenActive(token) || this.currentOpenSlug !== slug) {
+                    return false;
+                }
+                const context = this.contextBySlug.get(slug);
+                if (!context) return false;
+                const currentTop = this.measureStableViewportTop(context.item);
+                const delta = currentTop - anchorTop;
+                if (Math.abs(delta) > 0.5) {
+                    setScrollTopImmediate(getCurrentScrollY() + delta);
+                    return true;
+                }
+                return false;
+            };
+
+            const step = () => {
+                const didAdjust = applyCorrection();
+                frameCount += 1;
+                if (didAdjust && frameCount < maxFrames) {
+                    this.compactStabilizeRafId = requestAnimationFrame(step);
+                    return;
+                }
+                this.compactStabilizeRafId = null;
+            };
+
+            this.cancelCompactTopStabilization();
+            this.compactStabilizeRafId = requestAnimationFrame(step);
+            if (delayedCheckMs > 0) {
+                this.compactStabilizeTimeoutId = window.setTimeout(() => {
+                    this.compactStabilizeTimeoutId = null;
+                    applyCorrection();
+                }, delayedCheckMs);
+            }
+        }
+
         cancelManagedScrollTween() {
             if (this.scrollTweenRafId === null) return;
             cancelAnimationFrame(this.scrollTweenRafId);
@@ -341,11 +411,14 @@
             const context = this.contextBySlug.get(slug);
             if (!context) return;
             this.cancelSingleProjectCompactCommit();
+            this.cancelCompactTopStabilization();
+            const token = Number.isFinite(options.token) ? options.token : this.transitionToken;
 
             const delayMs = Math.max(0, Number(options.delayMs) || 0);
             const applyCompact = () => {
-                if (this.currentOpenSlug !== slug) return;
+                if (this.currentOpenSlug !== slug || !this.isTokenActive(token)) return;
                 const shouldCompensate = options.compensate !== false && (options.origin || this.openSession?.origin) === 'list';
+                const anchorTop = shouldCompensate ? this.measureStableViewportTop(context.item) : 0;
                 this.cancelManagedScrollTween();
                 if (shouldCompensate) {
                     // Cancel any in-flight smooth scroll before layout compaction.
@@ -356,17 +429,13 @@
                         setScrollTopImmediate(scrollYBefore - removedAbove);
                     }
                 }
-                const beforeTop = shouldCompensate ? context.item.getBoundingClientRect().top : 0;
                 this.listSceneEl.classList.add('pc-single-project-compact');
                 document.body.classList.add('pc-header-collapsed');
                 if (shouldCompensate) {
-                    const afterTop = context.item.getBoundingClientRect().top;
-                    const delta = afterTop - beforeTop;
-                    // Large deltas here are unstable with collapsed layout; keep only tiny corrective nudge.
-                    const clampedDelta = Math.abs(delta) <= 24 ? delta : 0;
-                    if (Math.abs(clampedDelta) > 0.5) {
-                        setScrollTopImmediate(getCurrentScrollY() + clampedDelta);
-                    }
+                    this.stabilizeCompactAnchorTop(slug, token, anchorTop, {
+                        maxFrames: this.isTouchLikeDevice() ? 6 : 3,
+                        delayedCheckMs: this.isTouchLikeDevice() ? 180 : 0,
+                    });
                 }
             };
 
@@ -424,6 +493,7 @@
 
         clearSingleProjectMode(options = {}) {
             this.cancelSingleProjectCompactCommit();
+            this.cancelCompactTopStabilization();
             if (this.listSceneEl) {
                 this.listSceneEl.classList.remove('pc-single-project-mode');
                 this.listSceneEl.classList.remove('pc-single-project-compact');
@@ -470,6 +540,7 @@
                 || document.body.classList.contains('pc-header-collapsed');
             if (!hadCompact) return;
 
+            this.cancelCompactTopStabilization();
             this.cancelManagedScrollTween();
             setScrollTopImmediate(getCurrentScrollY());
             const requestedAnchorTop = Number(options.anchorTop);
@@ -632,6 +703,7 @@
                 this.scheduleSingleProjectCompact(slug, {
                     origin: openOrigin,
                     delayMs: prefersInstant ? 0 : 450,
+                    token,
                 });
                 if (shouldUpdateUrl) {
                     this.syncOpenUrlState(slug, openOrigin, historyMode);
@@ -653,6 +725,7 @@
                 this.scheduleSingleProjectCompact(slug, {
                     origin: openOrigin,
                     delayMs: 0,
+                    token,
                 });
                 if (shouldUpdateUrl) {
                     this.syncOpenUrlState(slug, openOrigin, historyMode);
@@ -720,6 +793,7 @@
             this.scheduleSingleProjectCompact(slug, {
                 origin: openOrigin,
                 delayMs: prefersInstant ? 0 : 450,
+                token,
             });
             if (shouldUpdateUrl) {
                 this.syncOpenUrlState(slug, openOrigin, historyMode);
@@ -991,6 +1065,8 @@
         beginTransition() {
             this.transitionToken += 1;
             this.abortPendingFetch();
+            this.cancelSingleProjectCompactCommit();
+            this.cancelCompactTopStabilization();
             this.cancelManagedScrollTween();
             return this.transitionToken;
         }
