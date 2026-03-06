@@ -314,6 +314,10 @@
             return rect.top - (Number.isFinite(offsetTop) ? offsetTop : 0);
         }
 
+        isTouchLikeDevice() {
+            return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        }
+
         waitForAnimationFrames(frameCount = 1, token = this.transitionToken) {
             const steps = Math.max(1, Number(frameCount) || 1);
             return new Promise((resolve) => {
@@ -436,6 +440,62 @@
                 reason,
                 shouldCompact,
                 compactEnabled: this.listSceneEl.classList.contains('pc-single-project-compact'),
+                viewport: this.readViewportMetrics(),
+            });
+        }
+
+        async settleProjectTop(slug, token, desiredTop = 0, options = {}) {
+            const ctx = this.contextBySlug.get(slug);
+            if (!ctx?.item) return;
+            const maxFrames = Math.max(1, Number(options.maxFrames) || 4);
+            const settleReason = options.reason || 'settle-project-top';
+            const corrections = [];
+            const startTop = this.readStableViewportTop(ctx.item);
+            const startScrollY = getCurrentScrollY();
+
+            for (let frame = 0; frame < maxFrames; frame += 1) {
+                await this.waitForAnimationFrames(1, token);
+                if (!this.isTokenActive(token)) return;
+                const currentTop = this.readStableViewportTop(ctx.item);
+                const delta = currentTop - desiredTop;
+                if (Math.abs(delta) <= 0.5) {
+                    if (frame >= 1) break;
+                    continue;
+                }
+                const nextScroll = getCurrentScrollY() + delta;
+                setScrollTopImmediate(nextScroll);
+                corrections.push({
+                    frame,
+                    delta: Number(delta.toFixed(3)),
+                    nextScrollY: Number(nextScroll.toFixed(2)),
+                });
+            }
+
+            if (this.isTouchLikeDevice()) {
+                await this.waitForDuration(120, token);
+                if (!this.isTokenActive(token)) return;
+                const lateTop = this.readStableViewportTop(ctx.item);
+                const lateDelta = lateTop - desiredTop;
+                if (Math.abs(lateDelta) > 0.5) {
+                    const nextScroll = getCurrentScrollY() + lateDelta;
+                    setScrollTopImmediate(nextScroll);
+                    corrections.push({
+                        frame: 'late',
+                        delta: Number(lateDelta.toFixed(3)),
+                        nextScrollY: Number(nextScroll.toFixed(2)),
+                    });
+                }
+            }
+
+            this.debugLog('open-top-settle', {
+                slug,
+                reason: settleReason,
+                desiredTop: Number(desiredTop.toFixed(3)),
+                startTop: Number(startTop.toFixed(3)),
+                endTop: Number(this.readStableViewportTop(ctx.item).toFixed(3)),
+                startScrollY: Number(startScrollY.toFixed(2)),
+                endScrollY: Number(getCurrentScrollY().toFixed(2)),
+                corrections,
                 viewport: this.readViewportMetrics(),
             });
         }
@@ -590,6 +650,8 @@
             const sourceState = openOrigin === 'list' ? this.captureListSourceState(ctx) : null;
             const prefersInstant = isReducedMotion() || options.instant === true;
             const shouldScrollToProject = options.skipScroll !== true;
+            const shouldSettleOpenTop = shouldScrollToProject && openOrigin === 'list';
+            const serializeCompactionAfterScroll = shouldSettleOpenTop && this.isTouchLikeDevice() && !prefersInstant;
             this.setPhase('open.prepare', token, { slug, origin: openOrigin, prefersInstant });
             this.debugLog('open-source-state', {
                 slug,
@@ -706,13 +768,22 @@
                 this.setPhase('open.no-hero', token, { slug });
                 const noHeroDuration = prefersInstant ? 0 : 320;
                 const noHeroScrollPromise = scrollOpenProjectIntoView(noHeroDuration);
-                const noHeroCompactionPromise = commitOpenCompaction(compactionLeadInNoHeroMs, 'open-compact-no-hero');
+                const noHeroCompactionPromise = serializeCompactionAfterScroll
+                    ? noHeroScrollPromise.then(() => {
+                        if (!this.isTokenActive(token)) return;
+                        return commitOpenCompaction(0, 'open-compact-no-hero-after-scroll');
+                    })
+                    : commitOpenCompaction(compactionLeadInNoHeroMs, 'open-compact-no-hero');
                 await Promise.all([
                     this.animateCoherence(ctx.thumbnail, 1, noHeroDuration, token, { easing: 'inOut' }),
                     noHeroScrollPromise,
                     noHeroCompactionPromise,
                 ]);
                 if (!this.isTokenActive(token)) return;
+                if (shouldSettleOpenTop) {
+                    await this.settleProjectTop(slug, token, 0, { reason: 'open-no-hero-final' });
+                    if (!this.isTokenActive(token)) return;
+                }
 
                 requestAnimationFrame(() => {
                     if (!this.isTokenActive(token)) return;
@@ -738,6 +809,10 @@
                     commitOpenCompaction(0, 'open-compact-hero-instant'),
                 ]);
                 if (!this.isTokenActive(token)) return;
+                if (shouldSettleOpenTop) {
+                    await this.settleProjectTop(slug, token, 0, { reason: 'open-hero-instant-final' });
+                    if (!this.isTokenActive(token)) return;
+                }
                 ctx.item.classList.add('pc-hero-expanded');
                 this.setHeroSlotVisibility(ctx, true);
                 ctx.thumbnail.setCoherenceOverride(1);
@@ -773,7 +848,12 @@
 
             const morphDuration = 640;
             const openScrollPromise = scrollOpenProjectIntoView(morphDuration);
-            const openCompactionPromise = commitOpenCompaction(compactionLeadInHeroMs, 'open-compact-hero-morph');
+            const openCompactionPromise = serializeCompactionAfterScroll
+                ? openScrollPromise.then(() => {
+                    if (!this.isTokenActive(token)) return;
+                    return commitOpenCompaction(0, 'open-compact-hero-morph-after-scroll');
+                })
+                : commitOpenCompaction(compactionLeadInHeroMs, 'open-compact-hero-morph');
             const startRect = heroMorphStartRect || ctx.container.getBoundingClientRect();
             this.setContainerRect(ctx.container, startRect);
             this.animateMainFlowShift(ctx, morphDuration, token, () => {
@@ -796,6 +876,10 @@
                 : Promise.resolve();
             await Promise.all([flattenPromise, rectPromise, openScrollPromise, openCompactionPromise]);
             if (!this.isTokenActive(token)) return;
+            if (shouldSettleOpenTop) {
+                await this.settleProjectTop(slug, token, 0, { reason: 'open-hero-final' });
+                if (!this.isTokenActive(token)) return;
+            }
 
             const videoIsReady = await heroVideoReadyPromise;
 
