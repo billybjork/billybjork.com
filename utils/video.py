@@ -144,6 +144,29 @@ def _report_progress(progress_callback: ProgressCallback | None, stage: str, pro
         progress_callback(stage, progress)
 
 
+def _has_audio_stream(video_path: str) -> bool:
+    """Return whether the input has at least one audio stream."""
+    cmd = [
+        'ffprobe',
+        '-v', 'error',
+        '-select_streams', 'a:0',
+        '-show_entries', 'stream=index',
+        '-of', 'json',
+        video_path,
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return False
+
+    try:
+        data = json.loads(result.stdout or '{}')
+    except json.JSONDecodeError:
+        return False
+
+    return bool(data.get('streams'))
+
+
 def _upload_local_file(
     s3_client,
     local_path: str | Path,
@@ -263,7 +286,11 @@ def generate_hls(
     info = get_video_info(video_path)
     source_width = info['width']
     source_height = info['height']
+    source_fps = max(float(info.get('fps') or 0), 1.0)
+    has_audio = _has_audio_stream(video_path)
     resolutions = _build_hls_resolutions(source_width, source_height)
+    segment_duration = 6
+    gop_size = max(24, int(round(source_fps * segment_duration)))
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -277,14 +304,28 @@ def generate_hls(
     filter_complex = []
     maps = []
     stream_maps = []
+    stream_options = []
+    audio_options = ['-c:a', 'aac', '-b:a', '128k'] if has_audio else []
 
     for i, (width, height, bitrate) in enumerate(resolutions):
         # Explicit per-rendition dimensions keep the ladder aspect-stable across ABR switches.
         filter_complex.append(
             f"[0:v]scale={width}:{height}:flags=lanczos,setsar=1[v{i}]"
         )
-        maps.extend(['-map', f'[v{i}]', '-map', '0:a?'])
-        stream_maps.append(f'v:{i},a:{i}')
+        maps.extend(['-map', f'[v{i}]'])
+        if has_audio:
+            maps.extend(['-map', '0:a:0'])
+            stream_maps.append(f'v:{i},a:{i}')
+        else:
+            stream_maps.append(f'v:{i}')
+
+        maxrate = int(round(bitrate * 1.2))
+        bufsize = maxrate * 2
+        stream_options.extend([
+            f'-b:v:{i}', f'{bitrate}k',
+            f'-maxrate:v:{i}', f'{maxrate}k',
+            f'-bufsize:v:{i}', f'{bufsize}k',
+        ])
 
     cmd = [
         'ffmpeg',
@@ -295,11 +336,18 @@ def generate_hls(
         '-c:v', 'libx264',
         '-preset', 'slow',
         '-crf', '23',
-        '-c:a', 'aac',
-        '-b:a', '128k',
+        '-pix_fmt', 'yuv420p',
+        '-g', str(gop_size),
+        '-keyint_min', str(gop_size),
+        '-sc_threshold', '0',
+        '-force_key_frames', f'expr:gte(t,n_forced*{segment_duration})',
+        *stream_options,
+        *audio_options,
         '-f', 'hls',
-        '-hls_time', '6',
+        '-hls_time', str(segment_duration),
         '-hls_list_size', '0',
+        '-hls_flags', 'independent_segments',
+        '-hls_playlist_type', 'vod',
         '-hls_segment_filename', os.path.join(output_dir, 'seg_%v_%03d.ts'),
         '-master_pl_name', 'master.m3u8',
         '-var_stream_map', ' '.join(stream_maps),
