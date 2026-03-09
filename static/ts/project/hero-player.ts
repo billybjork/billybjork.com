@@ -1,11 +1,10 @@
 import {
-  DEFAULT_HLS_CONFIG,
-  canPlayNativeHls,
+  attachHlsPlayback,
   destroyHlsInstance,
   loadHlsScript,
+  resetVideoElementSource,
 } from '../core/hls';
 
-const MOBILE_BREAKPOINT = 768;
 const HLS_LEVEL_ASPECT_DRIFT_TOLERANCE = 0.0015;
 
 const hlsSetupInFlight = new WeakMap<HTMLVideoElement, Promise<void>>();
@@ -83,27 +82,6 @@ function tryAutoplay(videoElement: HTMLVideoElement): void {
 function ensureNativeVideoControls(videoElement: HTMLVideoElement): void {
   videoElement.controls = true;
   videoElement.setAttribute('controls', '');
-}
-
-function initializeOnMetadata(
-  videoElement: HTMLVideoElement,
-  onReady: () => void,
-  assignSource: () => void
-): void {
-  let handled = false;
-  const handleReady = () => {
-    if (handled) return;
-    handled = true;
-    videoElement.removeEventListener('loadedmetadata', handleReady);
-    onReady();
-  };
-
-  videoElement.addEventListener('loadedmetadata', handleReady, { once: true });
-  assignSource();
-
-  if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
-    handleReady();
-  }
 }
 
 interface HlsLevelSelection {
@@ -192,12 +170,6 @@ function applyStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): void {
   }
 
   hls.startLevel = stableLevel;
-
-  if (window.innerWidth <= MOBILE_BREAKPOINT) {
-    hls.loadLevel = stableLevel;
-    hls.nextLevel = stableLevel;
-    hls.currentLevel = stableLevel;
-  }
 }
 
 export function preloadHlsScript(): Promise<void> {
@@ -224,6 +196,7 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
   const setupPromise = new Promise<void>((resolve, reject) => {
     let settled = false;
     let cancelled = false;
+    const abortController = new AbortController();
     const resolveOnce = () => {
       if (settled) return;
       settled = true;
@@ -236,7 +209,9 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
     };
 
     const cancelSetup = () => {
+      if (cancelled) return;
       cancelled = true;
+      abortController.abort();
       resolveOnce();
     };
     hlsSetupCancel.set(videoElement, cancelSetup);
@@ -275,102 +250,22 @@ export function setupHeroVideoPlayer(videoElement: HTMLVideoElement, autoplay: b
       resolveOnce();
     };
 
-    const canPlayNative = canPlayNativeHls(videoElement);
-
-    const initializeHls = () => {
-      if (!window.Hls || !Hls.isSupported()) {
-        if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-          return;
-        }
-        console.error('HLS is not supported in this browser');
-        rejectOnce('HLS is not supported');
-        return;
-      }
-
-      if (videoElement.hlsInstance) {
-        console.warn('HLS instance already exists for this video element. Destroying existing instance.');
-        destroyHlsInstance(videoElement);
-      }
-
-      const hls = new Hls(DEFAULT_HLS_CONFIG);
-      videoElement.hlsInstance = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(videoElement);
-
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          applyStableHlsLevel(hls, videoElement);
-          initializeVideo();
-        });
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        const errorData = data as { fatal?: boolean; type?: string; details?: string };
-        if (errorData.fatal) {
-          switch (errorData.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.error('Fatal network error encountered, trying to recover');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.error('Fatal media error encountered, trying to recover');
-              hls.recoverMediaError();
-              break;
-            default:
-              console.error('Fatal error encountered, destroying HLS instance:', data);
-              hls.destroy();
-              videoElement.hlsInstance = null;
-              rejectOnce(data);
-              break;
-          }
-        } else {
-          if (errorData.details === 'bufferAppendError') {
-            console.warn('HLS.js bufferAppendError encountered and ignored:', data);
-            hls.recoverMediaError();
-          } else {
-            console.warn('HLS.js non-fatal error:', data);
-          }
-        }
-      });
-    };
-
-    if (window.Hls && Hls.isSupported()) {
-      initializeHls();
-      return;
-    }
-
-    loadHlsScript()
+    void attachHlsPlayback({
+      videoElement,
+      sourceUrl: streamUrl,
+      signal: abortController.signal,
+      onManifestParsed: hls => {
+        applyStableHlsLevel(hls, videoElement);
+      },
+    })
       .then(() => {
-        if (Hls.isSupported()) {
-          initializeHls();
-        } else if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
-        } else {
-          console.error('HLS is not supported in this browser');
-          rejectOnce('HLS is not supported');
-        }
+        initializeVideo();
       })
       .catch(err => {
-        if (canPlayNative) {
-          initializeOnMetadata(videoElement, initializeVideo, () => {
-            videoElement.src = streamUrl;
-          });
-          if (autoplay) {
-            tryAutoplay(videoElement);
-          }
+        if (cancelled || (err instanceof Error && err.name === 'AbortError')) {
+          resolveOnce();
           return;
         }
-        console.error('Failed to load HLS.js:', err);
         rejectOnce(err);
       });
   });
@@ -399,11 +294,11 @@ export function destroyHeroVideoPlayer(videoElement: HTMLVideoElement): void {
   }
 
   destroyHlsInstance(videoElement);
+  const currentSrc = videoElement.currentSrc || videoElement.src;
+  resetVideoElementSource(videoElement);
   delete videoElement.dataset.loaded;
-  if (videoElement.src && videoElement.src.startsWith('blob:')) {
-    const blobUrl = videoElement.src;
-    URL.revokeObjectURL(blobUrl);
-    videoElement.src = '';
+  if (currentSrc.startsWith('blob:')) {
+    URL.revokeObjectURL(currentSrc);
   }
 }
 
