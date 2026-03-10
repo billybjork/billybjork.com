@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -18,6 +19,8 @@ DEFAULT_TEST_SPRITE_SLUG_MAP = [
     ("surf", "surf"),
 ]
 TEST_PROJECTS_FILE = CONTENT_DIR / "test_projects.json"
+TEST_RGBD_SPRITES_DIR = Path(__file__).resolve().parent.parent / "static" / "test" / "rgbd-sprites"
+DEFAULT_TEST_RESOLUTION = "640x360"
 
 router = APIRouter()
 
@@ -60,6 +63,51 @@ def _load_test_project_entries() -> list[tuple[str, str]]:
     return list(DEFAULT_TEST_SPRITE_SLUG_MAP)
 
 
+def _load_rgbd_sprite_metadata(sprite_id: str) -> dict:
+    """Load RGBD sprite metadata for a test project, if available."""
+    metadata_path = TEST_RGBD_SPRITES_DIR / sprite_id / "metadata.json"
+    if not metadata_path.exists():
+        return {}
+
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as file_obj:
+            metadata = json.load(file_obj)
+    except (OSError, json.JSONDecodeError) as err:
+        logger.warning("Failed to read sprite metadata for %s: %s", sprite_id, err)
+        return {}
+
+    resolutions = metadata.get("resolutions")
+    if not isinstance(resolutions, dict) or not resolutions:
+        return {}
+
+    resolution = resolutions.get(
+        DEFAULT_TEST_RESOLUTION if DEFAULT_TEST_RESOLUTION in resolutions else next(iter(resolutions))
+    )
+    if not isinstance(resolution, dict):
+        return {}
+
+    frame_width = resolution.get("frame_width")
+    frame_height = resolution.get("frame_height")
+    aspect_ratio = None
+    if isinstance(frame_width, (int, float)) and isinstance(frame_height, (int, float)) and frame_height:
+        aspect_ratio = frame_width / frame_height
+
+    rgb_file = resolution.get("rgb_file")
+    sprite_sheet_url = None
+    if isinstance(rgb_file, str) and rgb_file.strip():
+        sprite_sheet_url = f"/static/test/rgbd-sprites/{sprite_id}/{rgb_file.strip()}"
+
+    return {
+        "frames": metadata.get("frames"),
+        "columns": metadata.get("columns"),
+        "rows": metadata.get("rows"),
+        "frame_width": frame_width,
+        "frame_height": frame_height,
+        "sprite_sheet_url": sprite_sheet_url,
+        "aspect_ratio": aspect_ratio,
+    }
+
+
 def _load_test_projects() -> list[dict]:
     """Load projects that currently have RGBD sprite assets for /test."""
     projects = []
@@ -68,6 +116,11 @@ def _load_test_projects() -> list[dict]:
         if not project_data:
             continue
         project = ProjectInfo.from_dict(project_data)
+        sprite_metadata = _load_rgbd_sprite_metadata(sprite_id)
+        video_aspect_ratio = None
+        if project.video_width and project.video_height:
+            video_aspect_ratio = project.video_width / project.video_height
+
         projects.append(
             {
                 "name": project.name,
@@ -75,6 +128,14 @@ def _load_test_projects() -> list[dict]:
                 "sprite_id": sprite_id,
                 "video_link": project.video_link,
                 "thumbnail_link": project.thumbnail_link,
+                "sprite_sheet_link": sprite_metadata.get("sprite_sheet_url") or project.sprite_sheet_link,
+                "frames": sprite_metadata.get("frames") or project.frames,
+                "columns": sprite_metadata.get("columns") or project.columns,
+                "rows": sprite_metadata.get("rows") or project.rows,
+                "frame_width": sprite_metadata.get("frame_width") or project.frame_width,
+                "frame_height": sprite_metadata.get("frame_height") or project.frame_height,
+                "sprite_aspect_ratio": sprite_metadata.get("aspect_ratio"),
+                "hero_aspect_ratio": video_aspect_ratio or sprite_metadata.get("aspect_ratio"),
                 "formatted_date": project.formatted_date,
             }
         )
@@ -119,7 +180,6 @@ def _test2_template_context(
         "projects": projects,
         "page_title": "Shared Element Transition Reliability Test",
         "page_meta_description": "Testing deterministic list/detail shared-element transitions",
-        "project_url_sync": False,
         "load_project_bundle": False,
         "is_dev_mode": _is_localhost(request),
         "initial_project_slug": initial_project_slug,
