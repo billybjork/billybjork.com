@@ -143,13 +143,23 @@
             ctx.heroSlot.setAttribute('aria-hidden', slotVisible ? 'false' : 'true');
         }
 
+        restoreDefaultStageAspectRatio(ctx) {
+            const rawRatio = ctx.item.dataset.stageAspectRatio;
+            const resolvedRatio = Number.parseFloat(rawRatio || '');
+            if (Number.isFinite(resolvedRatio) && resolvedRatio > 0.35 && resolvedRatio < 4.5) {
+                ctx.item.style.setProperty('--pc-stage-aspect-ratio', resolvedRatio.toString());
+                return;
+            }
+            ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+        }
+
         resetProjectVisualState(ctx) {
             this.stopMainFlowShift(ctx);
             this.clearPinnedCloseButton(ctx);
             ctx.item.classList.remove('pc-has-hero-video');
             ctx.item.classList.remove('pc-hero-expanded');
             ctx.item.classList.remove('pc-closing');
-            ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+            this.restoreDefaultStageAspectRatio(ctx);
             ctx.item.style.top = '';
             ctx.item.style.left = '';
             ctx.item.style.width = '';
@@ -1547,7 +1557,7 @@
         syncStageAspectRatioFromHero(ctx) {
             const heroVideo = ctx.heroSlot.querySelector('video');
             if (!heroVideo) {
-                ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+                this.restoreDefaultStageAspectRatio(ctx);
                 return;
             }
 
@@ -1562,7 +1572,7 @@
             if (Number.isFinite(resolvedRatio) && resolvedRatio > 0.35 && resolvedRatio < 4.5) {
                 ctx.item.style.setProperty('--pc-stage-aspect-ratio', resolvedRatio.toString());
             } else {
-                ctx.item.style.removeProperty('--pc-stage-aspect-ratio');
+                this.restoreDefaultStageAspectRatio(ctx);
             }
         }
 

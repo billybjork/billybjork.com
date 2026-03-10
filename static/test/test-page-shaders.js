@@ -7,6 +7,7 @@
         uniform float frameIndex;
         uniform vec2 atlasSize;
         uniform vec2 frameSize;
+        uniform vec2 planeSize;
         uniform float columns;
         uniform float depthAmount;
         uniform float pointSize;
@@ -78,11 +79,9 @@
             vEdgeMask = 1.0 - smoothstep(edgeThreshold * 0.5, edgeThreshold, gradMag);
             vNormal = normalize(vec3(-gradX * 10.0, -gradY * 10.0, 1.0));
 
-            float planeWidth = 80.0;
-            float planeHeight = 45.0;
             vec3 pos;
-            pos.x = (pixelUV.x - 0.5) * planeWidth;
-            pos.y = (pixelUV.y - 0.5) * planeHeight;
+            pos.x = (pixelUV.x - 0.5) * planeSize.x;
+            pos.y = (pixelUV.y - 0.5) * planeSize.y;
             pos.z = depth * depthAmount;
 
             if (ambientWaveStrength > 0.0) {

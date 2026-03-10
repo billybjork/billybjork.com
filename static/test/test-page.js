@@ -20,9 +20,9 @@
 
     const {
         SPRITE_BASE_PATH,
-        RESOLUTION,
-        PLANE_WIDTH,
-        PLANE_HEIGHT,
+        PREFERRED_FRAME_WIDTH,
+        PREFERRED_FRAME_HEIGHT,
+        PLANE_BASE_HEIGHT,
         CAMERA_FOV,
         CAMERA_Z,
         TILT_ORBIT_VERTICAL_SCALE,
@@ -389,9 +389,9 @@
         releaseSharedGeometry,
         constants: {
             SPRITE_BASE_PATH,
-            RESOLUTION,
-            PLANE_WIDTH,
-            PLANE_HEIGHT,
+            PREFERRED_FRAME_WIDTH,
+            PREFERRED_FRAME_HEIGHT,
+            PLANE_BASE_HEIGHT,
             CAMERA_FOV,
             CAMERA_Z,
             TILT_ORBIT_VERTICAL_SCALE,

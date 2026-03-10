@@ -18,10 +18,15 @@
 
     {% if projects %}
         {% for project in projects %}
+        {% set stage_aspect_ratio = project.hero_aspect_ratio or project.sprite_aspect_ratio %}
         <article
             class="pc-project no-fade"
             data-slug="{{ project.slug }}"
             data-sprite="{{ project.sprite_id }}"
+            {% if stage_aspect_ratio %}
+            data-stage-aspect-ratio="{{ stage_aspect_ratio | round(8) }}"
+            style="--pc-stage-aspect-ratio: {{ stage_aspect_ratio | round(8) }};"
+            {% endif %}
             {% if project.video_link %}
             data-hls-url="{{ project.video_link }}"
             {% endif %}>

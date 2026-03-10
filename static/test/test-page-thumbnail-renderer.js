@@ -20,9 +20,9 @@
 
         const {
             SPRITE_BASE_PATH,
-            RESOLUTION,
-            PLANE_WIDTH,
-            PLANE_HEIGHT,
+            PREFERRED_FRAME_WIDTH,
+            PREFERRED_FRAME_HEIGHT,
+            PLANE_BASE_HEIGHT,
             CAMERA_FOV,
             CAMERA_Z,
             TILT_ORBIT_VERTICAL_SCALE,
@@ -128,6 +128,8 @@
             this.lastLayoutTop = Number.NaN;
             this.lastLayoutCanvasWidth = -1;
             this.lastLayoutCanvasHeight = -1;
+            this.planeWidth = 1;
+            this.planeHeight = PLANE_BASE_HEIGHT;
 
             this.group = new THREE.Group();
             this.group.visible = false;
@@ -148,12 +150,14 @@
         }
 
         createPointCloud() {
-            const { metadata, rgbTexture, depthTexture } = this.spriteData;
-            const res = metadata.resolutions[RESOLUTION];
+            const { metadata, rgbTexture, depthTexture, resolution } = this.spriteData;
+            const res = resolution;
             const shared = acquireSharedGeometry(res.frame_width, res.frame_height, config.pointDensity);
             this.geometryKey = shared.key;
             const geometry = shared.geometry;
             this.pointCount = geometry.getAttribute('pixelUV').count;
+            this.planeHeight = PLANE_BASE_HEIGHT;
+            this.planeWidth = this.planeHeight * (res.frame_width / Math.max(res.frame_height, 1));
 
             this.uniforms = {
                 rgbAtlas: { value: rgbTexture },
@@ -161,6 +165,7 @@
                 frameIndex: { value: 0.0 },
                 atlasSize: { value: new THREE.Vector2(res.sheet_width, res.sheet_height) },
                 frameSize: { value: new THREE.Vector2(res.frame_width, res.frame_height) },
+                planeSize: { value: new THREE.Vector2(this.planeWidth, this.planeHeight) },
                 columns: { value: metadata.columns },
                 depthAmount: { value: config.depthAmount },
                 pointSize: { value: config.pointSize },
@@ -435,8 +440,10 @@
             const pixelsPerWorld = renderState.height / Math.max(visibleHeight, 1e-6);
             const centerX = (left + width / 2 - renderState.width / 2) / pixelsPerWorld;
             const centerY = (renderState.height / 2 - (top + height / 2)) / pixelsPerWorld;
-            const scaleX = (width * CLOUD_FILL_FACTOR) / (PLANE_WIDTH * pixelsPerWorld);
-            const scaleY = (height * CLOUD_FILL_FACTOR) / (PLANE_HEIGHT * pixelsPerWorld);
+            const planeWidth = Math.max(this.planeWidth, 1e-6);
+            const planeHeight = Math.max(this.planeHeight, 1e-6);
+            const scaleX = (width * CLOUD_FILL_FACTOR) / (planeWidth * pixelsPerWorld);
+            const scaleY = (height * CLOUD_FILL_FACTOR) / (planeHeight * pixelsPerWorld);
             const scaleZ = (scaleX + scaleY) * 0.5;
 
             this.group.position.set(centerX, centerY, this.currentZPush);
@@ -592,6 +599,47 @@
         return `${url}${separator}v=${encodeURIComponent(version)}`;
     }
 
+    function selectSpriteResolution(resolutions, preferredWidth, preferredHeight) {
+        if (!resolutions || typeof resolutions !== 'object') {
+            return null;
+        }
+
+        const candidates = Object.entries(resolutions)
+            .map(([key, value]) => {
+                const frameWidth = Number(value?.frame_width);
+                const frameHeight = Number(value?.frame_height);
+                if (!Number.isFinite(frameWidth) || !Number.isFinite(frameHeight) || frameWidth <= 0 || frameHeight <= 0) {
+                    return null;
+                }
+                return {
+                    key,
+                    value,
+                    score: [
+                        frameWidth === preferredWidth ? 0 : 1,
+                        Math.abs(frameWidth - preferredWidth),
+                        Math.abs(frameHeight - preferredHeight),
+                        -frameWidth,
+                        -frameHeight,
+                    ],
+                };
+            })
+            .filter(Boolean);
+
+        if (candidates.length === 0) {
+            return null;
+        }
+
+        candidates.sort((left, right) => {
+            for (let index = 0; index < left.score.length; index += 1) {
+                if (left.score[index] === right.score[index]) continue;
+                return left.score[index] - right.score[index];
+            }
+            return 0;
+        });
+
+        return candidates[0];
+    }
+
     async function loadSpriteSet(spriteId) {
         const spritePath = `${SPRITE_BASE_PATH}/${spriteId}`;
 
@@ -606,7 +654,16 @@
         }
 
         const loader = new THREE.TextureLoader();
-        const res = metadata.resolutions[RESOLUTION];
+        const selectedResolution = selectSpriteResolution(
+            metadata.resolutions,
+            PREFERRED_FRAME_WIDTH,
+            PREFERRED_FRAME_HEIGHT
+        );
+        if (!selectedResolution) {
+            console.error(`No usable resolutions found in metadata for ${spriteId}`);
+            return null;
+        }
+        const res = selectedResolution.value;
 
         const atlasVersion = String(
             metadata.atlas_version ||
@@ -651,7 +708,13 @@
         }
 
         console.log(`Loaded sprite set: ${spriteId} (${metadata.frames} frames)`);
-        return { metadata, rgbTexture, depthTexture };
+        return {
+            metadata,
+            resolutionKey: selectedResolution.key,
+            resolution: res,
+            rgbTexture,
+            depthTexture,
+        };
     }
 
     function loadTexture(loader, url) {

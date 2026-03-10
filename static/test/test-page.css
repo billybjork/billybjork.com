@@ -168,7 +168,7 @@
         flex-shrink: 0;
         width: 100%;
         max-width: none;
-        aspect-ratio: 16 / 9;
+        aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
         background: transparent;
         border-radius: 0;
         overflow: visible;
@@ -246,7 +246,7 @@
 
     .pc-thumb-placeholder {
         width: 100%;
-        aspect-ratio: 16 / 9;
+        aspect-ratio: var(--pc-stage-aspect-ratio, 1.7777777778);
         pointer-events: none;
     }
 

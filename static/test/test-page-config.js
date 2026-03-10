@@ -46,9 +46,9 @@
 
     const constants = {
         SPRITE_BASE_PATH: '/static/test/rgbd-sprites',
-        RESOLUTION: '640x360',
-        PLANE_WIDTH: 80.0,
-        PLANE_HEIGHT: 45.0,
+        PREFERRED_FRAME_WIDTH: 640,
+        PREFERRED_FRAME_HEIGHT: 360,
+        PLANE_BASE_HEIGHT: 45.0,
         CAMERA_FOV: 50,
         CAMERA_Z: 100,
         TILT_ORBIT_VERTICAL_SCALE: 1.0,

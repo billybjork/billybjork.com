@@ -2,7 +2,10 @@
   "frames": 41,
   "columns": 6,
   "rows": 7,
-  "atlas_version": 2026021610,
+  "atlas_version": 1773106532,
+  "source_width": 1080,
+  "source_height": 608,
+  "aspect_ratio": 1.7763157894736843,
   "depth_normalization": {
     "global_min": 0.0,
     "global_max": 1201.0

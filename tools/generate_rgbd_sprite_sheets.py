@@ -13,8 +13,11 @@ Usage:
         --depth-npz ./workdir/vda_test/full_output/depths.npz \
         --output ./static/test/rgbd-sprites \
         --columns 5 \
-        --resolutions 320x180,640x360
+        --native-aspect \
+        --resolutions 320,640
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -117,6 +120,42 @@ def create_sprite_sheet(
     return sheet
 
 
+def parse_resolution_specs(raw_value: str) -> list[tuple[int, int | None]]:
+    """Parse comma-separated resolution specs."""
+    specs: list[tuple[int, int | None]] = []
+    for token in raw_value.split(","):
+        spec = token.strip().lower()
+        if not spec:
+            continue
+        if "x" in spec:
+            width_str, height_str = spec.split("x", 1)
+            specs.append((int(width_str), int(height_str)))
+            continue
+        specs.append((int(spec), None))
+    if not specs:
+        raise ValueError("At least one resolution must be provided")
+    return specs
+
+
+def resolve_target_size(
+    resolution_spec: tuple[int, int | None],
+    source_width: int,
+    source_height: int,
+    native_aspect: bool,
+) -> tuple[int, int]:
+    """Resolve a resolution spec into an output frame size."""
+    target_width, target_height = resolution_spec
+    if target_height is not None:
+        return target_width, target_height
+    if not native_aspect:
+        raise ValueError(
+            "Width-only resolution specs require --native-aspect. "
+            "Use WIDTHxHEIGHT for fixed output sizes."
+        )
+    derived_height = max(1, int(round(target_width * source_height / source_width)))
+    return target_width, derived_height
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate RGBD sprite sheets")
     parser.add_argument("--rgb-dir", required=True, help="Directory with RGB frames")
@@ -126,7 +165,12 @@ def main():
     parser.add_argument(
         "--resolutions",
         default="320x180,640x360",
-        help="Comma-separated WxH resolutions",
+        help="Comma-separated WIDTH or WIDTHxHEIGHT resolution specs",
+    )
+    parser.add_argument(
+        "--native-aspect",
+        action="store_true",
+        help="Allow width-only resolutions and derive output height from the source frame aspect ratio",
     )
     args = parser.parse_args()
 
@@ -136,10 +180,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Parse resolutions
-    resolutions = []
-    for res_str in args.resolutions.split(","):
-        w, h = map(int, res_str.strip().split("x"))
-        resolutions.append((w, h))
+    resolution_specs = parse_resolution_specs(args.resolutions)
 
     print(f"Loading depth data from {depth_npz}...")
     depth_data = np.load(depth_npz)
@@ -161,6 +202,8 @@ def main():
     # Load and process frames
     rgb_frames = load_rgb_frames(rgb_dir, max_frames=num_frames)
     print(f"  Loaded {len(rgb_frames)} RGB frames, size: {rgb_frames[0].shape}")
+    source_height, source_width = rgb_frames[0].shape[:2]
+    print(f"  Source frame size: {source_width}x{source_height}")
 
     # Normalize depth across clip
     print("Normalizing depth across clip...")
@@ -191,6 +234,9 @@ def main():
         "columns": columns,
         "rows": rows,
         "atlas_version": int(time.time()),
+        "source_width": source_width,
+        "source_height": source_height,
+        "aspect_ratio": source_width / source_height,
         "depth_normalization": {
             "global_min": float(global_min),
             "global_max": float(global_max),
@@ -198,7 +244,13 @@ def main():
         "resolutions": {},
     }
 
-    for target_w, target_h in resolutions:
+    for resolution_spec in resolution_specs:
+        target_w, target_h = resolve_target_size(
+            resolution_spec,
+            source_width=source_width,
+            source_height=source_height,
+            native_aspect=args.native_aspect,
+        )
         res_key = f"{target_w}x{target_h}"
         print(f"\nGenerating {res_key} sprite sheets...")
 

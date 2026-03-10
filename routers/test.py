@@ -1,5 +1,7 @@
 """Test route for exploring point cloud rendering from RGBD sprite sheets."""
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
@@ -20,7 +22,8 @@ DEFAULT_TEST_SPRITE_SLUG_MAP = [
 ]
 TEST_PROJECTS_FILE = CONTENT_DIR / "test_projects.json"
 TEST_RGBD_SPRITES_DIR = Path(__file__).resolve().parent.parent / "static" / "test" / "rgbd-sprites"
-DEFAULT_TEST_RESOLUTION = "640x360"
+DEFAULT_TEST_RESOLUTION_WIDTH = 640
+DEFAULT_TEST_RESOLUTION_HEIGHT = 360
 
 router = APIRouter()
 
@@ -80,19 +83,20 @@ def _load_rgbd_sprite_metadata(sprite_id: str) -> dict:
     if not isinstance(resolutions, dict) or not resolutions:
         return {}
 
-    resolution = resolutions.get(
-        DEFAULT_TEST_RESOLUTION if DEFAULT_TEST_RESOLUTION in resolutions else next(iter(resolutions))
-    )
-    if not isinstance(resolution, dict):
+    resolution = _select_rgbd_resolution(resolutions)
+    if not resolution:
         return {}
 
-    frame_width = resolution.get("frame_width")
-    frame_height = resolution.get("frame_height")
-    aspect_ratio = None
-    if isinstance(frame_width, (int, float)) and isinstance(frame_height, (int, float)) and frame_height:
-        aspect_ratio = frame_width / frame_height
+    _, resolution_payload = resolution
 
-    rgb_file = resolution.get("rgb_file")
+    frame_width = resolution_payload.get("frame_width")
+    frame_height = resolution_payload.get("frame_height")
+    aspect_ratio = metadata.get("aspect_ratio")
+    if isinstance(frame_width, (int, float)) and isinstance(frame_height, (int, float)) and frame_height:
+        if not isinstance(aspect_ratio, (int, float)) or aspect_ratio <= 0:
+            aspect_ratio = frame_width / frame_height
+
+    rgb_file = resolution_payload.get("rgb_file")
     sprite_sheet_url = None
     if isinstance(rgb_file, str) and rgb_file.strip():
         sprite_sheet_url = f"/static/test/rgbd-sprites/{sprite_id}/{rgb_file.strip()}"
@@ -106,6 +110,40 @@ def _load_rgbd_sprite_metadata(sprite_id: str) -> dict:
         "sprite_sheet_url": sprite_sheet_url,
         "aspect_ratio": aspect_ratio,
     }
+
+
+def _select_rgbd_resolution(resolutions: dict) -> tuple[str, dict] | None:
+    """Pick the best available atlas resolution for the current test runtime."""
+    candidates: list[tuple[tuple[int, int, int, int, int], str, dict]] = []
+    for key, value in resolutions.items():
+        if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        frame_width = value.get("frame_width")
+        frame_height = value.get("frame_height")
+        if not isinstance(frame_width, int) or not isinstance(frame_height, int):
+            continue
+        if frame_width <= 0 or frame_height <= 0:
+            continue
+        candidates.append(
+            (
+                (
+                    0 if frame_width == DEFAULT_TEST_RESOLUTION_WIDTH else 1,
+                    abs(frame_width - DEFAULT_TEST_RESOLUTION_WIDTH),
+                    abs(frame_height - DEFAULT_TEST_RESOLUTION_HEIGHT),
+                    -frame_width,
+                    -frame_height,
+                ),
+                key,
+                value,
+            )
+        )
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[0])
+    _, key, value = candidates[0]
+    return key, value
 
 
 def _load_test_projects() -> list[dict]:
