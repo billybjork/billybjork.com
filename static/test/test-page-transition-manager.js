@@ -691,6 +691,7 @@
             ctx.container.classList.remove('thumb-hidden');
 
             ctx.thumbnail.setMotionFrozen(true);
+            ctx.thumbnail.freezeFrame();
 
             let html = '';
             try {
@@ -894,8 +895,8 @@
             const videoIsReady = await heroVideoReadyPromise;
 
             if (videoIsReady) {
-                this.setHeroSlotVisibility(ctx, true, true);
-                this.restoreContainer(ctx, true);
+                await this.crossfadePromotedThumbnailToHero(ctx, token);
+                if (!this.isTokenActive(token)) return;
                 ctx.thumbnail.setRenderSuppressed(true);
             } else {
                 this.setHeroSlotVisibility(ctx, false);
@@ -904,6 +905,7 @@
                 });
                 this.restoreContainer(ctx, false);
                 ctx.thumbnail.setRenderSuppressed(false);
+                ctx.thumbnail.resetTransitionState();
             }
 
             requestAnimationFrame(() => {
@@ -946,6 +948,7 @@
 
             ctx.thumbnail.setRenderSuppressed(false);
             ctx.thumbnail.setMotionFrozen(true);
+            ctx.thumbnail.freezeFrame();
             const thumbReadyPromise = prefersInstant
                 ? Promise.resolve(true)
                 : this.waitForCloseThumbnailReady(ctx, token);
@@ -1053,6 +1056,7 @@
             ctx.details.hidden = true;
             ctx.item.classList.remove('pc-open');
             this.resetProjectVisualState(ctx);
+            ctx.thumbnail.unfreezeFrame();
             ctx.closeButton.disabled = false;
             const inactiveExplodeCoherence = -0.4;
             const inactiveExplodeBackBias = 0.75;
@@ -1653,6 +1657,29 @@
                 ctx.container.classList.remove('thumb-hidden');
             }
             bumpTransitionRectRefresh(260);
+        }
+
+        async crossfadePromotedThumbnailToHero(ctx, token, durationMs = 180) {
+            this.setHeroSlotVisibility(ctx, true, true);
+            if (isReducedMotion() || durationMs <= 0 || !this.promotedStates.has(ctx.slug)) {
+                this.restoreContainer(ctx, true);
+                return;
+            }
+
+            const animation = ctx.container.animate(
+                [
+                    { opacity: 1 },
+                    { opacity: 0 },
+                ],
+                {
+                    duration: durationMs,
+                    easing: 'cubic-bezier(0.2, 0.0, 0, 1)',
+                    fill: 'forwards',
+                }
+            );
+            await animation.finished.catch(() => {});
+            if (!this.isTokenActive(token)) return;
+            this.restoreContainer(ctx, true);
         }
 
         stopMainFlowShift(ctx) {

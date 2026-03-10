@@ -106,6 +106,8 @@
             this.currentPanY = 0;
             this.viewportPosition = 0.5;
             this.pointCount = 0;
+            this.currentFrameIndex = 0;
+            this.frameIndexOverride = null;
             this.currentCoherence = isReducedMotion() ? 1 : 0;
             this.coherenceOverride = null;
             this.opacityOverride = null;
@@ -340,6 +342,18 @@
             this.motionFrozen = !!frozen;
         }
 
+        freezeFrame() {
+            this.frameIndexOverride = this.currentFrameIndex;
+        }
+
+        unfreezeFrame() {
+            this.frameIndexOverride = null;
+        }
+
+        getCurrentFrameIndex() {
+            return this.frameIndexOverride !== null ? this.frameIndexOverride : this.currentFrameIndex;
+        }
+
         getMotionTargets(respectFreeze = true) {
             const scrollTilt = (this.viewportPosition - 0.5) * 2 * config.tiltRange;
 
@@ -383,6 +397,7 @@
             this.scatterBackBiasOverride = null;
             this.zPushOverride = null;
             this.scatterDepthBoostOverride = null;
+            this.frameIndexOverride = null;
             this.currentOpacityMultiplier = 1;
             this.currentScatterBackBias = 0;
             this.currentZPush = 0;
@@ -487,8 +502,11 @@
             if (!this.material || !this.uniforms) return;
 
             const { metadata } = this.spriteData;
-            let frameIndex = Math.floor(globalProgress) % metadata.frames;
+            let frameIndex = this.frameIndexOverride !== null
+                ? this.frameIndexOverride
+                : Math.floor(globalProgress) % metadata.frames;
             if (frameIndex < 0) frameIndex += metadata.frames;
+            this.currentFrameIndex = frameIndex;
 
             this.updateViewportPosition(rect);
 

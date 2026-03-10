@@ -18,6 +18,7 @@
     const HLS_JS_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
     const OPEN_DURATION_MS = 340;
     const CLOSE_DURATION_MS = 300;
+    const HERO_BRIDGE_FADE_MS = 180;
     const EASING_STANDARD = 'cubic-bezier(0.2, 0.0, 0, 1)';
 
     function nowMs() {
@@ -160,6 +161,7 @@
             this.isDestroying = false;
             this.isHandlingPopState = false;
             this.spriteRuntime = null;
+            this.activeHeroVideoReadyPromise = Promise.resolve(false);
 
             this.debug = buildDebugStore();
 
@@ -431,6 +433,8 @@
 
         resetDetailContent() {
             this.teardownHeroVideo();
+            this.clearHeroBridge();
+            this.activeHeroVideoReadyPromise = Promise.resolve(false);
             this.detailHeroMedia.innerHTML = '';
             this.detailContent.innerHTML = '';
             this.detailTitle.textContent = '';
@@ -471,34 +475,99 @@
             return image;
         }
 
-        createTransitionNode(card, mode, sourceRect) {
+        getTransitionFrameIndex(card) {
+            if (!card?.spriteController || typeof card.spriteController.getCurrentFrameIndex !== 'function') {
+                return 0;
+            }
+            return card.spriteController.getCurrentFrameIndex();
+        }
+
+        createHeroBridgeNode(card, frameIndex) {
+            const width = Math.max(1, Math.round(this.detailHeroFrame?.clientWidth || 1));
+            const height = Math.max(1, Math.round(this.detailHeroFrame?.clientHeight || 1));
+            const node = this.createCardPreviewNode(card, {
+                frameIndex,
+                className: 't2-hero-bridge',
+                width,
+                height,
+            });
+            node.setAttribute('aria-hidden', 'true');
+            return node;
+        }
+
+        clearHeroBridge() {
+            const bridge = this.detailHeroFrame.querySelector('.t2-hero-bridge');
+            if (bridge) {
+                bridge.remove();
+            }
+        }
+
+        installHeroBridge(card, frameIndex) {
+            this.clearHeroBridge();
+            if (!card) return null;
+            const bridge = this.createHeroBridgeNode(card, frameIndex);
+            this.detailHeroFrame.appendChild(bridge);
+            return bridge;
+        }
+
+        async fadeOutHeroBridge(token, durationMs = HERO_BRIDGE_FADE_MS) {
+            const bridge = this.detailHeroFrame.querySelector('.t2-hero-bridge');
+            if (!bridge) return;
+            if (shouldUseReducedMotion() || durationMs <= 0) {
+                bridge.remove();
+                return;
+            }
+            const animation = this.trackAnimation(
+                bridge.animate(
+                    [
+                        { opacity: 1 },
+                        { opacity: 0 },
+                    ],
+                    {
+                        duration: durationMs,
+                        easing: EASING_STANDARD,
+                        fill: 'forwards',
+                    }
+                )
+            );
+            await waitForAnimationFinish(animation);
+            if (!this.isTokenActive(token)) return;
+            bridge.remove();
+        }
+
+        async revealHeroVideoWhenReady(card, token, frameIndex) {
+            if (!this.isTokenActive(token)) return;
+            const video = this.detailHeroMedia.querySelector('video');
+            if (!video) {
+                this.clearHeroBridge();
+                return;
+            }
+
+            this.installHeroBridge(card, frameIndex);
+            const isReady = await this.activeHeroVideoReadyPromise.catch(() => false);
+            if (!this.isTokenActive(token)) return;
+            if (!isReady) {
+                this.clearHeroBridge();
+                return;
+            }
+
+            await this.fadeOutHeroBridge(token);
+        }
+
+        createTransitionNode(card, sourceRect, frameIndex) {
             const wrapper = document.createElement('div');
             wrapper.className = 't2-transition-visual';
             const previewWidth = Math.max(1, Math.round(sourceRect?.width || card.thumbFrame?.clientWidth || 1));
             const previewHeight = Math.max(1, Math.round(sourceRect?.height || card.thumbFrame?.clientHeight || 1));
 
-            const currentFrameIndex = card.spriteController && typeof card.spriteController.getCurrentFrameIndex === 'function'
-                ? card.spriteController.getCurrentFrameIndex()
-                : 0;
-            const openMode = mode !== 'close';
-            const sourceFrameIndex = openMode ? currentFrameIndex : 0;
-            const targetFrameIndex = openMode ? 0 : currentFrameIndex;
-
-            const sourceNode = this.createCardPreviewNode(card, {
-                frameIndex: sourceFrameIndex,
-                className: 't2-transition-media-layer t2-transition-source',
-                width: previewWidth,
-                height: previewHeight,
-            });
-            const targetNode = this.createCardPreviewNode(card, {
-                frameIndex: targetFrameIndex,
-                className: 't2-transition-media-layer t2-transition-target',
+            const node = this.createCardPreviewNode(card, {
+                frameIndex,
+                className: 't2-transition-media-layer',
                 width: previewWidth,
                 height: previewHeight,
             });
 
-            wrapper.appendChild(sourceNode);
-            wrapper.appendChild(targetNode);
+            wrapper.appendChild(node);
             return wrapper;
         }
 
@@ -730,9 +799,99 @@
             this.activeHls.attachMedia(video);
         }
 
-        async mountDetail(slug, token) {
+        waitForFirstVideoFrame(video, token, timeoutMs = 7000) {
+            return new Promise((resolve, reject) => {
+                let done = false;
+                let frameCallbackId = null;
+                let tokenWatcherId = null;
+
+                const finish = (ok, error) => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timeoutId);
+                    if (tokenWatcherId !== null) {
+                        clearInterval(tokenWatcherId);
+                    }
+                    video.removeEventListener('loadeddata', onMaybeReady);
+                    video.removeEventListener('canplay', onMaybeReady);
+                    video.removeEventListener('playing', onMaybeReady);
+                    video.removeEventListener('timeupdate', onMaybeReady);
+                    video.removeEventListener('error', onError);
+                    if (frameCallbackId !== null && typeof video.cancelVideoFrameCallback === 'function') {
+                        video.cancelVideoFrameCallback(frameCallbackId);
+                    }
+                    if (ok) {
+                        resolve(true);
+                    } else {
+                        reject(error || new Error('Video did not render a first frame in time'));
+                    }
+                };
+
+                const onMaybeReady = () => {
+                    if (!this.isTokenActive(token)) {
+                        finish(false, new Error('Transition cancelled'));
+                        return;
+                    }
+                    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+                        finish(true);
+                    }
+                };
+
+                const onError = () => {
+                    finish(false, new Error('Video error before first frame'));
+                };
+
+                const timeoutId = window.setTimeout(() => {
+                    finish(false, new Error('Timed out waiting for first video frame'));
+                }, timeoutMs);
+
+                tokenWatcherId = window.setInterval(() => {
+                    if (!this.isTokenActive(token)) {
+                        finish(false, new Error('Transition cancelled'));
+                    }
+                }, 80);
+
+                video.addEventListener('loadeddata', onMaybeReady);
+                video.addEventListener('canplay', onMaybeReady);
+                video.addEventListener('playing', onMaybeReady);
+                video.addEventListener('timeupdate', onMaybeReady);
+                video.addEventListener('error', onError, { once: true });
+
+                if (typeof video.requestVideoFrameCallback === 'function') {
+                    frameCallbackId = video.requestVideoFrameCallback(() => {
+                        if (!this.isTokenActive(token)) {
+                            finish(false, new Error('Transition cancelled'));
+                            return;
+                        }
+                        finish(true);
+                    });
+                }
+
+                onMaybeReady();
+            });
+        }
+
+        async prepareHeroVideo(slug, token) {
+            const video = this.detailHeroMedia.querySelector('video');
+            if (!video) return false;
+            try {
+                await this.setupHeroVideo(slug);
+                if (!this.isTokenActive(token)) return false;
+                await this.waitForFirstVideoFrame(video, token, 7000);
+                if (!this.isTokenActive(token)) return false;
+                return true;
+            } catch (error) {
+                if (this.isTokenActive(token)) {
+                    console.warn('Hero video was not ready before reveal window:', error);
+                }
+                return false;
+            }
+        }
+
+        async mountDetail(slug, token, options = {}) {
             const card = this.cardsBySlug.get(slug);
             if (!card) throw new Error(`Card not found: ${slug}`);
+            const preferredFrameIndex = Number.isFinite(options.frameIndex) ? options.frameIndex : 0;
 
             this.resetDetailContent();
             this.setHeroAspectRatio(card);
@@ -753,7 +912,7 @@
                 this.detailHeroMedia.appendChild(heroNode);
             } else {
                 const fallbackNode = this.createCardPreviewNode(card, {
-                    frameIndex: 0,
+                    frameIndex: preferredFrameIndex,
                     className: 't2-detail-fallback-media',
                 });
                 this.detailHeroMedia.appendChild(fallbackNode);
@@ -785,7 +944,7 @@
                 this.detailContent.appendChild(fallbackNode);
             }
 
-            await this.setupHeroVideo(slug);
+            this.activeHeroVideoReadyPromise = this.prepareHeroVideo(slug, token);
         }
 
         async openProject(slug, options = {}) {
@@ -817,9 +976,10 @@
             const token = this.beginTransition('open', slug, reason);
             this.state = 'opening:measure';
             this.detailScene.setAttribute('data-scene-state', this.state);
+            const transitionFrameIndex = this.getTransitionFrameIndex(card);
 
             try {
-                await this.mountDetail(slug, token);
+                await this.mountDetail(slug, token, { frameIndex: transitionFrameIndex });
                 if (!this.isTokenActive(token)) return;
 
                 // Read phase: capture geometry before any scene class writes.
@@ -848,7 +1008,10 @@
 
                 this.state = 'opening:animate';
                 this.detailScene.setAttribute('data-scene-state', this.state);
-                this.mountTransitionLayer(this.createTransitionNode(card, 'open', snapshot.sourceRect), snapshot.sourceRect);
+                this.mountTransitionLayer(
+                    this.createTransitionNode(card, snapshot.sourceRect, transitionFrameIndex),
+                    snapshot.sourceRect
+                );
                 await this.runMorphAnimation({
                     sourceRect: snapshot.sourceRect,
                     targetRect: snapshot.targetRect,
@@ -857,16 +1020,19 @@
                     mode: 'open',
                 });
                 if (!this.isTokenActive(token)) return;
-                this.commitOpen(token, slug, historyMode, 'open:animation-finished');
+                this.commitOpen(token, slug, historyMode, 'open:animation-finished', {
+                    frameIndex: transitionFrameIndex,
+                });
             } catch (error) {
                 if (!this.isTokenActive(token)) return;
                 this.rollbackToList(`open-error:${error instanceof Error ? error.message : String(error)}`);
             }
         }
 
-        commitOpen(token, slug, historyMode, reason) {
+        commitOpen(token, slug, historyMode, reason, options = {}) {
             if (!this.isTokenActive(token)) return;
-            if (!this.cardsBySlug.has(slug)) return;
+            const card = this.cardsBySlug.get(slug);
+            if (!card) return;
 
             this.clearTransitionLayer();
             this.markTargetVisibility(false);
@@ -874,6 +1040,9 @@
             this.detailScene.setAttribute('data-scene-state', 'open:detail');
             this.openSlug = slug;
             this.state = 'open:detail';
+            const transitionFrameIndex = Number.isFinite(options.frameIndex) ? options.frameIndex : this.getTransitionFrameIndex(card);
+
+            void this.revealHeroVideoWhenReady(card, token, transitionFrameIndex);
 
             const closeButton = this.detailScene.querySelector('.t2-close-button');
             if (closeButton instanceof HTMLElement) closeButton.focus({ preventScroll: true });
@@ -928,7 +1097,10 @@
 
                 this.state = 'closing:animate';
                 this.detailScene.setAttribute('data-scene-state', this.state);
-                this.mountTransitionLayer(this.createTransitionNode(card, 'close', snapshot.sourceRect), snapshot.sourceRect);
+                this.mountTransitionLayer(
+                    this.createTransitionNode(card, snapshot.sourceRect, this.getTransitionFrameIndex(card)),
+                    snapshot.sourceRect
+                );
                 await this.runMorphAnimation({
                     sourceRect: snapshot.sourceRect,
                     targetRect: snapshot.targetRect,
