@@ -13,19 +13,24 @@
     data-initial-project-slug="{{ initial_project_slug or '' }}"
     data-initial-project-direct-entry="{{ 'true' if initial_project_direct_entry else 'false' }}"
     data-test-base-path="{{ test_base_path }}">
-    <header class="t2-intro">
-        <h2>/test-2 Shared-Element Transition Prototype</h2>
-        <p>ListScene + DetailScene + TransitionLayer</p>
-    </header>
-
     {% if projects %}
     <ul class="t2-project-list" aria-label="Projects">
         {% for project in projects %}
-        <li class="t2-project-item" data-slug="{{ project.slug }}">
+        <li>
             <article
                 class="t2-project-card"
                 data-project-card
                 data-slug="{{ project.slug }}"
+                data-title="{{ project.name }}"
+                data-formatted-date="{{ project.formatted_date }}"
+                {% if project.sprite_sheet_link %}data-sprite-sheet="{{ project.sprite_sheet_link }}"{% endif %}
+                {% if project.frames %}data-frames="{{ project.frames }}"{% endif %}
+                {% if project.columns %}data-columns="{{ project.columns }}"{% endif %}
+                {% if project.rows %}data-rows="{{ project.rows }}"{% endif %}
+                {% if project.frame_width %}data-frame-width="{{ project.frame_width }}"{% endif %}
+                {% if project.frame_height %}data-frame-height="{{ project.frame_height }}"{% endif %}
+                {% if project.sprite_aspect_ratio or project.hero_aspect_ratio %}data-sprite-aspect-ratio="{{ (project.sprite_aspect_ratio or project.hero_aspect_ratio) | round(8) }}"{% endif %}
+                {% if project.hero_aspect_ratio %}data-hero-aspect-ratio="{{ project.hero_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
                 {% if project.video_link %}data-hls-url="{{ project.video_link }}"{% endif %}>
                 <button
@@ -34,21 +39,24 @@
                     data-open-project="{{ project.slug }}"
                     aria-controls="t2-detail-scene"
                     aria-label="Open {{ project.name }}">
-                    <span class="t2-thumb-frame" data-thumb-frame>
-                        {% if project.thumbnail_link %}
-                        <img
-                            class="t2-thumb-image"
-                            src="{{ project.thumbnail_link }}"
-                            alt=""
-                            loading="lazy"
-                            decoding="async">
-                        {% else %}
-                        <span class="t2-thumb-empty" aria-hidden="true">No thumbnail</span>
-                        {% endif %}
-                    </span>
-                    <span class="t2-card-meta">
-                        <span class="t2-card-title">{{ project.name }}</span>
-                        <span class="t2-card-date">{{ project.formatted_date }}</span>
+                    <span
+                        class="t2-thumb-frame"
+                        data-thumb-frame
+                        {% if project.sprite_aspect_ratio or project.hero_aspect_ratio %}
+                        style="--t2-thumb-aspect: {{ (project.sprite_aspect_ratio or project.hero_aspect_ratio) | round(8) }};"
+                        {% endif %}>
+                        <span class="t2-thumb-media" data-thumb-media>
+                            {% if project.thumbnail_link %}
+                            <img
+                                class="t2-thumb-image"
+                                src="{{ project.thumbnail_link }}"
+                                alt=""
+                                loading="lazy"
+                                decoding="async">
+                            {% else %}
+                            <span class="t2-thumb-empty" aria-hidden="true">No thumbnail</span>
+                            {% endif %}
+                        </span>
                     </span>
                 </button>
             </article>
@@ -75,8 +83,7 @@
             <div
                 class="t2-hero-frame"
                 id="t2-detail-hero-frame"
-                aria-label="Project media"
-                style="--t2-fallback-poster: none;">
+                aria-label="Project media">
                 <div class="t2-hero-media" id="t2-detail-hero-media"></div>
             </div>
             <section class="t2-detail-content" id="t2-detail-content"></section>
@@ -88,6 +95,7 @@
 {% endblock %}
 
 {% block additional_scripts %}
+<script src="/static/test/test-2-sprite-runtime.js"></script>
 <script src="/static/test/test-2-transition-manager.js"></script>
 <script src="/static/test/test-2.js"></script>
 {% endblock %}

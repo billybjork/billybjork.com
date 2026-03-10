@@ -45,6 +45,11 @@
         return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
 
+    function readPositiveNumber(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+
     function buildDebugStore() {
         const params = new URLSearchParams(window.location.search);
         let enabled = params.get(QUERY_DEBUG_KEY) === '1' || window.localStorage.getItem('t2debug') === '1';
@@ -124,7 +129,7 @@
             },
         };
 
-        return { start, mark, finish, isEnabled: () => enabled };
+        return { start, mark, finish };
     }
 
     class Test2TransitionManager {
@@ -144,7 +149,6 @@
             this.detailsHtmlCache = new Map();
 
             this.openSlug = null;
-            this.openCard = null;
             this.lastFocusedBeforeOpen = null;
             this.state = 'idle:list';
             this.transitionToken = 0;
@@ -155,7 +159,7 @@
             this.hlsScriptPromise = null;
             this.isDestroying = false;
             this.isHandlingPopState = false;
-            this.isApplyingHistory = false;
+            this.spriteRuntime = null;
 
             this.debug = buildDebugStore();
 
@@ -165,6 +169,7 @@
         }
 
         init() {
+            this.initSpriteRuntime();
             this.rebuildCardMap();
             document.addEventListener('click', this.boundOnClick, true);
             document.addEventListener('keydown', this.boundOnKeyDown);
@@ -179,15 +184,27 @@
             document.removeEventListener('keydown', this.boundOnKeyDown);
             window.removeEventListener('popstate', this.boundOnPopState);
             this.cancelInFlight('destroy');
-            this.teardownHeroVideo();
-            this.detailHeroMedia.innerHTML = '';
-            this.detailContent.innerHTML = '';
+            this.resetDetailContent();
             this.clearTransitionLayer();
             this.applyListSceneState({ activeSlug: null, dimmed: false });
             this.applyDetailSceneVisibility(false);
             this.setNavHidden(false);
             this.detailScene.setAttribute('aria-hidden', 'true');
             this.detailScene.setAttribute('data-scene-state', 'closed');
+            if (this.spriteRuntime && typeof this.spriteRuntime.destroy === 'function') {
+                this.spriteRuntime.destroy();
+            }
+            this.spriteRuntime = null;
+        }
+
+        initSpriteRuntime() {
+            if (!window.Test2SpriteRuntime || typeof window.Test2SpriteRuntime.create !== 'function') {
+                return;
+            }
+            this.spriteRuntime = window.Test2SpriteRuntime.create({
+                listScene: this.listScene,
+            });
+            this.spriteRuntime.init();
         }
 
         rebuildCardMap() {
@@ -199,8 +216,9 @@
                 const openButton = cardEl.querySelector('[data-open-project]');
                 const thumbFrame = cardEl.querySelector('[data-thumb-frame]');
                 if (!openButton || !thumbFrame) return;
-                const titleEl = cardEl.querySelector('.t2-card-title');
                 const thumbImg = thumbFrame.querySelector('img');
+                const spriteAspectRatio = readPositiveNumber(cardEl.dataset.spriteAspectRatio);
+                const heroAspectRatio = readPositiveNumber(cardEl.dataset.heroAspectRatio) || spriteAspectRatio;
 
                 this.cardsBySlug.set(slug, {
                     slug,
@@ -208,9 +226,13 @@
                     openButton,
                     thumbFrame,
                     thumbImg,
-                    title: titleEl ? titleEl.textContent.trim() : slug,
+                    title: (cardEl.dataset.title || slug).trim(),
+                    formattedDate: (cardEl.dataset.formattedDate || '').trim(),
                     thumbnail: (cardEl.dataset.thumbnail || '').trim(),
                     hlsUrl: (cardEl.dataset.hlsUrl || '').trim(),
+                    spriteAspectRatio,
+                    heroAspectRatio,
+                    spriteController: this.spriteRuntime ? this.spriteRuntime.getThumbnail(slug) : null,
                 });
             });
         }
@@ -322,16 +344,12 @@
             const nextUrl = this.buildUrlForSlug(slug);
             const currentHref = window.location.href;
             if (currentHref === nextUrl) return;
-            this.isApplyingHistory = true;
             window.history.pushState({ test2: true, slug: slug || null }, '', nextUrl);
-            this.isApplyingHistory = false;
         }
 
         replaceHistoryState(slug) {
             const nextUrl = this.buildUrlForSlug(slug);
-            this.isApplyingHistory = true;
             window.history.replaceState({ test2: true, slug: slug || null }, '', nextUrl);
-            this.isApplyingHistory = false;
         }
 
         cancelInFlight(reason) {
@@ -411,22 +429,77 @@
             this.transitionLayer.innerHTML = '';
         }
 
-        createTransitionNode(card) {
+        resetDetailContent() {
+            this.teardownHeroVideo();
+            this.detailHeroMedia.innerHTML = '';
+            this.detailContent.innerHTML = '';
+            this.detailTitle.textContent = '';
+            this.detailHeroFrame.style.setProperty('--t2-fallback-poster', 'none');
+            this.detailHeroFrame.style.setProperty('--t2-hero-aspect', (16 / 9).toString());
+        }
+
+        setHeroAspectRatio(card) {
+            const aspectRatio = card?.heroAspectRatio || card?.spriteAspectRatio || (16 / 9);
+            this.detailHeroFrame.style.setProperty('--t2-hero-aspect', aspectRatio.toString());
+        }
+
+        createCardPreviewNode(card, options = {}) {
+            const className = options.className || '';
+            const frameIndex = Number.isFinite(options.frameIndex) ? options.frameIndex : 0;
+            if (card.spriteController && typeof card.spriteController.createFrameNode === 'function') {
+                return card.spriteController.createFrameNode(frameIndex, {
+                    className,
+                    width: options.width,
+                    height: options.height,
+                });
+            }
+
             const thumbSrc = card.thumbnail || card.thumbImg?.currentSrc || card.thumbImg?.src || '';
             if (!thumbSrc) {
                 const fallback = document.createElement('div');
-                fallback.style.width = '100%';
-                fallback.style.height = '100%';
+                fallback.className = className;
                 fallback.style.background = '#141414';
                 return fallback;
             }
 
             const image = document.createElement('img');
+            image.className = className;
             image.src = thumbSrc;
             image.alt = '';
             image.decoding = 'sync';
             image.loading = 'eager';
             return image;
+        }
+
+        createTransitionNode(card, mode, sourceRect) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 't2-transition-visual';
+            const previewWidth = Math.max(1, Math.round(sourceRect?.width || card.thumbFrame?.clientWidth || 1));
+            const previewHeight = Math.max(1, Math.round(sourceRect?.height || card.thumbFrame?.clientHeight || 1));
+
+            const currentFrameIndex = card.spriteController && typeof card.spriteController.getCurrentFrameIndex === 'function'
+                ? card.spriteController.getCurrentFrameIndex()
+                : 0;
+            const openMode = mode !== 'close';
+            const sourceFrameIndex = openMode ? currentFrameIndex : 0;
+            const targetFrameIndex = openMode ? 0 : currentFrameIndex;
+
+            const sourceNode = this.createCardPreviewNode(card, {
+                frameIndex: sourceFrameIndex,
+                className: 't2-transition-media-layer t2-transition-source',
+                width: previewWidth,
+                height: previewHeight,
+            });
+            const targetNode = this.createCardPreviewNode(card, {
+                frameIndex: targetFrameIndex,
+                className: 't2-transition-media-layer t2-transition-target',
+                width: previewWidth,
+                height: previewHeight,
+            });
+
+            wrapper.appendChild(sourceNode);
+            wrapper.appendChild(targetNode);
+            return wrapper;
         }
 
         mountTransitionLayer(node, rect) {
@@ -458,9 +531,10 @@
             ];
         }
 
-        async runMorphAnimation({ sourceRect, targetRect, durationMs, token }) {
+        async runMorphAnimation({ sourceRect, targetRect, durationMs, token, mode }) {
             if (!this.isTokenActive(token)) return;
             const keyframes = this.buildMorphKeyframes(sourceRect, targetRect);
+            const animations = [];
             const layerAnimation = this.trackAnimation(
                 this.transitionLayer.animate(keyframes, {
                     duration: durationMs,
@@ -468,7 +542,51 @@
                     fill: 'forwards',
                 })
             );
-            await waitForAnimationFinish(layerAnimation);
+            animations.push(layerAnimation);
+
+            const sourceNode = this.transitionLayer.querySelector('.t2-transition-source');
+            const targetNode = this.transitionLayer.querySelector('.t2-transition-target');
+            if (sourceNode && targetNode) {
+                const sourceFrames = mode === 'close'
+                    ? [
+                        { opacity: 1, transform: 'scale(1)' },
+                        { opacity: 1, transform: 'scale(1)', offset: 0.55 },
+                        { opacity: 0, transform: 'scale(0.985)' },
+                    ]
+                    : [
+                        { opacity: 1, transform: 'scale(1)' },
+                        { opacity: 1, transform: 'scale(1)', offset: 0.4 },
+                        { opacity: 0, transform: 'scale(0.982)' },
+                    ];
+                const targetFrames = mode === 'close'
+                    ? [
+                        { opacity: 0, transform: 'scale(1.02)' },
+                        { opacity: 0.05, transform: 'scale(1.012)', offset: 0.3 },
+                        { opacity: 1, transform: 'scale(1)' },
+                    ]
+                    : [
+                        { opacity: 0, transform: 'scale(1.03)' },
+                        { opacity: 0.08, transform: 'scale(1.016)', offset: 0.32 },
+                        { opacity: 1, transform: 'scale(1)' },
+                    ];
+
+                animations.push(
+                    this.trackAnimation(sourceNode.animate(sourceFrames, {
+                        duration: durationMs,
+                        easing: 'linear',
+                        fill: 'forwards',
+                    }))
+                );
+                animations.push(
+                    this.trackAnimation(targetNode.animate(targetFrames, {
+                        duration: durationMs,
+                        easing: 'linear',
+                        fill: 'forwards',
+                    }))
+                );
+            }
+
+            await Promise.all(animations.map((animation) => waitForAnimationFinish(animation)));
             this.activeAnimations = [];
         }
 
@@ -529,24 +647,29 @@
             const controller = new AbortController();
             this.activeFetchController = controller;
 
-            this.debug.mark(token, 'fetch:start', { url: projectUrl.toString() });
-            const response = await fetch(projectUrl.toString(), {
-                method: 'GET',
-                headers: {
-                    Accept: 'text/html',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                signal: controller.signal,
-            });
-            if (!response.ok) {
-                throw new Error(`Failed to fetch project detail (${response.status})`);
+            try {
+                this.debug.mark(token, 'fetch:start', { url: projectUrl.toString() });
+                const response = await fetch(projectUrl.toString(), {
+                    method: 'GET',
+                    headers: {
+                        Accept: 'text/html',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    signal: controller.signal,
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch project detail (${response.status})`);
+                }
+                const html = await response.text();
+                if (!this.isTokenActive(token)) return '';
+                this.detailsHtmlCache.set(slug, html);
+                this.debug.mark(token, 'fetch:done', { bytes: html.length });
+                return html;
+            } finally {
+                if (this.activeFetchController === controller) {
+                    this.activeFetchController = null;
+                }
             }
-            const html = await response.text();
-            if (!this.isTokenActive(token)) return '';
-            this.detailsHtmlCache.set(slug, html);
-            this.activeFetchController = null;
-            this.debug.mark(token, 'fetch:done', { bytes: html.length });
-            return html;
         }
 
         teardownHeroVideo() {
@@ -611,9 +734,8 @@
             const card = this.cardsBySlug.get(slug);
             if (!card) throw new Error(`Card not found: ${slug}`);
 
-            this.teardownHeroVideo();
-            this.detailHeroMedia.innerHTML = '';
-            this.detailContent.innerHTML = '';
+            this.resetDetailContent();
+            this.setHeroAspectRatio(card);
             this.detailTitle.textContent = card.title;
             this.detailHeroFrame.style.setProperty(
                 '--t2-fallback-poster',
@@ -629,19 +751,38 @@
             if (heroNode) {
                 heroNode.removeAttribute('id');
                 this.detailHeroMedia.appendChild(heroNode);
-            } else if (card.thumbnail) {
-                const fallbackImage = document.createElement('img');
-                fallbackImage.src = card.thumbnail;
-                fallbackImage.alt = '';
-                fallbackImage.decoding = 'sync';
-                this.detailHeroMedia.appendChild(fallbackImage);
+            } else {
+                const fallbackNode = this.createCardPreviewNode(card, {
+                    frameIndex: 0,
+                    className: 't2-detail-fallback-media',
+                });
+                this.detailHeroMedia.appendChild(fallbackNode);
             }
 
             const contentNode = parser.querySelector('.project-content');
+            if (card.formattedDate) {
+                const metaNode = document.createElement('div');
+                metaNode.className = 't2-detail-meta';
+
+                const labelNode = document.createElement('span');
+                labelNode.className = 't2-detail-meta-label';
+                labelNode.textContent = 'Published';
+
+                const dateNode = document.createElement('time');
+                dateNode.className = 't2-detail-date';
+                dateNode.textContent = card.formattedDate;
+
+                metaNode.appendChild(labelNode);
+                metaNode.appendChild(dateNode);
+                this.detailContent.appendChild(metaNode);
+            }
+
             if (contentNode) {
                 this.detailContent.appendChild(contentNode);
             } else {
-                this.detailContent.innerHTML = '<p>Project details unavailable.</p>';
+                const fallbackNode = document.createElement('p');
+                fallbackNode.textContent = 'Project details unavailable.';
+                this.detailContent.appendChild(fallbackNode);
             }
 
             await this.setupHeroVideo(slug);
@@ -691,6 +832,9 @@
                 });
 
                 // Write phase: commit transient visual state for the morph.
+                if (card.spriteController && typeof card.spriteController.freeze === 'function') {
+                    card.spriteController.freeze();
+                }
                 this.setNavHidden(true);
                 this.applyListSceneState({ activeSlug: slug, dimmed: true });
                 this.applyDetailSceneVisibility(true);
@@ -704,12 +848,13 @@
 
                 this.state = 'opening:animate';
                 this.detailScene.setAttribute('data-scene-state', this.state);
-                this.mountTransitionLayer(this.createTransitionNode(card), snapshot.sourceRect);
+                this.mountTransitionLayer(this.createTransitionNode(card, 'open', snapshot.sourceRect), snapshot.sourceRect);
                 await this.runMorphAnimation({
                     sourceRect: snapshot.sourceRect,
                     targetRect: snapshot.targetRect,
                     durationMs: OPEN_DURATION_MS,
                     token,
+                    mode: 'open',
                 });
                 if (!this.isTokenActive(token)) return;
                 this.commitOpen(token, slug, historyMode, 'open:animation-finished');
@@ -721,21 +866,19 @@
 
         commitOpen(token, slug, historyMode, reason) {
             if (!this.isTokenActive(token)) return;
-            const card = this.cardsBySlug.get(slug);
-            if (!card) return;
+            if (!this.cardsBySlug.has(slug)) return;
 
             this.clearTransitionLayer();
             this.markTargetVisibility(false);
             this.detailScene.classList.add('t2-visible');
             this.detailScene.setAttribute('data-scene-state', 'open:detail');
             this.openSlug = slug;
-            this.openCard = card;
             this.state = 'open:detail';
 
             const closeButton = this.detailScene.querySelector('.t2-close-button');
             if (closeButton instanceof HTMLElement) closeButton.focus({ preventScroll: true });
 
-            if (historyMode === 'push' && !this.isHandlingPopState && !this.isApplyingHistory) {
+            if (historyMode === 'push' && !this.isHandlingPopState) {
                 this.pushHistoryState(slug);
             } else if (historyMode === 'replace') {
                 this.replaceHistoryState(slug);
@@ -785,12 +928,13 @@
 
                 this.state = 'closing:animate';
                 this.detailScene.setAttribute('data-scene-state', this.state);
-                this.mountTransitionLayer(this.createTransitionNode(card), snapshot.sourceRect);
+                this.mountTransitionLayer(this.createTransitionNode(card, 'close', snapshot.sourceRect), snapshot.sourceRect);
                 await this.runMorphAnimation({
                     sourceRect: snapshot.sourceRect,
                     targetRect: snapshot.targetRect,
                     durationMs: CLOSE_DURATION_MS,
                     token,
+                    mode: 'close',
                 });
                 if (!this.isTokenActive(token)) return;
                 this.commitClose(token, historyMode, 'close:animation-finished');
@@ -805,21 +949,22 @@
             const previousSlug = this.openSlug;
 
             this.clearTransitionLayer();
-            this.teardownHeroVideo();
-            this.detailHeroMedia.innerHTML = '';
-            this.detailContent.innerHTML = '';
-            this.detailTitle.textContent = '';
+            this.resetDetailContent();
             this.markTargetVisibility(false);
             this.applyDetailSceneVisibility(false);
             this.applyListSceneState({ activeSlug: null, dimmed: false });
             this.setNavHidden(false);
 
             if (previousSlug && this.cardsBySlug.has(previousSlug)) {
-                this.markSourceVisibility(this.cardsBySlug.get(previousSlug), false);
+                const previousCard = this.cardsBySlug.get(previousSlug);
+                this.markSourceVisibility(previousCard, false);
+                if (previousCard.spriteController && typeof previousCard.spriteController.unfreeze === 'function') {
+                    previousCard.spriteController.unfreeze();
+                    previousCard.spriteController.refresh();
+                }
             }
 
             this.openSlug = null;
-            this.openCard = null;
             this.state = 'idle:list';
             this.detailScene.setAttribute('data-scene-state', 'closed');
 
@@ -830,7 +975,7 @@
             }
             this.lastFocusedBeforeOpen = null;
 
-            if (historyMode === 'push' && !this.isHandlingPopState && !this.isApplyingHistory) {
+            if (historyMode === 'push' && !this.isHandlingPopState) {
                 this.pushHistoryState(null);
             } else if (historyMode === 'replace') {
                 this.replaceHistoryState(null);
@@ -843,14 +988,19 @@
         rollbackToList(cancelReason) {
             this.cancelRunningAnimations();
             this.clearTransitionLayer();
-            this.teardownHeroVideo();
+            this.resetDetailContent();
             this.applyDetailSceneVisibility(false);
             this.applyListSceneState({ activeSlug: null, dimmed: false });
             this.setNavHidden(false);
-            this.cardsBySlug.forEach((card) => this.markSourceVisibility(card, false));
+            this.cardsBySlug.forEach((card) => {
+                this.markSourceVisibility(card, false);
+                if (card.spriteController && typeof card.spriteController.unfreeze === 'function') {
+                    card.spriteController.unfreeze();
+                    card.spriteController.refresh();
+                }
+            });
             this.markTargetVisibility(false);
             this.openSlug = null;
-            this.openCard = null;
             this.state = 'idle:list';
             this.detailScene.setAttribute('data-scene-state', 'closed');
             if (this.activeTransitionToken !== null) {
