@@ -104,6 +104,30 @@ def _test_template_context(
     }
 
 
+def _test2_template_context(
+    request: Request,
+    initial_project_slug: str | None = None,
+    initial_project_direct_entry: bool = False,
+) -> dict:
+    projects = _load_test_projects()
+    slug_set = {project["slug"] for project in projects}
+    if initial_project_slug and initial_project_slug not in slug_set:
+        raise HTTPException(status_code=404, detail="Project not found in /test-2")
+
+    return {
+        "request": request,
+        "projects": projects,
+        "page_title": "Shared Element Transition Reliability Test",
+        "page_meta_description": "Testing deterministic list/detail shared-element transitions",
+        "project_url_sync": False,
+        "load_project_bundle": False,
+        "is_dev_mode": _is_localhost(request),
+        "initial_project_slug": initial_project_slug,
+        "initial_project_direct_entry": initial_project_direct_entry,
+        "test_base_path": "/test-2",
+    }
+
+
 @router.get("/test", response_class=HTMLResponse)
 async def test_page(request: Request, project: str | None = Query(None)):
     """Render the shared-canvas point cloud depth test page."""
@@ -127,6 +151,36 @@ async def test_project_page(request: Request, project_slug: str):
     return templates.TemplateResponse(
         "test.html",
         _test_template_context(
+            request,
+            initial_project_slug=project_slug,
+            initial_project_direct_entry=True,
+        ),
+    )
+
+
+@router.get("/test-2", response_class=HTMLResponse)
+async def test_2_page(request: Request, project: str | None = Query(None)):
+    """Render clean-slate shared-element transition test page."""
+    initial_project_slug = project.strip() if isinstance(project, str) else None
+    if initial_project_slug == "":
+        initial_project_slug = None
+
+    return templates.TemplateResponse(
+        "test-2.html",
+        _test2_template_context(
+            request,
+            initial_project_slug=initial_project_slug,
+            initial_project_direct_entry=bool(initial_project_slug),
+        ),
+    )
+
+
+@router.get("/test-2/{project_slug}", response_class=HTMLResponse)
+async def test_2_project_page(request: Request, project_slug: str):
+    """Render /test-2 with a project opened directly from URL."""
+    return templates.TemplateResponse(
+        "test-2.html",
+        _test2_template_context(
             request,
             initial_project_slug=project_slug,
             initial_project_direct_entry=True,

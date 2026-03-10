@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block main_class %}test-two-shared-element{% endblock %}
+
+{% block additional_head %}
+<link rel="stylesheet" href="/static/test/test-2.css">
+{% endblock %}
+
+{% block content %}
+<div
+    class="t2-list-scene"
+    id="t2-list-scene"
+    data-initial-project-slug="{{ initial_project_slug or '' }}"
+    data-initial-project-direct-entry="{{ 'true' if initial_project_direct_entry else 'false' }}"
+    data-test-base-path="{{ test_base_path }}">
+    <header class="t2-intro">
+        <h2>/test-2 Shared-Element Transition Prototype</h2>
+        <p>ListScene + DetailScene + TransitionLayer</p>
+    </header>
+
+    {% if projects %}
+    <ul class="t2-project-list" aria-label="Projects">
+        {% for project in projects %}
+        <li class="t2-project-item" data-slug="{{ project.slug }}">
+            <article
+                class="t2-project-card"
+                data-project-card
+                data-slug="{{ project.slug }}"
+                {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
+                {% if project.video_link %}data-hls-url="{{ project.video_link }}"{% endif %}>
+                <button
+                    class="t2-open-button"
+                    type="button"
+                    data-open-project="{{ project.slug }}"
+                    aria-controls="t2-detail-scene"
+                    aria-label="Open {{ project.name }}">
+                    <span class="t2-thumb-frame" data-thumb-frame>
+                        {% if project.thumbnail_link %}
+                        <img
+                            class="t2-thumb-image"
+                            src="{{ project.thumbnail_link }}"
+                            alt=""
+                            loading="lazy"
+                            decoding="async">
+                        {% else %}
+                        <span class="t2-thumb-empty" aria-hidden="true">No thumbnail</span>
+                        {% endif %}
+                    </span>
+                    <span class="t2-card-meta">
+                        <span class="t2-card-title">{{ project.name }}</span>
+                        <span class="t2-card-date">{{ project.formatted_date }}</span>
+                    </span>
+                </button>
+            </article>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="t2-empty">No projects configured for /test-2.</p>
+    {% endif %}
+</div>
+
+<section
+    class="t2-detail-scene"
+    id="t2-detail-scene"
+    aria-hidden="true"
+    data-scene-state="closed">
+    <div class="t2-detail-backdrop" data-close-detail></div>
+    <div class="t2-detail-scroll">
+        <article class="t2-detail-shell" role="dialog" aria-modal="true" aria-labelledby="t2-detail-title">
+            <header class="t2-detail-header">
+                <h2 class="t2-detail-title" id="t2-detail-title"></h2>
+                <button class="t2-close-button" type="button" data-close-detail aria-label="Close project">&times;</button>
+            </header>
+            <div
+                class="t2-hero-frame"
+                id="t2-detail-hero-frame"
+                aria-label="Project media"
+                style="--t2-fallback-poster: none;">
+                <div class="t2-hero-media" id="t2-detail-hero-media"></div>
+            </div>
+            <section class="t2-detail-content" id="t2-detail-content"></section>
+        </article>
+    </div>
+</section>
+
+<div id="t2-transition-layer" class="t2-transition-layer" aria-hidden="true"></div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="/static/test/test-2-transition-manager.js"></script>
+<script src="/static/test/test-2.js"></script>
+{% endblock %}

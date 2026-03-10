@@ -1,0 +1,300 @@
+/* Clean-slate /test-2 shared-element transition styles. */
+
+body {
+    background: #060606;
+}
+
+#main-header {
+    transition: opacity 220ms ease, transform 220ms ease, visibility 0ms linear 0ms;
+    will-change: opacity, transform;
+}
+
+body.t2-nav-hidden #main-header {
+    opacity: 0;
+    transform: translateY(-10px);
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 220ms ease, transform 220ms ease, visibility 0ms linear 220ms;
+}
+
+main.test-two-shared-element {
+    padding-top: clamp(5rem, 8vw, 6rem);
+    padding-bottom: clamp(4rem, 6vw, 6rem);
+}
+
+.t2-list-scene {
+    width: min(1080px, calc(100vw - 2rem));
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+.t2-intro {
+    margin-bottom: 2.25rem;
+}
+
+.t2-intro h2 {
+    color: #f4f4f2;
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.15rem, 2.4vw, 1.65rem);
+}
+
+.t2-intro p {
+    color: #878781;
+    margin: 0;
+    font-size: 0.92rem;
+}
+
+.t2-project-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.1rem;
+}
+
+.t2-project-card {
+    opacity: 1;
+    transform: translateZ(0);
+    transition: opacity 260ms ease;
+}
+
+.t2-list-scene.t2-list-dimmed .t2-project-card {
+    opacity: 0.2;
+}
+
+.t2-list-scene.t2-list-dimmed .t2-project-card.t2-active-card {
+    opacity: 1;
+}
+
+.t2-open-button {
+    width: 100%;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+    display: block;
+}
+
+.t2-open-button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}
+
+.t2-thumb-frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 10px;
+    overflow: hidden;
+    display: block;
+    background: #141414;
+    transform: translateZ(0);
+}
+
+.t2-thumb-frame.t2-source-hidden {
+    opacity: 0;
+}
+
+.t2-thumb-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.t2-thumb-empty {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: #949494;
+    background: #171717;
+}
+
+.t2-card-meta {
+    margin-top: 0.55rem;
+    display: grid;
+    gap: 0.16rem;
+}
+
+.t2-card-title {
+    color: #efefec;
+    font-size: 0.92rem;
+    line-height: 1.2;
+}
+
+.t2-card-date {
+    color: #76766f;
+    font-size: 0.76rem;
+}
+
+.t2-detail-scene {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 260ms ease, visibility 0ms linear 260ms;
+}
+
+.t2-detail-scene.t2-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 260ms ease, visibility 0ms linear 0ms;
+}
+
+.t2-detail-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 5, 5, 0.96);
+}
+
+.t2-detail-scroll {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: clamp(1rem, 2.8vw, 2rem);
+}
+
+.t2-detail-shell {
+    width: min(960px, calc(100vw - 2rem));
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+    color: #eaeae7;
+}
+
+.t2-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.8rem;
+}
+
+.t2-detail-title {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    margin: 0;
+}
+
+.t2-close-button {
+    border: 0;
+    background: none;
+    color: #f6f6f2;
+    font-size: 2rem;
+    line-height: 1;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+    cursor: pointer;
+}
+
+.t2-close-button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.t2-hero-frame {
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    background:
+        var(--t2-fallback-poster) center / cover no-repeat,
+        #0f0f0f;
+    aspect-ratio: 16 / 9;
+    position: relative;
+}
+
+.t2-hero-frame.t2-target-hidden .t2-hero-media {
+    opacity: 0;
+}
+
+.t2-hero-media {
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+}
+
+.t2-hero-media > img,
+.t2-hero-media > video,
+.t2-hero-media > .video-container,
+.t2-hero-media > .video-container > video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.t2-hero-media > .video-container {
+    margin: 0;
+    max-width: none;
+    min-height: 0;
+    background: transparent;
+}
+
+.t2-detail-content {
+    margin-top: 1.2rem;
+}
+
+.t2-detail-content .project-content {
+    color: #dfdfdb;
+}
+
+.t2-detail-content .project-links {
+    margin-top: 1.2rem;
+}
+
+.t2-transition-layer {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 90;
+    overflow: hidden;
+    border-radius: 12px;
+    transform-origin: top left;
+    will-change: transform, opacity;
+}
+
+.t2-transition-layer.t2-active {
+    opacity: 1;
+}
+
+.t2-transition-layer > img,
+.t2-transition-layer > video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.t2-empty {
+    color: #8e8e86;
+}
+
+@media (max-width: 760px) {
+    .t2-project-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #main-header,
+    .t2-project-card,
+    .t2-detail-scene {
+        transition: none !important;
+    }
+}
