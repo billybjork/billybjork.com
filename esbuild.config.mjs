@@ -1,15 +1,17 @@
 import * as esbuild from 'esbuild';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
+const outputDir = 'static/build';
 
-// Entry points for each bundle
+// One generated output per browser runtime entry.
 const entryPoints = {
-  'project-bundle': 'static/ts/project/index.ts',
-  'edit-bundle': 'static/ts/edit/index.ts',
+  project: 'static/ts/project/index.ts',
+  edit: 'static/ts/edit/index.ts',
+  homepage: 'static/ts/homepage/index.ts',
 };
 
 // Filter to only existing entry points
@@ -18,19 +20,25 @@ const existingEntries = Object.entries(entryPoints)
   .reduce((acc, [name, path]) => ({ ...acc, [name]: path }), {});
 
 if (Object.keys(existingEntries).length === 0) {
-  console.log('No entry points found yet. Create TypeScript files to start building.');
+  console.log('No frontend entry points found yet. Create TypeScript files to start building.');
   process.exit(0);
+}
+
+function prepareOutputDir() {
+  const absoluteOutputDir = join(__dirname, outputDir);
+  rmSync(absoluteOutputDir, { recursive: true, force: true });
+  mkdirSync(absoluteOutputDir, { recursive: true });
 }
 
 /** @type {esbuild.BuildOptions} */
 const buildOptions = {
   entryPoints: existingEntries,
   bundle: true,
-  outdir: 'static/js',
+  outdir: outputDir,
   format: 'iife',
   platform: 'browser',
   target: ['es2022'],
-  sourcemap: true,
+  sourcemap: isWatch,
   minify: !isWatch,
   metafile: true,
   logLevel: 'info',
@@ -65,7 +73,7 @@ const buildOptions = {
             if (result.metafile) {
               const outputs = Object.entries(result.metafile.outputs);
               for (const [file, meta] of outputs) {
-                if (file.endsWith('.js')) {
+                if (file.endsWith('.js') || file.endsWith('.css')) {
                   const sizeKB = (meta.bytes / 1024).toFixed(1);
                   console.log(`  ${file}: ${sizeKB} KB`);
                 }
@@ -80,6 +88,7 @@ const buildOptions = {
 
 async function build() {
   try {
+    prepareOutputDir();
     if (isWatch) {
       const ctx = await esbuild.context(buildOptions);
       await ctx.watch();

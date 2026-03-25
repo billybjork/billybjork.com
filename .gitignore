@@ -151,4 +151,5 @@ workdir/
 
 # Node.js / TypeScript
 node_modules/
+static/build/
 *.js.map

@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from config import templates
-from utils.content import CONTENT_DIR, ProjectInfo, load_project
+from utils.content import ProjectCardInfo, get_content_paths, load_project_info
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,6 @@ DEFAULT_TEST_SPRITE_SLUG_MAP = [
     ("lead-me-home", "lead-me-home"),
     ("surf", "surf"),
 ]
-TEST_PROJECTS_FILE = CONTENT_DIR / "test_projects.json"
 TEST_RGBD_SPRITES_DIR = Path(__file__).resolve().parent.parent / "static" / "test" / "rgbd-sprites"
 DEFAULT_TEST_RESOLUTION_WIDTH = 640
 DEFAULT_TEST_RESOLUTION_HEIGHT = 360
@@ -36,19 +35,20 @@ def _is_localhost(request: Request) -> bool:
 
 def _load_test_project_entries() -> list[tuple[str, str]]:
     """Load ordered sprite/slug pairs for /test from content config."""
-    if not TEST_PROJECTS_FILE.exists():
+    test_projects_file = get_content_paths().test_projects_file
+    if not test_projects_file.exists():
         return list(DEFAULT_TEST_SPRITE_SLUG_MAP)
 
     try:
-        with open(TEST_PROJECTS_FILE, "r", encoding="utf-8") as file_obj:
+        with open(test_projects_file, "r", encoding="utf-8") as file_obj:
             payload = json.load(file_obj)
     except (OSError, json.JSONDecodeError) as err:
-        logger.warning("Failed to read %s: %s", TEST_PROJECTS_FILE, err)
+        logger.warning("Failed to read %s: %s", test_projects_file, err)
         return list(DEFAULT_TEST_SPRITE_SLUG_MAP)
 
     raw_entries = payload.get("projects") if isinstance(payload, dict) else payload
     if not isinstance(raw_entries, list):
-        logger.warning("Invalid /test project config format in %s", TEST_PROJECTS_FILE)
+        logger.warning("Invalid /test project config format in %s", test_projects_file)
         return list(DEFAULT_TEST_SPRITE_SLUG_MAP)
 
     parsed_entries: list[tuple[str, str]] = []
@@ -107,8 +107,8 @@ def _load_rgbd_sprite_metadata(sprite_id: str) -> dict:
         "rows": metadata.get("rows"),
         "frame_width": frame_width,
         "frame_height": frame_height,
-        "sprite_sheet_url": sprite_sheet_url,
-        "aspect_ratio": aspect_ratio,
+        "sprite_sheet_link": sprite_sheet_url,
+        "sprite_aspect_ratio": aspect_ratio,
     }
 
 
@@ -146,36 +146,19 @@ def _select_rgbd_resolution(resolutions: dict) -> tuple[str, dict] | None:
     return key, value
 
 
-def _load_test_projects() -> list[dict]:
+def _load_test_projects() -> list[ProjectCardInfo]:
     """Load projects that currently have RGBD sprite assets for /test."""
     projects = []
     for sprite_id, project_slug in _load_test_project_entries():
-        project_data = load_project(project_slug)
-        if not project_data:
+        project = load_project_info(project_slug)
+        if not project:
             continue
-        project = ProjectInfo.from_dict(project_data)
         sprite_metadata = _load_rgbd_sprite_metadata(sprite_id)
-        video_aspect_ratio = None
-        if project.video_width and project.video_height:
-            video_aspect_ratio = project.video_width / project.video_height
-
         projects.append(
-            {
-                "name": project.name,
-                "slug": project.slug,
-                "sprite_id": sprite_id,
-                "video_link": project.video_link,
-                "thumbnail_link": project.thumbnail_link,
-                "sprite_sheet_link": sprite_metadata.get("sprite_sheet_url") or project.sprite_sheet_link,
-                "frames": sprite_metadata.get("frames") or project.frames,
-                "columns": sprite_metadata.get("columns") or project.columns,
-                "rows": sprite_metadata.get("rows") or project.rows,
-                "frame_width": sprite_metadata.get("frame_width") or project.frame_width,
-                "frame_height": sprite_metadata.get("frame_height") or project.frame_height,
-                "sprite_aspect_ratio": sprite_metadata.get("aspect_ratio"),
-                "hero_aspect_ratio": video_aspect_ratio or sprite_metadata.get("aspect_ratio"),
-                "formatted_date": project.formatted_date,
-            }
+            project.to_card(
+                media_overrides=sprite_metadata,
+                sprite_id=sprite_id,
+            )
         )
     return projects
 
@@ -186,7 +169,7 @@ def _test_template_context(
     initial_project_direct_entry: bool = False,
 ) -> dict:
     projects = _load_test_projects()
-    slug_set = {project["slug"] for project in projects}
+    slug_set = {project.slug for project in projects}
     if initial_project_slug and initial_project_slug not in slug_set:
         raise HTTPException(status_code=404, detail="Project not found in /test")
 
@@ -203,29 +186,6 @@ def _test_template_context(
     }
 
 
-def _test2_template_context(
-    request: Request,
-    initial_project_slug: str | None = None,
-    initial_project_direct_entry: bool = False,
-) -> dict:
-    projects = _load_test_projects()
-    slug_set = {project["slug"] for project in projects}
-    if initial_project_slug and initial_project_slug not in slug_set:
-        raise HTTPException(status_code=404, detail="Project not found in /test-2")
-
-    return {
-        "request": request,
-        "projects": projects,
-        "page_title": "Shared Element Transition Reliability Test",
-        "page_meta_description": "Testing deterministic list/detail shared-element transitions",
-        "load_project_bundle": False,
-        "is_dev_mode": _is_localhost(request),
-        "initial_project_slug": initial_project_slug,
-        "initial_project_direct_entry": initial_project_direct_entry,
-        "test_base_path": "/test-2",
-    }
-
-
 @router.get("/test", response_class=HTMLResponse)
 async def test_page(request: Request, project: str | None = Query(None)):
     """Render the shared-canvas point cloud depth test page."""
@@ -234,6 +194,7 @@ async def test_page(request: Request, project: str | None = Query(None)):
         initial_project_slug = None
 
     return templates.TemplateResponse(
+        request,
         "test.html",
         _test_template_context(
             request,
@@ -247,38 +208,9 @@ async def test_page(request: Request, project: str | None = Query(None)):
 async def test_project_page(request: Request, project_slug: str):
     """Render /test with a project opened directly from URL."""
     return templates.TemplateResponse(
+        request,
         "test.html",
         _test_template_context(
-            request,
-            initial_project_slug=project_slug,
-            initial_project_direct_entry=True,
-        ),
-    )
-
-
-@router.get("/test-2", response_class=HTMLResponse)
-async def test_2_page(request: Request, project: str | None = Query(None)):
-    """Render clean-slate shared-element transition test page."""
-    initial_project_slug = project.strip() if isinstance(project, str) else None
-    if initial_project_slug == "":
-        initial_project_slug = None
-
-    return templates.TemplateResponse(
-        "test-2.html",
-        _test2_template_context(
-            request,
-            initial_project_slug=initial_project_slug,
-            initial_project_direct_entry=bool(initial_project_slug),
-        ),
-    )
-
-
-@router.get("/test-2/{project_slug}", response_class=HTMLResponse)
-async def test_2_project_page(request: Request, project_slug: str):
-    """Render /test-2 with a project opened directly from URL."""
-    return templates.TemplateResponse(
-        "test-2.html",
-        _test2_template_context(
             request,
             initial_project_slug=project_slug,
             initial_project_direct_entry=True,

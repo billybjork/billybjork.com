@@ -1,10 +1,10 @@
 {% if is_open %}
-    {% if project.video_link %}
+    {% if project.has_video %}
     <section
         class="video-container"
         id="hero"
-        {% if project.video_width and project.video_height %}
-        style="--video-aspect-ratio: {{ (project.video_width / project.video_height) | round(8) }};"
+        {% if project.video_aspect_ratio %}
+        style="--video-aspect-ratio: {{ project.video_aspect_ratio | round(8) }};"
         {% endif %}>
         <video id="video-player-{{ project.id }}"
                class="lazy-video"

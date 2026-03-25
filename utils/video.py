@@ -369,7 +369,8 @@ def generate_sprite_sheet(
     fps: int = 20,
     frame_width: int = 320,
     frame_height: int = 180,
-    columns: int = 5
+    columns: int = 5,
+    preserve_aspect: bool = False,
 ) -> Tuple[str, dict]:
     """
     Generate a sprite sheet from a video.
@@ -383,6 +384,9 @@ def generate_sprite_sheet(
         frame_width: Width of each frame
         frame_height: Height of each frame
         columns: Number of columns in sprite sheet
+        preserve_aspect: When True, scale to the requested frame size without
+            crop-to-fill. Callers should provide a frame size that matches the
+            source aspect ratio.
 
     Returns:
         Tuple of (output_path, metadata dict)
@@ -395,13 +399,26 @@ def generate_sprite_sheet(
         frames_pattern = os.path.join(temp_dir, 'frame_%04d.jpg')
 
         # Extract frames
+        if preserve_aspect:
+            video_filter = (
+                f'fps={fps},'
+                f'scale={frame_width}:{frame_height}:flags=lanczos,'
+                'setsar=1'
+            )
+        else:
+            video_filter = (
+                f'fps={fps},'
+                f'scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,'
+                f'crop={frame_width}:{frame_height}'
+            )
+
         cmd = [
             'ffmpeg',
             '-y',
             '-i', video_path,
             '-ss', str(start_time),
             '-t', str(duration),
-            '-vf', f'fps={fps},scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,crop={frame_width}:{frame_height}',
+            '-vf', video_filter,
             '-q:v', '5',
             frames_pattern
         ]
@@ -440,7 +457,7 @@ def generate_sprite_sheet(
                 '-i', video_path,
                 '-ss', str(start_time),
                 '-t', str(duration),
-                '-vf', f'fps={fps},scale={frame_width}:{frame_height}:force_original_aspect_ratio=increase,crop={frame_width}:{frame_height},tile={tile_w}x{tile_h}',
+                '-vf', f'{video_filter},tile={tile_w}x{tile_h}',
                 '-frames:v', '1',
                 '-q:v', '5',
                 output_path

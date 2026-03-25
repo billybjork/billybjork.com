@@ -12,9 +12,9 @@ router = APIRouter()
 async def valentine_page(request: Request):
     """Render the Valentine's Day 3D gallery page."""
     return templates.TemplateResponse(
+        request,
         "valentine.html",
         {
-            "request": request,
             "page_title": "Will You Be My Valentine?",
             "page_meta_description": "A special Valentine's Day message",
         },

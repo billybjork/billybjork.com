@@ -58,12 +58,12 @@
 
     {% include "footer.html" %}
 
-    <!-- Deferred scripts (TypeScript bundles) -->
+    <!-- Deferred scripts (generated frontend runtimes) -->
     {% if should_load_project_bundle %}
-    <script src="{{ static_url(request, 'js/project-bundle.js') }}" defer></script>
+    <script src="{{ static_url(request, 'build/project.js') }}" defer></script>
     {% endif %}
     {% if is_dev_mode %}
-    <script src="{{ static_url(request, 'js/edit-bundle.js') }}" defer></script>
+    <script src="{{ static_url(request, 'build/edit.js') }}" defer></script>
     {% endif %}
 
     {% block additional_scripts %}{% endblock %}

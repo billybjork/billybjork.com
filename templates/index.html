@@ -1,21 +1,119 @@
 {% extends "base.html" %}
 
-{% block main_class %}
-    home-page{% if isolation_mode %} isolation-mode{% endif %}
+{% block main_class %}homepage-shared-element{% endblock %}
+
+{% block additional_head %}
+<link rel="stylesheet" href="{{ static_url(request, 'build/homepage.css') }}">
 {% endblock %}
 
 {% block content %}
-
-<section id="project-list">
-    {% set open_project = open_project if open_project is defined else None %}
-    {% for project in projects %}
-        {% set is_open = (open_project and open_project.slug == project.slug) %}
-        {% include "project.html" with context %}
-    {% endfor %}
-
-    {% if not isolation_mode and has_more %}
-        {% include "infinite_scroll_sentinel.html" %}
+<div
+    class="homepage-list-scene"
+    id="homepage-list-scene">
+    {% if projects %}
+    <ul class="homepage-project-list" aria-label="Projects">
+        {% for project in projects %}
+        {% set homepage_thumb_aspect_ratio = project.thumbnail_aspect_ratio %}
+        <li>
+            <article
+                class="homepage-project-card"
+                data-homepage-project-card
+                data-slug="{{ project.slug }}"
+                data-title="{{ project.name }}"
+                data-formatted-date="{{ project.formatted_date }}"
+                {% if project.has_sprite_animation %}data-sprite-sheet="{{ project.sprite_sheet_link }}"{% endif %}
+                {% if project.has_sprite_animation %}data-frames="{{ project.frames }}"{% endif %}
+                {% if project.has_sprite_animation %}data-columns="{{ project.columns }}"{% endif %}
+                {% if project.has_sprite_animation %}data-rows="{{ project.rows }}"{% endif %}
+                {% if project.has_sprite_animation %}data-frame-width="{{ project.frame_width }}"{% endif %}
+                {% if project.has_sprite_animation %}data-frame-height="{{ project.frame_height }}"{% endif %}
+                {% if project.sprite_aspect_ratio %}data-sprite-aspect-ratio="{{ project.sprite_aspect_ratio | round(8) }}"{% endif %}
+                {% if homepage_thumb_aspect_ratio %}data-thumbnail-aspect-ratio="{{ homepage_thumb_aspect_ratio | round(8) }}"{% endif %}
+                {% if project.hero_aspect_ratio %}data-hero-aspect-ratio="{{ project.hero_aspect_ratio | round(8) }}"{% endif %}
+                {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
+                {% if project.video_link %}data-hls-url="{{ project.video_link }}"{% endif %}>
+                <button
+                    class="homepage-open-button"
+                    type="button"
+                    data-open-project="{{ project.slug }}"
+                    aria-controls="homepage-detail-scene"
+                    aria-label="Open {{ project.name }}">
+                    <span
+                        class="homepage-thumb-frame"
+                        data-homepage-thumb-frame
+                        {% if homepage_thumb_aspect_ratio %}
+                        style="--homepage-thumb-aspect: {{ homepage_thumb_aspect_ratio | round(8) }};"
+                        {% endif %}>
+                        <span class="homepage-thumb-media" data-homepage-thumb-media>
+                            {% if project.thumbnail_link %}
+                            <img
+                                class="homepage-thumb-image"
+                                src="{{ project.thumbnail_link }}"
+                                alt=""
+                                loading="lazy"
+                                decoding="async">
+                            {% else %}
+                            <span class="homepage-thumb-empty" aria-hidden="true">No thumbnail</span>
+                            {% endif %}
+                        </span>
+                    </span>
+                </button>
+            </article>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="homepage-empty">No projects available.</p>
     {% endif %}
+</div>
+
+<section
+    class="homepage-detail-scene"
+    id="homepage-detail-scene"
+    aria-hidden="true"
+    data-scene-state="closed"
+    data-open-project-slug="">
+    <div class="homepage-detail-backdrop" data-close-detail></div>
+    <div class="homepage-detail-scroll">
+        <article class="homepage-detail-shell" role="dialog" aria-modal="true" aria-labelledby="homepage-detail-title">
+            <header class="homepage-detail-header">
+                <div class="homepage-detail-heading">
+                    <time class="homepage-detail-date project-date" id="homepage-detail-date"></time>
+                    <h2 class="homepage-detail-title project-name" id="homepage-detail-title"></h2>
+                </div>
+                <div class="homepage-detail-actions edit-buttons">
+                    {% if is_dev_mode %}
+                    <button
+                        class="edit-project-btn homepage-edit-project-btn"
+                        type="button"
+                        data-action="edit"
+                        data-homepage-edit-project
+                        data-project-slug=""
+                        aria-label="Edit project"
+                        title="Edit">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    </button>
+                    {% endif %}
+                    <button class="homepage-close-button" type="button" data-close-detail aria-label="Close project">&times;</button>
+                </div>
+            </header>
+            <div
+                class="homepage-hero-frame"
+                id="homepage-detail-hero-frame"
+                aria-label="Project media">
+                <div class="homepage-hero-media" id="homepage-detail-hero-media"></div>
+            </div>
+            <section
+                class="homepage-detail-content"
+                id="homepage-detail-content"
+                data-homepage-detail-content></section>
+        </article>
+    </div>
 </section>
 
+<div id="homepage-transition-layer" class="homepage-transition-layer" aria-hidden="true"></div>
+{% endblock %}
+
+{% block additional_scripts %}
+<script src="{{ static_url(request, 'build/homepage.js') }}"></script>
 {% endblock %}

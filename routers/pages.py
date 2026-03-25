@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime
@@ -11,7 +13,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from config import templates
 from dependencies import get_general_info, is_edit_mode
 from utils.analytics import get_project_stats, record_view
-from utils.content import load_about, load_all_projects, load_project, ProjectInfo
+from utils.content import (
+    ProjectCardInfo,
+    load_about,
+    load_all_project_info,
+    load_project_info,
+)
 
 router = APIRouter()
 
@@ -40,96 +47,72 @@ def extract_meta_description(html_content: str, word_limit: int = 25) -> str:
     return snippet
 
 
-def format_project_for_template(project: ProjectInfo, is_open: bool = False) -> dict:
-    """Format a ProjectInfo object for template rendering."""
+def resolve_homepage_projects(show_drafts_only: bool) -> list[ProjectCardInfo]:
+    if show_drafts_only:
+        projects = [
+            project
+            for project in load_all_project_info(
+                include_drafts=True,
+                include_html=False,
+                include_revision=False,
+            )
+            if project.is_draft
+        ]
+    else:
+        projects = load_all_project_info(
+            include_drafts=False,
+            include_html=False,
+            include_revision=False,
+        )
+
+    return [project.to_card() for project in projects]
+
+
+def build_homepage_context(
+    request: Request,
+    *,
+    projects: list[ProjectCardInfo],
+    is_dev_mode: bool,
+    general_info,
+    page_title: str | None = None,
+    page_meta_description: str | None = None,
+    og_image_link: str | None = None,
+) -> dict:
     return {
-        "id": project.id,
-        "name": project.name,
-        "slug": project.slug,
-        "sprite_sheet_link": project.sprite_sheet_link,
-        "video_link": project.video_link,
-        "thumbnail_link": project.thumbnail_link,
-        "frames": project.frames if project.frames else 60,
-        "columns": project.columns if project.columns else 5,
-        "frame_width": project.frame_width if project.frame_width else 320,
-        "frame_height": project.frame_height if project.frame_height else 180,
-        "video_width": project.video_width,
-        "video_height": project.video_height,
-        "youtube_link": project.youtube_link,
-        "formatted_date": project.formatted_date,
-        "pinned": project.pinned,
-        "is_open": is_open,
-        "is_draft": project.is_draft,
+        "request": request,
+        "projects": projects,
+        "current_year": datetime.now().year,
+        "general_info": general_info,
+        "is_dev_mode": is_dev_mode,
+        "page_title": page_title,
+        "page_meta_description": page_meta_description,
+        "og_image_link": og_image_link or general_info.about_photo_link,
     }
 
 
 @router.get("/", response_class=HTMLResponse)
 async def read_root(
     request: Request,
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
     show_drafts: bool = Query(False),
 ):
     try:
         is_dev_mode = is_edit_mode(request)
         show_drafts_only = show_drafts and is_dev_mode
-        if show_drafts_only:
-            all_projects = [
-                project
-                for project in load_all_projects(
-                    include_drafts=True,
-                    include_html=False,
-                    include_revision=False,
-                )
-                if project.get("is_draft", False)
-            ]
-        else:
-            all_projects = load_all_projects(
-                include_drafts=False,
-                include_html=False,
-                include_revision=False,
-            )
-
-        start_idx = (page - 1) * limit
-        end_idx = start_idx + limit
-        projects = all_projects[start_idx:end_idx]
-
-        formatted_projects = [
-            format_project_for_template(ProjectInfo.from_dict(proj_data))
-            for proj_data in projects
-        ]
-
-        has_more = end_idx < len(all_projects)
+        formatted_projects = resolve_homepage_projects(show_drafts_only)
         general_info = get_general_info()
 
-        if is_partial_request(request):
-            return templates.TemplateResponse(
-                "projects_infinite_scroll.html",
-                {
-                    "request": request,
-                    "projects": formatted_projects,
-                    "page": page,
-                    "has_more": has_more,
-                    "show_drafts": show_drafts_only,
-                },
-            )
-
         return templates.TemplateResponse(
+            request,
             "index.html",
-            {
-                "request": request,
-                "projects": formatted_projects,
-                "current_year": datetime.now().year,
-                "general_info": general_info,
-                "is_dev_mode": is_dev_mode,
-                "page": page,
-                "has_more": has_more,
-                "limit": limit,
-                "show_drafts": show_drafts_only,
-                "og_image_link": general_info.about_photo_link,
-            },
+            build_homepage_context(
+                request,
+                projects=formatted_projects,
+                is_dev_mode=is_dev_mode,
+                general_info=general_info,
+                og_image_link=general_info.about_photo_link,
+            ),
         )
-    except Exception as e:
+    except Exception:
         logger.exception("Error in read_root")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
@@ -151,9 +134,9 @@ async def read_about(request: Request):
     is_dev_mode = is_edit_mode(request)
 
     return templates.TemplateResponse(
+        request,
         "about.html",
         {
-            "request": request,
             "current_year": datetime.now().year,
             "about_content": about_html,
             "about_photo_link": general_info.about_photo_link,
@@ -178,11 +161,10 @@ async def read_project(
     show_drafts: bool = Query(False),
 ):
     try:
-        project_data = load_project(project_slug, include_revision=False)
-        if not project_data:
+        project = load_project_info(project_slug, include_revision=False)
+        if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        project = ProjectInfo.from_dict(project_data)
         general_info = get_general_info()
         is_open = not close
         is_dev_mode = is_edit_mode(request)
@@ -193,8 +175,11 @@ async def read_project(
         if is_partial and not is_open:
             return Response(content="", status_code=200)
 
-        # Record page view (analytics never breaks the site)
-        if is_open:
+        # Record page view (analytics never breaks the site).
+        # The new shared-element homepage fetches project details via partials,
+        # so we only record views on the partial/detail response path to avoid
+        # double-counting direct-entry page loads.
+        if is_open and is_partial:
             try:
                 forwarded = request.headers.get("x-forwarded-for", "")
                 client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
@@ -206,7 +191,7 @@ async def read_project(
 
         # Fetch stats only on localhost
         analytics = None
-        if is_open and is_dev_mode:
+        if is_open and is_partial and is_dev_mode:
             try:
                 analytics = await asyncio.to_thread(get_project_stats, project_slug)
             except Exception:
@@ -214,9 +199,9 @@ async def read_project(
 
         if is_partial:
             return templates.TemplateResponse(
+                request,
                 "project_details.html",
                 {
-                    "request": request,
                     "project": project,
                     "is_open": is_open,
                     "meta_description": meta_description,
@@ -224,28 +209,22 @@ async def read_project(
                 },
             )
 
-        formatted_project = format_project_for_template(project)
-        formatted_project["html_content"] = project.html_content
-
+        homepage_projects = resolve_homepage_projects(show_drafts_only)
         return templates.TemplateResponse(
+            request,
             "index.html",
-            {
-                "request": request,
-                "projects": [formatted_project],
-                "open_project": project,
-                "current_year": datetime.now().year,
-                "general_info": general_info,
-                "isolation_mode": True,
-                "is_dev_mode": is_dev_mode,
-                "page_title": project.name,
-                "page_meta_description": meta_description,
-                "analytics": analytics,
-                "show_drafts": show_drafts_only,
-                "og_image_link": project.og_image_link,
-            },
+            build_homepage_context(
+                request,
+                projects=homepage_projects,
+                is_dev_mode=is_dev_mode,
+                general_info=general_info,
+                page_title=project.name,
+                page_meta_description=meta_description,
+                og_image_link=project.og_image_link,
+            ),
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error in read_project")
         raise HTTPException(status_code=500, detail="Internal Server Error")

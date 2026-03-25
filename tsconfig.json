@@ -11,10 +11,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false,
-    "declarationMap": false,
-    "sourceMap": true,
-    "outDir": "./static/js",
+    "noEmit": true,
     "rootDir": "./static/ts",
     "baseUrl": "./static/ts",
     "paths": {
@@ -27,5 +24,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["static/ts/**/*.ts"],
-  "exclude": ["node_modules", "static/js"]
+  "exclude": ["node_modules", "static/build"]
 }

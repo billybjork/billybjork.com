@@ -1,16 +1,8 @@
 /**
  * Project Interactions Module
- * Handles project item interactions, HLS video, thumbnails, and animations
+ * Generic detail hydration for project content mounted anywhere on the site.
  */
 
-import type { ProjectEventDetail } from '../types/events';
-import {
-  cleanupActiveHeroPlayers as cleanupActiveHLSPlayers,
-  destroyHeroVideoPlayer as destroyHLSPlayer,
-  initializeLazyHeroVideos as initializeLazyVideos,
-  initializeOpenHeroVideo as handleInitialLoad,
-  setupHeroVideoPlayer as setupHLSPlayer,
-} from './hero-player';
 import { copyToClipboard, showNotification } from './clipboard';
 import { resolveHashTarget, scrollToHashTarget } from './hash-scroll';
 import {
@@ -20,50 +12,22 @@ import {
   openImageLightbox,
   openVideoLightbox,
 } from './lightbox';
-import { closeProject as closeProjectBySlug } from './loader';
 
-// ========== UTILITY FUNCTIONS ==========
-
-/**
- * Resets the background position of a thumbnail element.
- */
-function resetThumbnailPosition(thumbnail: HTMLElement): void {
-  if (thumbnail) {
-    thumbnail.style.backgroundPosition = '0 0';
-  }
-}
-
-/**
- * Scrolls smoothly to a given project header with an offset.
- */
-function scrollToProjectHeader(projectHeader: HTMLElement): void {
-  const offset = 40;
-  const headerRect = projectHeader.getBoundingClientRect();
-  const absoluteElementTop = headerRect.top + window.pageYOffset;
-  const scrollToPosition = absoluteElementTop - offset;
-
-  window.scrollTo({
-    top: scrollToPosition,
-    behavior: 'smooth'
-  });
-}
-
-/**
- * Opens external links in new tabs.
- */
 function openExternalLinksInNewTab(root: ParentNode = document): void {
   const links = root.querySelectorAll<HTMLAnchorElement>('a[href]');
   const currentHost = window.location.host;
 
-  links.forEach(link => {
+  links.forEach((link) => {
     const href = link.getAttribute('href');
     if (!href) return;
 
-    if (href.startsWith('#') ||
-        href.startsWith('/') ||
-        href.startsWith('../') ||
-        href.startsWith('mailto:') ||
-        href.startsWith('tel:')) {
+    if (
+      href.startsWith('#') ||
+      href.startsWith('/') ||
+      href.startsWith('../') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('tel:')
+    ) {
       return;
     }
 
@@ -74,65 +38,25 @@ function openExternalLinksInNewTab(root: ParentNode = document): void {
         link.setAttribute('rel', 'noopener noreferrer');
       }
     } catch {
-      // Invalid URL, skip
+      // Ignore invalid URLs.
     }
   });
 }
 
-// ========== INTERSECTION OBSERVER FOR PROJECT ITEMS ==========
+let thumbnailObserver: IntersectionObserver | null = null;
 
-/**
- * Callback for IntersectionObserver to handle visibility of project items.
- */
-function handleProjectIntersection(
-  entries: IntersectionObserverEntry[],
-  observer: IntersectionObserver
-): void {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      const projectItem = entry.target as HTMLElement;
-      projectItem.classList.add('fade-in');
-      observer.unobserve(projectItem);
-    }
-  });
-}
+function getThumbnailObserver(): IntersectionObserver | null {
+  if (!('IntersectionObserver' in window)) {
+    return null;
+  }
+  if (thumbnailObserver) {
+    return thumbnailObserver;
+  }
 
-const projectObserver = new IntersectionObserver(handleProjectIntersection, {
-  root: null,
-  rootMargin: '0px',
-  threshold: 0.1
-});
+  thumbnailObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
 
-/**
- * Observes all project items that haven't been animated yet.
- */
-function observeProjectItems(projectItems: NodeListOf<Element> | Element[]): void {
-  projectItems.forEach(item => {
-    if (!item.classList.contains('fade-in') && !item.classList.contains('no-fade')) {
-      projectObserver.observe(item);
-    }
-  });
-}
-
-/**
- * Initializes the observer for existing project items on page load.
- */
-function initializeProjectObserver(): void {
-  const existingProjectItems = document.querySelectorAll('.project-item');
-  observeProjectItems(existingProjectItems);
-}
-
-// ========== INTERSECTION OBSERVER FOR THUMBNAILS ==========
-
-/**
- * Callback for IntersectionObserver to handle lazy loading of thumbnails.
- */
-function handleThumbnailIntersection(
-  entries: IntersectionObserverEntry[],
-  observer: IntersectionObserver
-): void {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
       const thumbnail = entry.target as HTMLElement;
       const bgImage = thumbnail.getAttribute('data-bg');
       if (bgImage) {
@@ -146,157 +70,34 @@ function handleThumbnailIntersection(
         };
         img.src = bgImage;
       }
+
       observer.unobserve(thumbnail);
-    }
+    });
+  }, {
+    rootMargin: '0px 0px 50px 0px',
+    threshold: 0.1,
   });
+
+  return thumbnailObserver;
 }
 
-const thumbnailObserver = new IntersectionObserver(handleThumbnailIntersection, {
-  rootMargin: '0px 0px 50px 0px',
-  threshold: 0.1
-});
-
-/**
- * Initializes lazy loading for thumbnails within a given root.
- */
 function initializeLazyThumbnails(root: ParentNode = document): void {
   const lazyThumbnails = root.querySelectorAll<HTMLElement>('.lazy-thumbnail');
+  const observer = getThumbnailObserver();
 
-  lazyThumbnails.forEach(thumbnail => {
-    if (thumbnail.getAttribute('data-bg')) {
-      thumbnailObserver.observe(thumbnail);
+  lazyThumbnails.forEach((thumbnail) => {
+    if (!thumbnail.getAttribute('data-bg')) return;
+    if (observer) {
+      observer.observe(thumbnail);
+      return;
     }
+
+    const bgImage = thumbnail.getAttribute('data-bg');
+    if (!bgImage) return;
+    thumbnail.style.backgroundImage = `url('${bgImage}')`;
+    thumbnail.removeAttribute('data-bg');
+    thumbnail.classList.remove('lazy-thumbnail');
   });
-}
-
-// ========== HLS VIDEO PLAYER ==========
-// Hero/HLS player lifecycle is isolated in ./hero-player.
-
-// ========== ANIMATION LOOP FOR THUMBNAILS ==========
-
-let animationProgress = 0;
-
-function updateThumbnails(): void {
-  const thumbnails = document.querySelectorAll<HTMLElement>('.thumbnail');
-
-  if (!thumbnails.length) {
-    return;
-  }
-
-  thumbnails.forEach(thumbnail => {
-    const totalFrames = parseInt(thumbnail.dataset.frames ?? '0', 10);
-    const frameWidth = parseInt(thumbnail.dataset.frameWidth ?? '0', 10);
-    const frameHeight = parseInt(thumbnail.dataset.frameHeight ?? '0', 10);
-    const columns = parseInt(thumbnail.dataset.columns ?? '1', 10);
-
-    const rows = Math.ceil(totalFrames / columns);
-    const spriteSheetWidth = frameWidth * columns;
-    const spriteSheetHeight = frameHeight * rows;
-    thumbnail.style.backgroundSize = `${spriteSheetWidth}px ${spriteSheetHeight}px`;
-
-    let frameIndex = Math.floor(animationProgress) % totalFrames;
-    if (frameIndex < 0) frameIndex += totalFrames;
-
-    const frameX = (frameIndex % columns) * frameWidth;
-    const frameY = Math.floor(frameIndex / columns) * frameHeight;
-
-    thumbnail.style.backgroundPosition = `-${frameX}px -${frameY}px`;
-  });
-}
-
-// ========== SCROLL HANDLING ==========
-
-let lastScrollTop = window.pageYOffset || document.documentElement.scrollTop;
-let lastScrollEventTime = Date.now();
-let animationSpeed = 0;
-let lastAnimationFrameTime = Date.now();
-let animationFrameId: number | null = null;
-
-function startAnimationLoop(): void {
-  if (animationFrameId !== null || document.hidden) return;
-  lastAnimationFrameTime = Date.now();
-  animationFrameId = requestAnimationFrame(animationLoop);
-}
-
-function stopAnimationLoop(): void {
-  if (animationFrameId !== null) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-  }
-}
-
-function handleScroll(): void {
-  const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop;
-  const now = Date.now();
-  const deltaTime = (now - lastScrollEventTime) / 1000;
-
-  if (deltaTime > 0) {
-    const scrollVelocity = (currentScrollTop - lastScrollTop) / deltaTime;
-    const pixelsPerFrame = 3;
-    animationSpeed = scrollVelocity / pixelsPerFrame;
-
-    const maxAnimationSpeed = 30;
-    const minAnimationSpeed = -30;
-    animationSpeed = Math.max(minAnimationSpeed, Math.min(maxAnimationSpeed, animationSpeed));
-  }
-
-  lastScrollTop = currentScrollTop;
-  lastScrollEventTime = now;
-
-  if (Math.abs(animationSpeed) > 0.01) {
-    startAnimationLoop();
-  }
-}
-
-function animationLoop(): void {
-  if (document.hidden) {
-    stopAnimationLoop();
-    return;
-  }
-
-  const now = Date.now();
-  const deltaTime = (now - lastAnimationFrameTime) / 1000;
-  lastAnimationFrameTime = now;
-
-  const baseDeceleration = 15;
-  const speedFactor = Math.abs(animationSpeed) * 0.1;
-  const dynamicDeceleration = baseDeceleration + speedFactor;
-
-  if (animationSpeed > 0) {
-    animationSpeed = Math.max(0, animationSpeed - dynamicDeceleration * deltaTime);
-  } else if (animationSpeed < 0) {
-    animationSpeed = Math.min(0, animationSpeed + dynamicDeceleration * deltaTime);
-  }
-
-  animationProgress += animationSpeed * deltaTime;
-
-  if (animationProgress > 1e6) animationProgress -= 1e6;
-  if (animationProgress < -1e6) animationProgress += 1e6;
-
-  updateThumbnails();
-
-  if (Math.abs(animationSpeed) > 0.01) {
-    animationFrameId = requestAnimationFrame(animationLoop);
-  } else {
-    animationSpeed = 0;
-    stopAnimationLoop();
-  }
-}
-
-// ========== INITIALIZATION ==========
-
-function initializeThumbnails(): void {
-  const isRoot = window.location.pathname === '/';
-
-  if (!isRoot) {
-    const existingProjectItems = document.querySelectorAll<HTMLElement>('.project-item');
-    existingProjectItems.forEach(item => {
-      item.classList.add('no-fade');
-    });
-  }
-
-  updateThumbnails();
-  window.addEventListener('scroll', handleScroll);
 }
 
 let inlineVideoObserver: IntersectionObserver | null = null;
@@ -316,7 +117,7 @@ function hydrateInlineVideo(video: HTMLVideoElement): void {
   }
 
   const sourceElements = video.querySelectorAll<HTMLSourceElement>('source[data-src]');
-  sourceElements.forEach(source => {
+  sourceElements.forEach((source) => {
     const sourceSrc = source.dataset.src;
     if (!sourceSrc) return;
     source.src = sourceSrc;
@@ -334,7 +135,7 @@ function hydrateInlineVideo(video: HTMLVideoElement): void {
 
   if (video.autoplay || video.hasAttribute('autoplay')) {
     video.play().catch(() => {
-      // Ignore autoplay errors; user interaction can still start playback.
+      // Ignore autoplay failures; user interaction can still start playback.
     });
   }
 }
@@ -348,7 +149,7 @@ function getInlineVideoObserver(): IntersectionObserver | null {
   }
 
   inlineVideoObserver = new IntersectionObserver((entries, observer) => {
-    entries.forEach(entry => {
+    entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
       const video = entry.target as HTMLVideoElement;
       observer.unobserve(video);
@@ -356,7 +157,7 @@ function getInlineVideoObserver(): IntersectionObserver | null {
     });
   }, {
     rootMargin: '0px 0px 250px 0px',
-    threshold: 0.01
+    threshold: 0.01,
   });
 
   return inlineVideoObserver;
@@ -366,327 +167,134 @@ function initializeLazyInlineVideos(root: ParentNode = document): void {
   const inlineVideos = root.querySelectorAll<HTMLVideoElement>('video.lazy-inline-video');
   const observer = getInlineVideoObserver();
 
-  inlineVideos.forEach(video => {
+  inlineVideos.forEach((video) => {
     if (video.dataset.loaded === 'true') return;
     if (observer) {
       observer.observe(video);
-    } else {
-      hydrateInlineVideo(video);
+      return;
     }
+    hydrateInlineVideo(video);
   });
 }
 
-function hydrateProjectMedia(root: ParentNode = document): void {
+export function hydrateProjectMedia(root: ParentNode = document): void {
   initializeLazyInlineVideos(root);
-  initializeLazyVideos(root);
   initializeLazyThumbnails(root);
   initializeLightboxMedia(root);
   openExternalLinksInNewTab(root);
 }
 
-function initializeProjects(): void {
-  hydrateProjectMedia();
-  handleInitialLoad();
-}
+function handleCopyLinkClick(event: MouseEvent): void {
+  const button = (event.target as HTMLElement).closest<HTMLElement>('.copy-text-link');
+  if (!button) return;
 
-// ========== PROJECT EVENT HANDLERS ==========
+  event.preventDefault();
+  const textToCopy = button.getAttribute('data-copy-text');
+  const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
 
-function handleProjectBeforeSwap(): void {
-  cleanupActiveHLSPlayers();
-}
-
-function handleProjectAfterSwap(event: CustomEvent<ProjectEventDetail>): void {
-  const { element, isOpen, smoothScroll = true } = event.detail;
-
-  if (!element) return;
-
-  const projectItem = element.closest<HTMLElement>('.project-item');
-  if (!projectItem) return;
-
-  if (isOpen) {
-    const video = element.querySelector<HTMLVideoElement>('video.lazy-video');
-    if (video) {
-      setupHLSPlayer(video, true).catch(err => {
-        console.error('Failed to initialize HLS player:', err);
-      });
-    }
-
-    const projectHeader = projectItem.querySelector<HTMLElement>('.project-header');
-    if (projectHeader && smoothScroll) {
-      scrollToProjectHeader(projectHeader);
-    }
-  } else {
-    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
-    if (video) {
-      video.pause();
-      destroyHLSPlayer(video);
-    }
-    const thumbnail = projectItem.querySelector<HTMLElement>('.thumbnail');
-    if (thumbnail) {
-      resetThumbnailPosition(thumbnail);
-    }
+  if (textToCopy) {
+    copyToClipboard(textToCopy, notificationMessage);
+    return;
   }
 
-  hydrateProjectMedia(element);
-  updateThumbnails();
+  showNotification('No content available to copy.', true);
 }
 
-function handleProjectsLoaded(): void {
-  const newProjectItems = document.querySelectorAll('.project-item:not(.fade-in):not(.no-fade)');
-  observeProjectItems(newProjectItems);
-  hydrateProjectMedia();
-  updateThumbnails();
-}
-
-function buildIsolationHomeUrl(): URL {
-  const url = new URL('/', window.location.origin);
-  const params = new URLSearchParams(window.location.search);
-  const hasShowDrafts = params.get('show_drafts') === 'true'
-    || sessionStorage.getItem('bb_show_drafts') === 'true';
-  if (hasShowDrafts) {
-    url.searchParams.set('show_drafts', 'true');
+function handleMediaLightboxClick(event: MouseEvent): void {
+  const target = event.target as HTMLElement;
+  const image = target.closest<HTMLImageElement>('.project-content img');
+  if (image) {
+    event.preventDefault();
+    openImageLightbox(image);
+    return;
   }
-  return url;
-}
 
-function navigateHomeFromIsolation(): void {
-  window.location.href = buildIsolationHomeUrl().toString();
-}
-
-/**
- * Closes a specific project item smoothly.
- */
-function closeProject(button: HTMLElement): void {
-  const projectItem = button.closest<HTMLElement>('.project-item');
-  if (!projectItem) return;
-
-  const isIsolationMode = document.body.dataset.isolationMode === 'true';
-
-  if (isIsolationMode) {
-    if (projectItem.dataset.closing === 'true') {
-      return;
-    }
-    projectItem.dataset.closing = 'true';
-    projectItem.classList.add('fade-out');
-
-    projectItem.addEventListener('animationend', function handler(event: AnimationEvent) {
-      if (event.target !== projectItem || event.animationName !== 'fadeOut') {
-        return;
-      }
-      navigateHomeFromIsolation();
-    }, { once: true });
-  } else {
-    projectItem.classList.remove('active');
-
-    const video = projectItem.querySelector<HTMLVideoElement>('video.lazy-video');
-    if (video) {
-      video.pause();
-      destroyHLSPlayer(video);
-    }
-
-    const thumbnail = projectItem.querySelector<HTMLElement>('.thumbnail');
-    if (thumbnail) {
-      resetThumbnailPosition(thumbnail);
-    }
-
-    const projectDetails = projectItem.querySelector<HTMLElement>('.project-details');
-    if (projectDetails) {
-      projectDetails.innerHTML = '';
-    }
+  const video = target.closest<HTMLVideoElement>('.project-content video');
+  if (!video || !isEligibleLightboxVideo(video)) {
+    return;
   }
+
+  event.preventDefault();
+  openVideoLightbox(video);
 }
 
-// ========== EVENT LISTENERS ==========
+function handleInPageAnchorClick(event: MouseEvent): void {
+  const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('.project-content a[href^="#"]');
+  if (!anchor) return;
+  if (event.defaultPrevented) return;
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+  const href = anchor.getAttribute('href') || '';
+  const target = resolveHashTarget(href);
+  if (!target) return;
+
+  event.preventDefault();
+
+  const nextUrl = new URL(window.location.href);
+  nextUrl.hash = target.id;
+  history.pushState(history.state, '', nextUrl.toString());
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  requestAnimationFrame(() => {
+    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+  });
+  setTimeout(() => {
+    target.scrollIntoView({ behavior: 'auto', block: 'start' });
+  }, 180);
+}
+
+function handleEscapeKey(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return;
+  if (document.body.classList.contains('editing')) return;
+  closeActiveLightbox();
+}
+
+function handleSiteTitleClick(event: MouseEvent): void {
+  const siteTitle = (event.target as HTMLElement).closest<HTMLAnchorElement>('a.site-title');
+  if (!siteTitle) return;
+  if (window.location.pathname !== '/me') return;
+
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+  if (siteTitle.target && siteTitle.target !== '_self') {
+    return;
+  }
+
+  let destination: URL;
+  try {
+    destination = new URL(siteTitle.href, window.location.origin);
+  } catch {
+    return;
+  }
+  if (destination.origin !== window.location.origin || destination.pathname !== '/') {
+    return;
+  }
+
+  try {
+    const referrer = document.referrer ? new URL(document.referrer) : null;
+    const cameFromHome = !!referrer
+      && referrer.origin === window.location.origin
+      && referrer.pathname === '/';
+    if (!cameFromHome) return;
+  } catch {
+    return;
+  }
+
+  event.preventDefault();
+  window.history.back();
+}
 
 function initializeEventListeners(): void {
-  document.body.addEventListener('project:afterSwap', handleProjectAfterSwap as EventListener);
-  document.body.addEventListener('project:beforeSwap', handleProjectBeforeSwap);
-  document.body.addEventListener('projects:loaded', handleProjectsLoaded);
-  document.body.addEventListener('project:error', () => {
-    showNotification('Failed to load content. Please try again.', true);
-  });
-
-  // Event delegation for copy-text-link
-  document.body.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    const button = target.closest<HTMLElement>('.copy-text-link');
-    if (button) {
-      event.preventDefault();
-      const textToCopy = button.getAttribute('data-copy-text');
-      const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
-
-      if (textToCopy) {
-        copyToClipboard(textToCopy, notificationMessage);
-      } else {
-        console.warn('No copy text provided for copying.');
-        showNotification('No content available to copy.', true);
-      }
-    }
-  });
-
-  // Close project buttons (isolation mode only)
-  document.body.addEventListener('click', function(event) {
-    const target = (event.target as HTMLElement).closest<HTMLElement>('.close-project');
-    if (target) {
-      const isIsolationMode = document.body.dataset.isolationMode === 'true';
-      if (isIsolationMode) {
-        event.preventDefault();
-        closeProject(target);
-      }
-    }
-  });
-
-  // Site title click should use smooth isolation close behavior instead of hard navigation.
-  document.body.addEventListener('click', function(event) {
-    const siteTitle = (event.target as HTMLElement).closest<HTMLAnchorElement>('a.site-title');
-    if (!siteTitle) return;
-
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-    if (siteTitle.target && siteTitle.target !== '_self') {
-      return;
-    }
-
-    let destination: URL;
-    try {
-      destination = new URL(siteTitle.href, window.location.origin);
-    } catch {
-      return;
-    }
-    if (destination.origin !== window.location.origin || destination.pathname !== '/') {
-      return;
-    }
-
-    const isIsolationMode = document.body.dataset.isolationMode === 'true';
-    if (!isIsolationMode) {
-      if (window.location.pathname === '/me') {
-        try {
-          const referrer = document.referrer ? new URL(document.referrer) : null;
-          const cameFromHome = !!referrer
-            && referrer.origin === window.location.origin
-            && referrer.pathname === '/';
-          if (cameFromHome) {
-            event.preventDefault();
-            window.history.back();
-            return;
-          }
-        } catch {
-          // Fall through to default navigation.
-        }
-      }
-      return;
-    }
-
-    event.preventDefault();
-    const activeProject = document.querySelector<HTMLElement>('.project-item.active');
-    const closeBtn = activeProject?.querySelector<HTMLElement>('.close-project');
-    if (closeBtn) {
-      closeProject(closeBtn);
-      return;
-    }
-
-    navigateHomeFromIsolation();
-  });
-
-  // Media lightbox (images and eligible content videos)
-  document.body.addEventListener('click', function(event) {
-    const target = event.target as HTMLElement;
-    const image = target.closest<HTMLImageElement>('.project-content img');
-    if (image) {
-      event.preventDefault();
-      openImageLightbox(image);
-      return;
-    }
-
-    const video = target.closest<HTMLVideoElement>('.project-content video');
-    if (!video || !isEligibleLightboxVideo(video)) {
-      return;
-    }
-
-    event.preventDefault();
-    openVideoLightbox(video);
-  });
-
-  // Deterministic in-page anchor navigation for project content.
-  document.body.addEventListener('click', function(event) {
-    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('.project-content a[href^="#"]');
-    if (!anchor) return;
-    if (event.defaultPrevented) return;
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
-    const href = anchor.getAttribute('href') || '';
-    const target = resolveHashTarget(href);
-    if (!target) return;
-
-    event.preventDefault();
-
-    const nextUrl = new URL(window.location.href);
-    nextUrl.hash = target.id;
-    history.pushState(history.state, '', nextUrl.toString());
-
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // A follow-up instant pass helps when late media/layout changes nudge the page.
-    requestAnimationFrame(() => {
-      target.scrollIntoView({ behavior: 'auto', block: 'start' });
-    });
-    setTimeout(() => {
-      target.scrollIntoView({ behavior: 'auto', block: 'start' });
-    }, 180);
-  });
-
-  // Escape key handler
-  document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-      if (document.body.classList.contains('editing')) {
-        return;
-      }
-
-      if (closeActiveLightbox()) {
-        return;
-      }
-
-      const activeProject = document.querySelector<HTMLElement>('.project-item.active');
-      if (activeProject) {
-        const closeBtn = activeProject.querySelector<HTMLElement>('.close-project');
-        if (closeBtn) {
-          const isIsolationMode = document.body.dataset.isolationMode === 'true';
-          if (isIsolationMode) {
-            closeProject(closeBtn);
-          } else {
-            const slug = activeProject.dataset.slug;
-            if (slug) {
-              closeProjectBySlug(slug);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  // Visibility change
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      stopAnimationLoop();
-    } else if (Math.abs(animationSpeed) > 0.01) {
-      startAnimationLoop();
-    }
-  });
-}
-
-// ========== MAIN INITIALIZATION ==========
-
-function initializeAll(): void {
-  initializeThumbnails();
-  initializeProjects();
-  initializeProjectObserver();
-  window.addEventListener('beforeunload', cleanupActiveHLSPlayers);
+  document.body.addEventListener('click', handleCopyLinkClick);
+  document.body.addEventListener('click', handleMediaLightboxClick);
+  document.body.addEventListener('click', handleInPageAnchorClick);
+  document.body.addEventListener('click', handleSiteTitleClick);
+  document.addEventListener('keydown', handleEscapeKey);
 }
 
 function init(): void {
-  initializeAll();
   initializeEventListeners();
-
   window.addEventListener('load', () => scrollToHashTarget('auto'));
 }
 
