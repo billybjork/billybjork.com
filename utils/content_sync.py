@@ -17,11 +17,11 @@ from pathlib import PurePosixPath
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
+from .content import get_content_paths
 from .s3 import S3_BUCKET, get_s3_client
 
 logger = logging.getLogger(__name__)
 
-CONTENT_DIR = Path(__file__).parent.parent / "content"
 S3_CONTENT_PREFIX = "content/"
 S3_CANONICAL_MARKER_KEY = f"{S3_CONTENT_PREFIX}.s3-canonical.json"
 
@@ -68,7 +68,7 @@ def archive_to_s3(local_path: Path) -> bool:
     try:
         from datetime import datetime
 
-        relative = local_path.relative_to(CONTENT_DIR)
+        relative = local_path.relative_to(get_content_paths().content_dir)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         s3_key = f"{S3_ARCHIVE_PREFIX}{relative.stem}_{timestamp}{relative.suffix}"
 
@@ -125,7 +125,11 @@ def sync_from_s3(*, require_marker: bool = False) -> int:
                 synced += 1
 
         if synced:
-            logger.info("Synced %d file(s) from S3 to %s", synced, CONTENT_DIR)
+            logger.info(
+                "Synced %d file(s) from S3 to %s",
+                synced,
+                get_content_paths().content_dir,
+            )
     except Exception:
         logger.exception("S3 content sync failed")
 
@@ -166,7 +170,7 @@ def write_canonical_marker(*, source: str) -> None:
 
 def local_to_s3_key(local_path: Path) -> str:
     """Translate a local content path to its S3 key."""
-    relative = local_path.relative_to(CONTENT_DIR)
+    relative = local_path.relative_to(get_content_paths().content_dir)
     return f"{S3_CONTENT_PREFIX}{relative.as_posix()}"
 
 
@@ -207,14 +211,15 @@ def seed_s3_from_local(*, delete_extra: bool = False) -> tuple[int, int]:
 
 def _iter_local_content_files() -> list[Path]:
     """List syncable local content files."""
-    if not CONTENT_DIR.exists():
+    content_dir = get_content_paths().content_dir
+    if not content_dir.exists():
         return []
 
     files = []
-    for path in CONTENT_DIR.rglob("*"):
+    for path in content_dir.rglob("*"):
         if not path.is_file():
             continue
-        relative = path.relative_to(CONTENT_DIR)
+        relative = path.relative_to(content_dir)
         if any(part.startswith(".") for part in relative.parts):
             continue
         files.append(path)
@@ -250,8 +255,8 @@ def _safe_local_content_path(relative_key: str) -> Path | None:
         logger.warning("Skipping unsafe content key: %s", relative_key)
         return None
 
-    local_path = (CONTENT_DIR / Path(*pure.parts)).resolve()
-    content_root = CONTENT_DIR.resolve()
+    content_root = get_content_paths().content_dir.resolve()
+    local_path = (content_root / Path(*pure.parts)).resolve()
     try:
         local_path.relative_to(content_root)
     except ValueError:

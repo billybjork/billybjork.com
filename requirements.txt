@@ -14,6 +14,10 @@ botocore==1.42.50
     # via
     #   boto3
     #   s3transfer
+certifi==2026.2.25
+    # via
+    #   httpcore
+    #   httpx
 click==8.1.8
     # via uvicorn
 exceptiongroup==1.3.1
@@ -21,9 +25,17 @@ exceptiongroup==1.3.1
 fastapi==0.128.8
     # via billybjork-site (pyproject.toml)
 h11==0.16.0
-    # via uvicorn
+    # via
+    #   httpcore
+    #   uvicorn
+httpcore==1.0.9
+    # via httpx
+httpx==0.28.1
+    # via billybjork-site (pyproject.toml)
 idna==3.11
-    # via anyio
+    # via
+    #   anyio
+    #   httpx
 importlib-metadata==8.7.1
     # via markdown
 jinja2==3.1.6

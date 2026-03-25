@@ -11,58 +11,51 @@ and the system behaves exactly as before (localhost-only).
 import hashlib
 import hmac
 import ipaddress
-import os
 from typing import Optional
 
 from fastapi import HTTPException, Request
 
-from utils.content import GeneralInfo, load_settings
-
-# ── configuration ──────────────────────────────────────────────────
-EDIT_TOKEN: Optional[str] = os.environ.get("EDIT_TOKEN")
-COOKIE_SECRET: str = os.environ.get("COOKIE_SECRET", EDIT_TOKEN or "")
-COOKIE_NAME = "bb_edit"
-COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
-LOCALHOST_BYPASS_ENV = os.environ.get("LOCALHOST_EDIT_BYPASS")
+from config import AuthSettings, get_app_settings, load_auth_settings
+from utils.content import GeneralInfo, load_site_settings
 
 
-def _env_flag(value: Optional[str], default: bool) -> bool:
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+def get_auth_settings(request: Request | None = None) -> AuthSettings:
+    if request is not None:
+        settings = get_app_settings(request=request)
+        return settings.resolved_auth()
+    return load_auth_settings()
 
 
-# Security default:
-# - Local-only mode (no EDIT_TOKEN): localhost bypass enabled
-# - Remote edit mode (EDIT_TOKEN set): bypass disabled unless explicitly enabled
-LOCALHOST_BYPASS_ENABLED = _env_flag(
-    LOCALHOST_BYPASS_ENV, default=not bool(EDIT_TOKEN)
-)
-
-
-# ── cookie signing ─────────────────────────────────────────────────
-def sign_cookie(payload: str) -> str:
+def sign_cookie(payload: str, auth_settings: AuthSettings | None = None) -> str:
     """HMAC-SHA256 sign a payload string."""
+    auth = auth_settings or load_auth_settings()
     sig = hmac.new(
-        COOKIE_SECRET.encode(), payload.encode(), hashlib.sha256
+        auth.cookie_secret.encode(),
+        payload.encode(),
+        hashlib.sha256,
     ).hexdigest()
     return f"{payload}.{sig}"
 
 
-def verify_cookie(signed: str) -> Optional[str]:
+def verify_cookie(
+    signed: str,
+    auth_settings: AuthSettings | None = None,
+) -> Optional[str]:
     """Verify an HMAC-signed cookie. Returns payload or None."""
-    if "." not in signed:
+    auth = auth_settings or load_auth_settings()
+    if "." not in signed or not auth.cookie_secret:
         return None
     payload, sig = signed.rsplit(".", 1)
     expected = hmac.new(
-        COOKIE_SECRET.encode(), payload.encode(), hashlib.sha256
+        auth.cookie_secret.encode(),
+        payload.encode(),
+        hashlib.sha256,
     ).hexdigest()
     if hmac.compare_digest(sig, expected):
         return payload
     return None
 
 
-# ── auth helpers ───────────────────────────────────────────────────
 def _is_localhost(request: Request) -> bool:
     """Check whether request should be treated as localhost."""
 
@@ -99,23 +92,20 @@ def _is_localhost(request: Request) -> bool:
 
 
 def is_edit_mode(request: Request) -> bool:
-    """Return True if the request is from an authenticated editor.
+    """Return True if the request is from an authenticated editor."""
+    auth = get_auth_settings(request)
 
-    Localhost can have edit access when localhost bypass is enabled.
-    Remote access requires a valid signed cookie, which
-    is only issued when the user logs in with EDIT_TOKEN.
-    """
-    if LOCALHOST_BYPASS_ENABLED and _is_localhost(request):
+    if auth.localhost_bypass_enabled and _is_localhost(request):
         return True
 
-    if not EDIT_TOKEN or not COOKIE_SECRET:
+    if not auth.edit_token or not auth.cookie_secret:
         return False
 
-    cookie = request.cookies.get(COOKIE_NAME)
+    cookie = request.cookies.get(auth.cookie_name)
     if not cookie:
         return False
 
-    return verify_cookie(cookie) == "editor"
+    return verify_cookie(cookie, auth) == "editor"
 
 
 def require_edit_mode(request: Request) -> None:
@@ -126,5 +116,5 @@ def require_edit_mode(request: Request) -> None:
 
 def get_general_info() -> GeneralInfo:
     """Load general info as a compatibility object."""
-    settings = load_settings()
-    return GeneralInfo.from_settings(settings)
+    settings = load_site_settings()
+    return GeneralInfo.from_site_settings(settings)

@@ -3,7 +3,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 
 from utils.assets import extract_cloudfront_urls, extract_s3_key
-from utils.content import validate_slug
+from utils.content import normalize_project_video, validate_slug
 
 
 def validate_save_project_input(data: dict[str, Any]) -> tuple[str, str]:
@@ -36,28 +36,7 @@ def build_project_frontmatter(
         "draft": data.get("draft", False),
     }
 
-    raw_video = data.get("video", {})
-    video = raw_video if isinstance(raw_video, dict) else {}
-    normalized_video: dict[str, Any] = {}
-    for key in ("hls", "thumbnail", "spriteSheet"):
-        value = video.get(key)
-        if isinstance(value, str) and value.strip():
-            normalized_video[key] = value.strip()
-
-    for key in ("frames", "columns", "rows", "frame_width", "frame_height", "fps", "video_width", "video_height"):
-        value = video.get(key)
-        if isinstance(value, bool):
-            continue
-        if isinstance(value, (int, float)) and value > 0:
-            normalized_video[key] = int(value)
-            continue
-        if isinstance(value, str):
-            try:
-                parsed = int(float(value.strip()))
-            except ValueError:
-                continue
-            if parsed > 0:
-                normalized_video[key] = parsed
+    normalized_video = normalize_project_video(data.get("video"))
 
     if normalized_video:
         frontmatter["video"] = normalized_video

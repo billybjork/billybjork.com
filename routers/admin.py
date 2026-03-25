@@ -38,12 +38,12 @@ from utils.assets import (
 )
 from utils.media_paths import content_image_key, misc_image_key
 from utils.content import (
-    ABOUT_FILE,
-    PROJECTS_DIR,
     content_revision,
     delete_project,
-    load_about,
+    get_content_paths,
     load_project,
+    load_about,
+    load_project_info,
     save_about,
     save_project,
     validate_slug,
@@ -85,35 +85,11 @@ router = APIRouter(
 @router.get("/project/{slug}")
 async def get_project(slug: str):
     """Get project data for editing."""
-    project_data = await asyncio.to_thread(load_project, slug)
-    if not project_data:
+    project = await asyncio.to_thread(load_project_info, slug)
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    return {
-        "slug": project_data.get("slug"),
-        "name": project_data.get("name"),
-        "date": project_data.get("creation_date"),
-        "pinned": project_data.get("pinned", False),
-        "draft": project_data.get("is_draft", False),
-        "youtube": project_data.get("youtube_link"),
-        "og_image": project_data.get("og_image"),
-        "video": {
-            "hls": project_data.get("video_link"),
-            "thumbnail": project_data.get("thumbnail_link"),
-            "spriteSheet": project_data.get("sprite_sheet_link"),
-            "frames": project_data.get("frames"),
-            "columns": project_data.get("columns"),
-            "rows": project_data.get("rows"),
-            "frame_width": project_data.get("frame_width"),
-            "frame_height": project_data.get("frame_height"),
-            "fps": project_data.get("fps"),
-            "video_width": project_data.get("video_width"),
-            "video_height": project_data.get("video_height"),
-        },
-        "markdown": project_data.get("markdown_content", ""),
-        "html": project_data.get("html_content", ""),
-        "revision": project_data.get("revision"),
-    }
+    return project.to_edit_payload()
 
 
 @router.post("/save-project")
@@ -134,44 +110,40 @@ async def save_project_endpoint(request: Request):
 
     # Conflict check: if client sent a base_revision, verify it still matches
     if base_revision and not data.get("force"):
-        filepath = PROJECTS_DIR / f"{original_slug}.md"
+        filepath = get_content_paths().projects_dir / f"{original_slug}.md"
         current_revision = await asyncio.to_thread(content_revision, filepath)
         if current_revision and base_revision != current_revision:
-            current_project = await asyncio.to_thread(load_project, original_slug)
+            current_project = await asyncio.to_thread(load_project_info, original_slug)
             return JSONResponse(
                 status_code=409,
                 content={
                     "conflict": True,
                     "server_revision": current_revision,
-                    "server_markdown": current_project.get("markdown_content", "") if current_project else "",
+                    "server_markdown": current_project.markdown_content if current_project else "",
                     "your_markdown": data.get("markdown", ""),
                     "message": "Content was modified by another session",
                 },
             )
 
     # Load old project to track removed references
-    old_project = await asyncio.to_thread(load_project, original_slug)
+    old_project = await asyncio.to_thread(load_project_info, original_slug)
     if not old_project:
         raise HTTPException(
             status_code=404,
             detail="Project not found. Use create-project for new projects.",
         )
 
-    old_video = {
-        "hls": old_project.get("video_link"),
-        "thumbnail": old_project.get("thumbnail_link"),
-        "spriteSheet": old_project.get("sprite_sheet_link"),
-    }
+    old_video = old_project.video_metadata()
     old_refs = collect_asset_refs(
-        old_project.get("markdown_content", ""),
+        old_project.markdown_content,
         old_video,
-        old_project.get("og_image"),
+        old_project.og_image,
     )
 
     # Preserve og_image when older clients omit the field in save payloads.
-    if "og_image" not in data and old_project.get("og_image"):
+    if "og_image" not in data and old_project.og_image:
         data = dict(data)
-        data["og_image"] = old_project.get("og_image")
+        data["og_image"] = old_project.og_image
 
     frontmatter, video = build_project_frontmatter(data, slug)
 
@@ -205,7 +177,7 @@ async def save_project_endpoint(request: Request):
     await asyncio.to_thread(cleanup_old_hls_versions, cleanup_slug, cleanup_hls)
 
     # Return new revision for the client to use in subsequent saves
-    filepath = PROJECTS_DIR / f"{slug}.md"
+    filepath = get_content_paths().projects_dir / f"{slug}.md"
     new_revision = await asyncio.to_thread(content_revision, filepath)
     return {"success": True, "slug": slug, "revision": new_revision}
 
@@ -246,19 +218,14 @@ async def create_project(request: Request):
 @router.delete("/project/{slug}")
 async def delete_project_endpoint(slug: str):
     """Delete a project and cleanup orphaned assets."""
-    project = await asyncio.to_thread(load_project, slug)
+    project = await asyncio.to_thread(load_project_info, slug)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    project_video = {
-        "hls": project.get("video_link"),
-        "thumbnail": project.get("thumbnail_link"),
-        "spriteSheet": project.get("sprite_sheet_link"),
-    }
     project_refs = collect_asset_refs(
-        project.get("markdown_content", ""),
-        project_video,
-        project.get("og_image"),
+        project.markdown_content,
+        project.video_metadata(),
+        project.og_image,
     )
 
     # Delete the project file first
@@ -296,7 +263,10 @@ async def save_about_endpoint(request: Request):
 
     # Conflict check
     if base_revision and not data.get("force"):
-        current_revision = await asyncio.to_thread(content_revision, ABOUT_FILE)
+        current_revision = await asyncio.to_thread(
+            content_revision,
+            get_content_paths().about_file,
+        )
         if current_revision and base_revision != current_revision:
             _, current_markdown, _ = await asyncio.to_thread(load_about)
             return JSONResponse(
@@ -323,7 +293,10 @@ async def save_about_endpoint(request: Request):
     if keys_to_check:
         await asyncio.to_thread(cleanup_orphans, keys_to_check)
 
-    new_revision = await asyncio.to_thread(content_revision, ABOUT_FILE)
+    new_revision = await asyncio.to_thread(
+        content_revision,
+        get_content_paths().about_file,
+    )
     return {"success": True, "revision": new_revision}
 
 
@@ -563,11 +536,11 @@ async def video_thumbnails_existing(request: Request):
     if not validate_slug(project_slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
 
-    project = await asyncio.to_thread(load_project, project_slug)
+    project = await asyncio.to_thread(load_project_info, project_slug)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    hls_url = project.get("video_link")
+    hls_url = project.video_link
     if not hls_url:
         raise HTTPException(status_code=400, detail="Project has no hero HLS video")
 
@@ -729,8 +702,8 @@ async def generate_sprite_sheet_endpoint(request: Request):
                 raise HTTPException(status_code=500, detail="HLS encoding timed out")
 
         if not hls_url:
-            project = await asyncio.to_thread(load_project, project_slug)
-            hls_url = project.get("video_link") if project else None
+            project = await asyncio.to_thread(load_project_info, project_slug)
+            hls_url = project.video_link if project else None
         if not hls_url:
             raise HTTPException(
                 status_code=500,
@@ -931,8 +904,8 @@ def cleanup_old_temp_videos():
             if session["status"] == "complete" and session.get("slug"):
                 try:
                     # Load project to get currently saved HLS URL
-                    project = load_project(session["slug"])
-                    current_hls = project.get("video_link") if project else None
+                    project = load_project_info(session["slug"])
+                    current_hls = project.video_link if project else None
                     cleanup_old_hls_versions(session["slug"], current_hls)
                     logger.info(f"Cleaned up orphaned HLS versions for slug: {session['slug']}")
                 except Exception as e:
@@ -944,7 +917,3 @@ def cleanup_old_temp_videos():
 
     if expired_hls_ids:
         logger.info(f"Cleaned up {len(expired_hls_ids)} expired HLS session(s)")
-
-
-# Clean up any leftover temp files on startup
-cleanup_old_temp_videos()

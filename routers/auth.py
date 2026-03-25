@@ -11,9 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from dependencies import (
-    COOKIE_MAX_AGE,
-    COOKIE_NAME,
-    EDIT_TOKEN,
+    get_auth_settings,
     is_edit_mode,
     sign_cookie,
 )
@@ -91,7 +89,8 @@ LOGIN_HTML = """<!DOCTYPE html>
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: int = 0):
     """Render the login form. If already authenticated, redirect home."""
-    if not EDIT_TOKEN:
+    auth_settings = get_auth_settings(request)
+    if not auth_settings.edit_token:
         raise HTTPException(status_code=404)
 
     if is_edit_mode(request):
@@ -104,20 +103,21 @@ async def login_page(request: Request, error: int = 0):
 @router.post("/login")
 async def login(request: Request):
     """Validate the edit token and set a signed session cookie."""
-    if not EDIT_TOKEN:
+    auth_settings = get_auth_settings(request)
+    if not auth_settings.edit_token:
         raise HTTPException(status_code=404)
 
     form = await request.form()
     token = form.get("token", "")
 
-    if token != EDIT_TOKEN:
+    if token != auth_settings.edit_token:
         return RedirectResponse("/edit/login?error=1", status_code=303)
 
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
-        COOKIE_NAME,
-        sign_cookie("editor"),
-        max_age=COOKIE_MAX_AGE,
+        auth_settings.cookie_name,
+        sign_cookie("editor", auth_settings),
+        max_age=auth_settings.cookie_max_age,
         httponly=True,
         secure=(request.url.scheme == "https"),
         samesite="strict",
@@ -127,8 +127,8 @@ async def login(request: Request):
 
 
 @router.get("/logout")
-async def logout():
+async def logout(request: Request):
     """Clear the edit cookie and redirect home."""
     response = RedirectResponse("/", status_code=303)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(get_auth_settings(request).cookie_name)
     return response

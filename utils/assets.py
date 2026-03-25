@@ -6,11 +6,11 @@ import hashlib
 import json
 import logging
 import re
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+from .content import get_content_paths
 from .media_paths import hero_hls_prefix
 from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, delete_file, get_s3_client
 
@@ -25,10 +25,6 @@ __all__ = [
     "cleanup_old_hls_versions",
 ]
 
-# Asset registry file
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-ASSETS_FILE = CONTENT_DIR / "assets.json"
-
 # CloudFront URL pattern
 CLOUDFRONT_PATTERN = re.compile(
     rf'https?://{re.escape(CLOUDFRONT_DOMAIN)}/([^\s"\'<>\)]+)'
@@ -37,24 +33,26 @@ CLOUDFRONT_PATTERN = re.compile(
 
 def _load_registry() -> dict:
     """Load the asset registry from disk."""
-    if not ASSETS_FILE.exists():
+    assets_file = get_content_paths().assets_file
+    if not assets_file.exists():
         return {"version": 1, "assets": {}}
 
-    with open(ASSETS_FILE, "r", encoding="utf-8") as f:
+    with open(assets_file, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def _save_registry(registry: dict) -> None:
     """Save the asset registry to disk and sync to S3."""
-    CONTENT_DIR.mkdir(parents=True, exist_ok=True)
-    with open(ASSETS_FILE, "w", encoding="utf-8") as f:
+    content_paths = get_content_paths()
+    content_paths.content_dir.mkdir(parents=True, exist_ok=True)
+    with open(content_paths.assets_file, "w", encoding="utf-8") as f:
         json.dump(registry, f, indent=2)
 
     try:
         from .content_sync import sync_to_s3
-        sync_to_s3(ASSETS_FILE)
+        sync_to_s3(content_paths.assets_file)
     except Exception:
-        logger.exception("Best-effort S3 sync failed for %s", ASSETS_FILE)
+        logger.exception("Best-effort S3 sync failed for %s", content_paths.assets_file)
 
 
 def compute_hash(data: bytes) -> str:
@@ -161,13 +159,12 @@ def scan_all_references() -> set[str]:
     Returns:
         Set of S3 keys that are referenced in content
     """
-    from .content import CONTENT_DIR, PROJECTS_DIR, ABOUT_FILE, SETTINGS_FILE
-
+    content_paths = get_content_paths()
     referenced_keys = set()
 
     # Scan all project files
-    if PROJECTS_DIR.exists():
-        for filepath in PROJECTS_DIR.glob("*.md"):
+    if content_paths.projects_dir.exists():
+        for filepath in content_paths.projects_dir.glob("*.md"):
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
             for url in extract_cloudfront_urls(content):
@@ -176,8 +173,8 @@ def scan_all_references() -> set[str]:
                     referenced_keys.add(key)
 
     # Scan about page
-    if ABOUT_FILE.exists():
-        with open(ABOUT_FILE, "r", encoding="utf-8") as f:
+    if content_paths.about_file.exists():
+        with open(content_paths.about_file, "r", encoding="utf-8") as f:
             content = f.read()
         for url in extract_cloudfront_urls(content):
             key = extract_s3_key(url)
@@ -185,8 +182,8 @@ def scan_all_references() -> set[str]:
                 referenced_keys.add(key)
 
     # Scan settings (for about photo)
-    if SETTINGS_FILE.exists():
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+    if content_paths.settings_file.exists():
+        with open(content_paths.settings_file, "r", encoding="utf-8") as f:
             content = f.read()
         for url in extract_cloudfront_urls(content):
             key = extract_s3_key(url)

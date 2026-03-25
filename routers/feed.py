@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 
 from routers.pages import extract_meta_description
-from utils.content import load_all_projects
+from utils.content import load_all_project_info
 
 router = APIRouter()
 
@@ -31,7 +31,7 @@ def _to_rfc822(d) -> str:
 
 @router.get("/feed.xml", include_in_schema=False)
 async def rss_feed():
-    projects = load_all_projects(
+    projects = load_all_project_info(
         include_drafts=False,
         include_revision=False,
     )
@@ -43,18 +43,18 @@ async def rss_feed():
     ET.SubElement(channel, "link").text = SITE_LINK
     ET.SubElement(channel, "description").text = SITE_DESCRIPTION
 
-    for proj in projects:
+    for project in projects:
         item = ET.SubElement(channel, "item")
-        slug = proj.get("slug", "")
+        slug = project.slug
         link = f"{SITE_LINK}/{slug}"
 
-        ET.SubElement(item, "title").text = proj.get("name", slug)
+        ET.SubElement(item, "title").text = project.name
         ET.SubElement(item, "link").text = link
         ET.SubElement(item, "description").text = extract_meta_description(
-            proj.get("html_content", "")
+            project.html_content
         )
 
-        pub_date = _to_rfc822(proj.get("creation_date"))
+        pub_date = _to_rfc822(project.creation_date)
         if pub_date:
             ET.SubElement(item, "pubDate").text = pub_date
 

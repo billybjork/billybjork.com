@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Content management utilities for file-based CMS.
 Handles loading and saving markdown files with YAML frontmatter.
@@ -24,21 +26,34 @@ from bs4 import BeautifulSoup
 from markdown.extensions.fenced_code import FencedCodeExtension
 from markdown.extensions.tables import TableExtension
 
+from config import ContentPaths, SRC_DIR
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "ContentPaths",
     "CONTENT_DIR",
     "PROJECTS_DIR",
     "ABOUT_FILE",
     "SETTINGS_FILE",
+    "get_content_paths",
+    "set_content_paths",
+    "reset_content_paths",
+    "clear_content_caches",
+    "SiteSettings",
     "GeneralInfo",
     "ProjectInfo",
+    "ProjectCardInfo",
     "validate_slug",
     "content_revision",
+    "normalize_project_video",
     "load_project",
+    "load_project_info",
     "load_all_projects",
+    "load_all_project_info",
     "save_project",
     "delete_project",
+    "load_site_settings",
     "load_settings",
     "save_settings",
     "load_about",
@@ -47,6 +62,25 @@ __all__ = [
 ]
 
 SLUG_PATTERN = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
+VIDEO_URL_FIELD_MAP = {
+    "hls": "video_link",
+    "thumbnail": "thumbnail_link",
+    "spriteSheet": "sprite_sheet_link",
+}
+VIDEO_INT_FIELD_MAP = {
+    "frames": "frames",
+    "columns": "columns",
+    "rows": "rows",
+    "frame_width": "frame_width",
+    "frame_height": "frame_height",
+    "fps": "fps",
+    "video_width": "video_width",
+    "video_height": "video_height",
+}
+DEFAULT_SPRITE_FRAMES = 60
+DEFAULT_SPRITE_COLUMNS = 5
+DEFAULT_SPRITE_FRAME_WIDTH = 320
+DEFAULT_SPRITE_FRAME_HEIGHT = 180
 
 
 # Register YAML representers once at module level
@@ -57,11 +91,8 @@ def _date_representer(dumper, data):
 yaml.add_representer(date, _date_representer)
 yaml.add_representer(datetime, _date_representer)
 
-# Base paths
-CONTENT_DIR = Path(__file__).parent.parent / "content"
-PROJECTS_DIR = CONTENT_DIR / "projects"
-SETTINGS_FILE = CONTENT_DIR / "settings.json"
-ABOUT_FILE = CONTENT_DIR / "about.md"
+_DEFAULT_CONTENT_PATHS = ContentPaths.from_root(SRC_DIR / "content")
+_content_paths = _DEFAULT_CONTENT_PATHS
 
 
 @dataclass
@@ -99,6 +130,75 @@ _cache_lock = RLock()
 _project_parse_cache: "OrderedDict[str, _ParsedProjectCacheEntry]" = OrderedDict()
 _project_html_cache: "OrderedDict[str, _RenderedProjectCacheEntry]" = OrderedDict()
 _about_cache: Optional[_AboutCacheEntry] = None
+
+
+class _RuntimePath(os.PathLike[str]):
+    def __init__(self, resolver):
+        self._resolver = resolver
+
+    def _path(self) -> Path:
+        return self._resolver()
+
+    def __fspath__(self) -> str:
+        return os.fspath(self._path())
+
+    def __str__(self) -> str:
+        return str(self._path())
+
+    def __repr__(self) -> str:
+        return repr(self._path())
+
+    def __truediv__(self, other):
+        return self._path() / other
+
+    def __getattr__(self, name):
+        return getattr(self._path(), name)
+
+
+def get_content_paths() -> ContentPaths:
+    return _content_paths
+
+
+def clear_content_caches() -> None:
+    global _about_cache
+    with _cache_lock:
+        _project_parse_cache.clear()
+        _project_html_cache.clear()
+        _about_cache = None
+
+
+def set_content_paths(paths: ContentPaths) -> None:
+    global _content_paths
+    _content_paths = paths
+    clear_content_caches()
+
+
+def reset_content_paths() -> None:
+    global _content_paths
+    _content_paths = _DEFAULT_CONTENT_PATHS
+    clear_content_caches()
+
+
+def _projects_dir() -> Path:
+    return get_content_paths().projects_dir
+
+
+def _settings_file() -> Path:
+    return get_content_paths().settings_file
+
+
+def _about_file() -> Path:
+    return get_content_paths().about_file
+
+
+def _content_dir() -> Path:
+    return get_content_paths().content_dir
+
+
+CONTENT_DIR = _RuntimePath(_content_dir)
+PROJECTS_DIR = _RuntimePath(_projects_dir)
+SETTINGS_FILE = _RuntimePath(_settings_file)
+ABOUT_FILE = _RuntimePath(_about_file)
 
 
 def _revision_from_content(content: str) -> str:
@@ -178,6 +278,86 @@ def _parse_iso_date(value: str) -> date:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError:
         return date.min
+
+
+def _normalize_non_empty_string(value) -> Optional[str]:
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _normalize_positive_int(value) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and value > 0:
+        return int(value)
+    if isinstance(value, str):
+        try:
+            parsed = int(float(value.strip()))
+        except ValueError:
+            return None
+        if parsed > 0:
+            return parsed
+    return None
+
+
+def _normalize_positive_float(value) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return None
+        if parsed > 0:
+            return parsed
+    return None
+
+
+def _resolve_absolute_asset_url(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    if value.startswith(("http://", "https://")):
+        return value
+
+    from utils.s3 import CLOUDFRONT_DOMAIN
+
+    return f"https://{CLOUDFRONT_DOMAIN}/{value.lstrip('/')}"
+
+
+def _compute_aspect_ratio(width: Optional[int], height: Optional[int]) -> Optional[float]:
+    if width and height:
+        return width / height
+    return None
+
+
+def _compute_sprite_rows(frames: Optional[int], columns: Optional[int]) -> Optional[int]:
+    if frames and columns:
+        return (frames + columns - 1) // columns
+    return None
+
+
+def normalize_project_video(video) -> dict[str, str | int]:
+    """Normalize frontmatter video metadata into the canonical field set."""
+    if not isinstance(video, dict):
+        return {}
+
+    normalized: dict[str, str | int] = {}
+    for source_key in VIDEO_URL_FIELD_MAP:
+        value = _normalize_non_empty_string(video.get(source_key))
+        if value:
+            normalized[source_key] = value
+
+    for source_key in VIDEO_INT_FIELD_MAP:
+        value = _normalize_positive_int(video.get(source_key))
+        if value:
+            normalized[source_key] = value
+
+    return normalized
 
 
 def parse_frontmatter(content: str) -> tuple[dict, str]:
@@ -410,7 +590,7 @@ def load_project(
     """
     if not validate_slug(slug):
         return None
-    filepath = PROJECTS_DIR / f"{slug}.md"
+    filepath = _projects_dir() / f"{slug}.md"
     if not filepath.exists():
         _invalidate_project_cache(slug)
         return None
@@ -440,6 +620,8 @@ def load_project(
                 _project_html_cache.move_to_end(slug)
                 _prune_project_cache_locked(_project_html_cache, now)
 
+    normalized_video = normalize_project_video(frontmatter.get("video"))
+
     # Build project dict
     project = {
         'slug': slug,
@@ -454,32 +636,11 @@ def load_project(
         'revision': parsed.revision if include_revision else None,
     }
 
-    # Video fields
-    video = frontmatter.get('video', {})
-    if video:
-        project['video_link'] = video.get('hls')
-        project['thumbnail_link'] = video.get('thumbnail')
-        project['sprite_sheet_link'] = video.get('spriteSheet')
-        project['frames'] = video.get('frames')
-        project['columns'] = video.get('columns')
-        project['rows'] = video.get('rows')
-        project['frame_width'] = video.get('frame_width')
-        project['frame_height'] = video.get('frame_height')
-        project['fps'] = video.get('fps')
-        project['video_width'] = video.get('video_width')
-        project['video_height'] = video.get('video_height')
-    else:
-        project['video_link'] = None
-        project['thumbnail_link'] = None
-        project['sprite_sheet_link'] = None
-        project['frames'] = None
-        project['columns'] = None
-        project['rows'] = None
-        project['frame_width'] = None
-        project['frame_height'] = None
-        project['fps'] = None
-        project['video_width'] = None
-        project['video_height'] = None
+    for frontmatter_key, project_key in VIDEO_URL_FIELD_MAP.items():
+        project[project_key] = normalized_video.get(frontmatter_key)
+
+    for frontmatter_key, project_key in VIDEO_INT_FIELD_MAP.items():
+        project[project_key] = normalized_video.get(frontmatter_key)
 
     return project
 
@@ -495,10 +656,11 @@ def load_all_projects(
     """
     projects = []
 
-    if not PROJECTS_DIR.exists():
+    projects_dir = _projects_dir()
+    if not projects_dir.exists():
         return projects
 
-    for filepath in PROJECTS_DIR.glob("*.md"):
+    for filepath in projects_dir.glob("*.md"):
         slug = filepath.stem
         project = load_project(
             slug,
@@ -524,14 +686,47 @@ def load_all_projects(
     return projects
 
 
+def load_project_info(
+    slug: str,
+    include_html: bool = True,
+    include_revision: bool = True,
+) -> Optional["ProjectInfo"]:
+    """Load a project as the canonical normalized data object."""
+    project = load_project(
+        slug,
+        include_html=include_html,
+        include_revision=include_revision,
+    )
+    if not project:
+        return None
+    return ProjectInfo.from_dict(project)
+
+
+def load_all_project_info(
+    include_drafts: bool = False,
+    include_html: bool = True,
+    include_revision: bool = True,
+) -> list["ProjectInfo"]:
+    """Load all projects as canonical normalized data objects."""
+    return [
+        ProjectInfo.from_dict(project)
+        for project in load_all_projects(
+            include_drafts=include_drafts,
+            include_html=include_html,
+            include_revision=include_revision,
+        )
+    ]
+
+
 def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
     """
     Save a project to a markdown file and sync to S3.
     """
     if not validate_slug(slug):
         raise ValueError(f"Invalid slug: {slug}")
-    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
-    filepath = PROJECTS_DIR / f"{slug}.md"
+    projects_dir = _projects_dir()
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    filepath = projects_dir / f"{slug}.md"
 
     content = serialize_frontmatter(frontmatter, markdown_content)
 
@@ -550,7 +745,7 @@ def delete_project(slug: str) -> bool:
     """
     if not validate_slug(slug):
         raise ValueError(f"Invalid slug: {slug}")
-    filepath = PROJECTS_DIR / f"{slug}.md"
+    filepath = _projects_dir() / f"{slug}.md"
     if filepath.exists():
         _archive_to_s3(filepath)
         filepath.unlink()
@@ -560,58 +755,110 @@ def delete_project(slug: str) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class SiteSettings:
+    youtube_link: Optional[str] = None
+    vimeo_link: Optional[str] = None
+    instagram_link: Optional[str] = None
+    linkedin_link: Optional[str] = None
+    github_link: Optional[str] = None
+    about_photo_link: Optional[str] = None
+    about_photo_srcset: Optional[str] = None
+    about_photo_sizes: Optional[str] = None
+
+    @classmethod
+    def from_storage_dict(cls, settings: dict) -> "SiteSettings":
+        social = settings.get("social_links", {})
+        about = settings.get("about", {})
+        return cls(
+            youtube_link=social.get("youtube"),
+            vimeo_link=social.get("vimeo"),
+            instagram_link=social.get("instagram"),
+            linkedin_link=social.get("linkedin"),
+            github_link=social.get("github"),
+            about_photo_link=about.get("photo_url"),
+            about_photo_srcset=about.get("photo_srcset"),
+            about_photo_sizes=about.get("photo_sizes"),
+        )
+
+    @classmethod
+    def from_legacy_dict(cls, settings: dict) -> "SiteSettings":
+        return cls(
+            youtube_link=settings.get("youtube_link"),
+            vimeo_link=settings.get("vimeo_link"),
+            instagram_link=settings.get("instagram_link"),
+            linkedin_link=settings.get("linkedin_link"),
+            github_link=settings.get("github_link"),
+            about_photo_link=settings.get("about_photo_link"),
+            about_photo_srcset=settings.get("about_photo_srcset"),
+            about_photo_sizes=settings.get("about_photo_sizes"),
+        )
+
+    def to_storage_dict(self) -> dict:
+        return {
+            "social_links": {
+                "youtube": self.youtube_link or "",
+                "vimeo": self.vimeo_link or "",
+                "instagram": self.instagram_link or "",
+                "linkedin": self.linkedin_link or "",
+                "github": self.github_link or "",
+            },
+            "about": {
+                "photo_url": self.about_photo_link or "",
+                "photo_srcset": self.about_photo_srcset or "",
+                "photo_sizes": self.about_photo_sizes or "",
+            },
+        }
+
+    def to_legacy_dict(self) -> dict:
+        return {
+            "youtube_link": self.youtube_link,
+            "vimeo_link": self.vimeo_link,
+            "instagram_link": self.instagram_link,
+            "linkedin_link": self.linkedin_link,
+            "github_link": self.github_link,
+            "about_photo_link": self.about_photo_link,
+            "about_photo_srcset": self.about_photo_srcset,
+            "about_photo_sizes": self.about_photo_sizes,
+        }
+
+
+def load_site_settings() -> SiteSettings:
+    settings_file = _settings_file()
+    if not settings_file.exists():
+        return SiteSettings()
+
+    with open(settings_file, "r", encoding="utf-8") as f:
+        settings = json.load(f)
+
+    return SiteSettings.from_storage_dict(settings)
+
+
 def load_settings() -> dict:
     """
     Load site settings from settings.json.
     Returns a dict compatible with the old General model.
     """
-    if not SETTINGS_FILE.exists():
-        return {}
-
-    with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-        settings = json.load(f)
-
-    # Convert to General-compatible format
-    social = settings.get('social_links', {})
-    about = settings.get('about', {})
-
-    return {
-        'youtube_link': social.get('youtube'),
-        'vimeo_link': social.get('vimeo'),
-        'instagram_link': social.get('instagram'),
-        'linkedin_link': social.get('linkedin'),
-        'github_link': social.get('github'),
-        'about_photo_link': about.get('photo_url'),
-        'about_photo_srcset': about.get('photo_srcset'),
-        'about_photo_sizes': about.get('photo_sizes'),
-    }
+    return load_site_settings().to_legacy_dict()
 
 
-def save_settings(settings: dict) -> bool:
+def save_settings(settings: dict | SiteSettings) -> bool:
     """
     Save site settings to settings.json.
     """
-    CONTENT_DIR.mkdir(parents=True, exist_ok=True)
+    content_dir = _content_dir()
+    settings_file = _settings_file()
+    content_dir.mkdir(parents=True, exist_ok=True)
 
-    data = {
-        'social_links': {
-            'youtube': settings.get('youtube_link', ''),
-            'vimeo': settings.get('vimeo_link', ''),
-            'instagram': settings.get('instagram_link', ''),
-            'linkedin': settings.get('linkedin_link', ''),
-            'github': settings.get('github_link', ''),
-        },
-        'about': {
-            'photo_url': settings.get('about_photo_link', ''),
-            'photo_srcset': settings.get('about_photo_srcset', ''),
-            'photo_sizes': settings.get('about_photo_sizes', ''),
-        }
-    }
+    site_settings = (
+        settings if isinstance(settings, SiteSettings)
+        else SiteSettings.from_legacy_dict(settings)
+    )
 
-    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
+    with open(settings_file, 'w', encoding='utf-8') as f:
+        json.dump(site_settings.to_storage_dict(), f, indent=2)
 
-    _sync_to_s3(SETTINGS_FILE)
+    _sync_to_s3(settings_file)
     return True
 
 
@@ -621,19 +868,20 @@ def load_about() -> tuple[str, str, Optional[str]]:
     Returns (html_content, markdown_content, revision).
     """
     global _about_cache
+    about_file = _about_file()
 
-    if not ABOUT_FILE.exists():
+    if not about_file.exists():
         _invalidate_about_cache()
         return '', '', None
 
-    mtime_ns, size = _project_stat(ABOUT_FILE)
+    mtime_ns, size = _project_stat(about_file)
     now = monotonic()
     with _cache_lock:
         cached = _about_cache
         if cached and cached.mtime_ns == mtime_ns and cached.size == size and _is_fresh(cached.cached_at, now):
             return cached.html_content, cached.markdown_content, cached.revision
 
-    with open(ABOUT_FILE, 'r', encoding='utf-8') as f:
+    with open(about_file, 'r', encoding='utf-8') as f:
         content = f.read()
 
     _, markdown_content = parse_frontmatter(content)
@@ -658,16 +906,18 @@ def save_about(markdown_content: str) -> bool:
     """
     Save about page content and sync to S3.
     """
-    CONTENT_DIR.mkdir(parents=True, exist_ok=True)
+    content_dir = _content_dir()
+    about_file = _about_file()
+    content_dir.mkdir(parents=True, exist_ok=True)
 
     # Simple frontmatter for about page
     content = f"---\ntitle: About\n---\n\n{markdown_content}"
 
-    with open(ABOUT_FILE, 'w', encoding='utf-8') as f:
+    with open(about_file, 'w', encoding='utf-8') as f:
         f.write(content)
 
     _invalidate_about_cache()
-    _sync_to_s3(ABOUT_FILE)
+    _sync_to_s3(about_file)
     return True
 
 
@@ -727,17 +977,25 @@ class GeneralInfo:
     about_content: Optional[str] = None
 
     @classmethod
-    def from_settings(cls, settings: dict) -> "GeneralInfo":
+    def from_site_settings(cls, settings: SiteSettings) -> "GeneralInfo":
         return cls(
-            youtube_link=settings.get("youtube_link"),
-            vimeo_link=settings.get("vimeo_link"),
-            instagram_link=settings.get("instagram_link"),
-            linkedin_link=settings.get("linkedin_link"),
-            github_link=settings.get("github_link"),
-            about_photo_link=settings.get("about_photo_link"),
-            about_photo_srcset=settings.get("about_photo_srcset"),
-            about_photo_sizes=settings.get("about_photo_sizes"),
+            youtube_link=settings.youtube_link,
+            vimeo_link=settings.vimeo_link,
+            instagram_link=settings.instagram_link,
+            linkedin_link=settings.linkedin_link,
+            github_link=settings.github_link,
+            about_photo_link=settings.about_photo_link,
+            about_photo_srcset=settings.about_photo_srcset,
+            about_photo_sizes=settings.about_photo_sizes,
         )
+
+    @classmethod
+    def from_settings(cls, settings: dict | SiteSettings) -> "GeneralInfo":
+        site_settings = (
+            settings if isinstance(settings, SiteSettings)
+            else SiteSettings.from_legacy_dict(settings)
+        )
+        return cls.from_site_settings(site_settings)
 
 
 @dataclass
@@ -765,19 +1023,153 @@ class ProjectInfo:
     video_height: Optional[int] = None
     youtube_link: Optional[str] = None
     og_image: Optional[str] = None
+    revision: Optional[str] = None
     formatted_date: str = field(default="", init=False)
     og_image_link: Optional[str] = field(default=None, init=False)
 
     def __post_init__(self):
         self.id = hash(self.slug)
+        self.name = _normalize_non_empty_string(self.name) or self.slug
         self.formatted_date = format_date(self.creation_date)
+        self.video_link = _normalize_non_empty_string(self.video_link)
+        self.thumbnail_link = _normalize_non_empty_string(self.thumbnail_link)
+        self.sprite_sheet_link = _normalize_non_empty_string(self.sprite_sheet_link)
+        self.frames = _normalize_positive_int(self.frames)
+        self.columns = _normalize_positive_int(self.columns)
+        self.rows = _normalize_positive_int(self.rows)
+        self.frame_width = _normalize_positive_int(self.frame_width)
+        self.frame_height = _normalize_positive_int(self.frame_height)
+        self.fps = _normalize_positive_int(self.fps)
+        self.video_width = _normalize_positive_int(self.video_width)
+        self.video_height = _normalize_positive_int(self.video_height)
+        self.youtube_link = _normalize_non_empty_string(self.youtube_link)
+        self.og_image = _normalize_non_empty_string(self.og_image)
+        self.revision = _normalize_non_empty_string(self.revision)
+
         # Compute og_image_link with fallback chain: explicit og_image -> thumbnail -> spriteSheet
-        og_image = self.og_image or self.thumbnail_link or self.sprite_sheet_link
-        if og_image and not og_image.startswith(('http://', 'https://')):
-            # Resolve relative URL to absolute
-            from utils.s3 import CLOUDFRONT_DOMAIN
-            og_image = f"https://{CLOUDFRONT_DOMAIN}/{og_image.lstrip('/')}"
-        self.og_image_link = og_image
+        self.og_image_link = _resolve_absolute_asset_url(
+            self.og_image or self.thumbnail_link or self.sprite_sheet_link
+        )
+
+    @property
+    def has_video(self) -> bool:
+        return bool(self.video_link)
+
+    @property
+    def video_aspect_ratio(self) -> Optional[float]:
+        return _compute_aspect_ratio(self.video_width, self.video_height)
+
+    @property
+    def sprite_aspect_ratio(self) -> Optional[float]:
+        return _compute_aspect_ratio(self.frame_width, self.frame_height)
+
+    @property
+    def primary_aspect_ratio(self) -> Optional[float]:
+        return self.video_aspect_ratio or self.sprite_aspect_ratio
+
+    def video_metadata(self) -> dict:
+        """Return the canonical normalized video metadata contract."""
+        return {
+            "hls": self.video_link,
+            "thumbnail": self.thumbnail_link,
+            "spriteSheet": self.sprite_sheet_link,
+            "frames": self.frames,
+            "columns": self.columns,
+            "rows": self.rows,
+            "frame_width": self.frame_width,
+            "frame_height": self.frame_height,
+            "fps": self.fps,
+            "video_width": self.video_width,
+            "video_height": self.video_height,
+        }
+
+    def to_edit_payload(self) -> dict:
+        """Return the stable edit/admin payload contract."""
+        return {
+            "slug": self.slug,
+            "name": self.name,
+            "date": self.creation_date,
+            "pinned": self.pinned,
+            "draft": self.is_draft,
+            "youtube": self.youtube_link,
+            "og_image": self.og_image,
+            "video": self.video_metadata(),
+            "markdown": self.markdown_content,
+            "html": self.html_content,
+            "revision": self.revision,
+        }
+
+    def to_card(
+        self,
+        *,
+        media_overrides: Optional[dict] = None,
+        sprite_id: Optional[str] = None,
+    ) -> "ProjectCardInfo":
+        """Build the normalized list/detail-card contract used by homepage-style views."""
+        overrides = media_overrides if isinstance(media_overrides, dict) else {}
+
+        sprite_sheet_link = _normalize_non_empty_string(
+            overrides.get("sprite_sheet_link", self.sprite_sheet_link)
+        )
+        frames = _normalize_positive_int(overrides.get("frames", self.frames))
+        columns = _normalize_positive_int(overrides.get("columns", self.columns))
+        rows = _normalize_positive_int(overrides.get("rows", self.rows))
+        frame_width = _normalize_positive_int(
+            overrides.get("frame_width", self.frame_width)
+        )
+        frame_height = _normalize_positive_int(
+            overrides.get("frame_height", self.frame_height)
+        )
+
+        if sprite_sheet_link:
+            frames = frames or DEFAULT_SPRITE_FRAMES
+            columns = columns or DEFAULT_SPRITE_COLUMNS
+            rows = rows or _compute_sprite_rows(frames, columns)
+
+        sprite_aspect_ratio = _normalize_positive_float(
+            overrides.get("sprite_aspect_ratio")
+        ) or _compute_aspect_ratio(frame_width, frame_height)
+        has_sprite_animation = all(
+            (
+                sprite_sheet_link,
+                frames,
+                columns,
+                rows,
+            )
+        )
+        if not has_sprite_animation:
+            sprite_sheet_link = None
+            frames = None
+            columns = None
+            rows = None
+            frame_width = None
+            frame_height = None
+
+        hero_aspect_ratio = _normalize_positive_float(
+            overrides.get("hero_aspect_ratio")
+        ) or self.video_aspect_ratio or sprite_aspect_ratio
+
+        return ProjectCardInfo(
+            slug=self.slug,
+            name=self.name,
+            video_link=_normalize_non_empty_string(
+                overrides.get("video_link", self.video_link)
+            ),
+            thumbnail_link=_normalize_non_empty_string(
+                overrides.get("thumbnail_link", self.thumbnail_link)
+            ),
+            sprite_sheet_link=sprite_sheet_link,
+            frames=frames,
+            columns=columns,
+            rows=rows,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            sprite_aspect_ratio=sprite_aspect_ratio,
+            hero_aspect_ratio=hero_aspect_ratio,
+            formatted_date=self.formatted_date,
+            is_draft=self.is_draft,
+            sprite_id=_normalize_non_empty_string(sprite_id),
+        )
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProjectInfo":
@@ -802,4 +1194,43 @@ class ProjectInfo:
             video_height=data.get("video_height"),
             youtube_link=data.get("youtube_link"),
             og_image=data.get("og_image"),
+            revision=data.get("revision"),
         )
+
+
+@dataclass
+class ProjectCardInfo:
+    """Normalized homepage/test card contract."""
+
+    slug: str
+    name: str
+    video_link: Optional[str] = None
+    thumbnail_link: Optional[str] = None
+    sprite_sheet_link: Optional[str] = None
+    frames: Optional[int] = None
+    columns: Optional[int] = None
+    rows: Optional[int] = None
+    frame_width: Optional[int] = None
+    frame_height: Optional[int] = None
+    sprite_aspect_ratio: Optional[float] = None
+    hero_aspect_ratio: Optional[float] = None
+    formatted_date: str = ""
+    is_draft: bool = False
+    sprite_id: Optional[str] = None
+
+    @property
+    def has_sprite_animation(self) -> bool:
+        return bool(
+            self.sprite_sheet_link
+            and self.frames
+            and self.columns
+            and self.rows
+        )
+
+    @property
+    def thumbnail_aspect_ratio(self) -> Optional[float]:
+        return self.hero_aspect_ratio or self.sprite_aspect_ratio
+
+    @property
+    def primary_aspect_ratio(self) -> Optional[float]:
+        return self.hero_aspect_ratio or self.sprite_aspect_ratio

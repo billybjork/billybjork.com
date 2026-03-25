@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import sqlite3
 from datetime import date
+from pathlib import Path
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "analytics.db")
+DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "data" / "analytics.db"
+_db_path = DEFAULT_DB_PATH
 
 BOT_PATTERN = re.compile(
     r"bot|crawl|spider|slurp|bingpreview|mediapartners-google|googlebot"
@@ -20,15 +21,25 @@ BOT_PATTERN = re.compile(
 
 
 def _get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn = sqlite3.connect(str(_db_path), timeout=5)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=3000")
     return conn
 
 
+def set_db_path(path: str | Path) -> None:
+    global _db_path
+    _db_path = Path(path).resolve()
+
+
+def reset_db_path() -> None:
+    global _db_path
+    _db_path = DEFAULT_DB_PATH
+
+
 def init_db() -> None:
     """Create data directory, tables, and indexes. Idempotent."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    _db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = _get_connection()
     try:
         conn.executescript(
