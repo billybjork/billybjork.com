@@ -2,6 +2,14 @@
 
 Personal portfolio site with a file-based CMS, in-browser block editor, and S3-backed media/content persistence.
 
+## Quick Start
+
+1. Copy `.env.example` to `.env` and fill in the values you need.
+2. Install backend and frontend dependencies.
+3. Build frontend assets once before starting the app.
+4. Run the FastAPI app with the factory entrypoint.
+5. In a second terminal, run `npm run watch` while changing frontend code.
+
 ## Setup
 
 ### Requirements
@@ -14,23 +22,48 @@ Personal portfolio site with a file-based CMS, in-browser block editor, and S3-b
 ### Install
 
 ```bash
+cp .env.example .env
 uv sync
 npm install
+npm run build
 ```
 
 ### Run Locally
 
 ```bash
-# Build frontend bundles once
-npm run build
-
-# Start API/app server
-uv run uvicorn main:app --reload
+uv run uvicorn main:create_app --factory --reload --port 8001
 ```
 
 For frontend changes during development, run `npm run watch` in a second terminal.
+`static/build/` is generated, cleaned on each build, and should not be committed.
+
+## Project Context
+
+- This app is the richer portfolio implementation. The extracted baseline lives in [`portfolio-kit`](https://github.com/billybjork/portfolio-kit).
+- Prefer borrowing maintainability and testability patterns from `portfolio-kit` without flattening this app’s richer video, homepage runtime, analytics, `/test`, or valentine behavior.
+- `main.py` exposes `create_app()` plus the default `app`. Dotenv loading, analytics DB init, content-root wiring, startup S3 sync, and temp-video cleanup wiring all happen at FastAPI startup rather than import time.
+- `utils.content` is the canonical content layer. It supports runtime-swappable content roots for tests while preserving the existing markdown/frontmatter and project video metadata formats.
+- Favor getter-based or injected auth/content configuration over import-time snapshots when touching backend setup.
+
+## Verification
+
+```bash
+# Frontend interaction regression suite
+npm test
+
+# TypeScript compile checks
+npm run typecheck
+
+# Generated bundle verification
+npm run build
+
+# Python route regression checks
+uv run python -m unittest discover -s tests -p 'test_*.py'
+```
 
 ## Environment Variables
+
+Use `.env.example` as the copyable source of truth for local setup.
 
 Core infra:
 
@@ -50,6 +83,8 @@ EDIT_TOKEN=
 COOKIE_SECRET=
 LOCALHOST_EDIT_BYPASS=
 CONTENT_STARTUP_SYNC_POLICY=always
+TEMP_VIDEO_CLEANUP_INTERVAL_SECONDS=900
+APP_PORT=8001
 ```
 
 - `EDIT_TOKEN`: enables remote edit login at `/edit/login`.
@@ -61,6 +96,8 @@ CONTENT_STARTUP_SYNC_POLICY=always
   - `always` (default): always sync from S3 at startup
   - `guarded`: sync from S3 only when canonical marker exists
   - `off`: skip startup S3 sync
+- `TEMP_VIDEO_CLEANUP_INTERVAL_SECONDS`: background cleanup loop interval for temp video/HLS session state.
+- `APP_PORT`: local `python main.py` port override. Defaults to `8001`.
 
 ## Edit Mode
 

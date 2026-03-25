@@ -68,11 +68,11 @@ interface HTMLVideoElement {
 // Window extensions for our modules
 interface Window {
   // Edit mode modules
-  EditMode: typeof import('../edit/mode').default;
+  EditMode?: typeof import('../edit/mode').default;
 
   // Project modules
-  ProjectSettings: typeof import('../edit/project-settings').default;
-  ProjectCreate: typeof import('../edit/project-create').default;
+  ProjectSettings?: typeof import('../edit/project-settings').default;
+  ProjectCreate?: typeof import('../edit/project-create').default;
 
   // External libraries
   Hls: typeof Hls;

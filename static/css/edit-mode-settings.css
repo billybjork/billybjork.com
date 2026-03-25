@@ -431,7 +431,8 @@
    Inline Settings (project edit mode)
    ======================================== */
 
-.project-header.edit-project-header-active {
+.project-header.edit-project-header-active,
+.homepage-detail-header.edit-project-header-active {
     cursor: default;
     transform: none;
 }
@@ -439,7 +440,9 @@
 .project-header.edit-project-header-active .project-name,
 .project-header.edit-project-header-active .project-date,
 .project-item.active .project-header.edit-project-header-active .project-name,
-.project-item.active .project-header.edit-project-header-active .project-date {
+.project-item.active .project-header.edit-project-header-active .project-date,
+.homepage-detail-header.edit-project-header-active .project-name,
+.homepage-detail-header.edit-project-header-active .project-date {
     transform: none;
     max-width: 100%;
 }

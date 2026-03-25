@@ -7,12 +7,15 @@
   },
   "scripts": {
     "build": "node esbuild.config.mjs",
+    "test": "vitest run --configLoader runner",
     "watch": "node esbuild.config.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
+    "@types/three": "^0.162.0",
     "esbuild": "^0.20.0",
-    "@types/three": "^0.162.0"
+    "jsdom": "^29.0.1",
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.0"
   }
 }

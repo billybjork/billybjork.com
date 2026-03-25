@@ -5,7 +5,8 @@
  */
 
 import { isDevMode, isShowDraftsActive } from '../core/utils';
-import { persistScrollForNavigation, restorePersistedScroll } from './scroll-restore';
+import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
+import { restorePersistedScroll } from './scroll-restore';
 
 // ========== CONSTANTS ==========
 
@@ -25,10 +26,6 @@ let headerCompactionFrame: number | null = null;
 
 // ========== HELPERS ==========
 
-function isIsolationMode(): boolean {
-  return document.body.dataset.isolationMode === 'true';
-}
-
 function buildUrlWithShowDrafts(
   pathname: string,
   params: Record<string, string | null | undefined> = {}
@@ -42,6 +39,52 @@ function buildUrlWithShowDrafts(
     url.searchParams.set('show_drafts', 'true');
   }
   return url.toString();
+}
+
+function readProjectSlugFromPath(): string | null {
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  if (!pathname || pathname === '/' || pathname === '/me') {
+    return null;
+  }
+
+  const slug = decodeURIComponent(pathname.slice(1)).trim();
+  return slug && !slug.includes('/') ? slug : null;
+}
+
+function getActiveProjectSlug(): string | null {
+  const homepageSlug = getHomepageRuntime()?.getOpenProjectSlug();
+  return homepageSlug || readProjectSlugFromPath();
+}
+
+function getEditableProjectContent(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('#homepage-detail-content .project-content')
+    ?? document.querySelector<HTMLElement>('.project-item.active .project-content')
+    ?? document.querySelector<HTMLElement>('.project-content');
+}
+
+function hasEditableProjectContent(): boolean {
+  return !!getEditableProjectContent();
+}
+
+async function activateProjectEditMode(preferredSlug?: string | null): Promise<void> {
+  let slug = getActiveProjectSlug();
+  if (!slug) {
+    slug = preferredSlug ?? null;
+  }
+
+  const homepageRuntime = getHomepageRuntime() ?? await waitForHomepageRuntime(1500);
+  if (homepageRuntime && slug) {
+    slug = await homepageRuntime.waitForProjectReady(slug, 2500);
+  }
+
+  if (!slug || !hasEditableProjectContent()) {
+    return;
+  }
+
+  if (!window.EditMode) {
+    await loadEditModeScripts();
+  }
+  window.EditMode?.init(slug);
 }
 
 // ========== SCRIPT LOADING ==========
@@ -67,12 +110,12 @@ function loadEditModeCSS(): void {
 
 /**
  * Ensure edit mode modules are ready
- * In the bundled version, all modules are already loaded via edit-bundle.js
+ * In the generated runtime build, all modules are already loaded via /static/build/edit.js
  */
 function loadEditModeScripts(): Promise<void> {
   return new Promise((resolve) => {
     loadEditModeCSS();
-    // All edit modules are already bundled and available on window
+    // All edit modules are already loaded by the generated edit runtime.
     // Just resolve immediately
     resolve();
   });
@@ -80,40 +123,15 @@ function loadEditModeScripts(): Promise<void> {
 
 // ========== UI CONTROLS ==========
 
-/**
- * Attach click handlers to project edit button(s) in the template.
- */
-function attachProjectControlHandlers(projectItem: HTMLElement): void {
-  const slug = projectItem.dataset.slug;
-  if (!slug) return;
+function attachHomepageProjectControlHandlers(): void {
+  const editBtn = document.querySelector<HTMLButtonElement>('[data-homepage-edit-project]');
+  if (!editBtn || editBtn.dataset.editHandlersAttached === 'true') return;
 
-  // Mark as already initialized to avoid duplicate handlers
-  if (projectItem.dataset.editHandlersAttached === 'true') return;
-  projectItem.dataset.editHandlersAttached = 'true';
-
-  const editBtns = projectItem.querySelectorAll<HTMLButtonElement>('.edit-project-btn');
-
-  editBtns.forEach((btn) => {
-    const action = btn.dataset.action;
-
-    if (action === 'edit') {
-      btn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (!isIsolationMode()) {
-          const destination = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
-          persistScrollForNavigation(new URL(destination).pathname, '.project-item.active .project-content');
-          window.location.href = destination;
-          return;
-        }
-
-        if (!window.EditMode) {
-          await loadEditModeScripts();
-        }
-        window.EditMode?.init(slug);
-      });
-    }
+  editBtn.dataset.editHandlersAttached = 'true';
+  editBtn.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await activateProjectEditMode(editBtn.dataset.projectSlug || getActiveProjectSlug());
   });
 }
 
@@ -253,7 +271,7 @@ function initEditModeKeyboardShortcut(): void {
       if (pathname === '/me') {
         const url = new URL(window.location.href);
         url.searchParams.set('edit', '');
-        window.history.replaceState({}, '', url);
+        window.history.replaceState(window.history.state, '', url.toString());
 
         if (!window.EditMode) {
           await loadEditModeScripts();
@@ -264,25 +282,34 @@ function initEditModeKeyboardShortcut(): void {
         return;
       }
 
-      const projectItem = document.querySelector<HTMLElement>('.project-item.active');
-      if (projectItem) {
-        const slug = projectItem.dataset.slug;
-        if (slug) {
-          if (!isIsolationMode()) {
-            const destination = buildUrlWithShowDrafts(`/${slug}`, { edit: '' });
-            persistScrollForNavigation(new URL(destination).pathname, '.project-item.active .project-content');
-            window.location.href = destination;
-            return;
-          }
+      const url = new URL(window.location.href);
+      url.searchParams.set('edit', '');
+      window.history.replaceState(window.history.state, '', url.toString());
 
-          if (!window.EditMode) {
-            await loadEditModeScripts();
-          }
-          window.EditMode?.init(slug);
-        }
-      }
+      await activateProjectEditMode(getActiveProjectSlug());
     }
   });
+}
+
+async function bootProjectEditFromUrl(): Promise<void> {
+  const pathname = window.location.pathname;
+  if (pathname === '/me') {
+    return;
+  }
+
+  const urlParams = new URLSearchParams(window.location.search);
+  if (!urlParams.has('edit') && !urlParams.has('settings')) {
+    return;
+  }
+
+  if (urlParams.has('settings')) {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete('settings');
+    nextUrl.searchParams.set('edit', '');
+    window.history.replaceState(window.history.state, '', nextUrl.toString());
+  }
+
+  await activateProjectEditMode(readProjectSlugFromPath());
 }
 
 // ========== INITIALIZATION ==========
@@ -308,44 +335,7 @@ function initializeEditMode(): void {
   addNewProjectButton();
   addShowDraftsToggle();
   initHeaderNavCompaction();
-
-  document.querySelectorAll<HTMLElement>('.project-item.active').forEach(attachProjectControlHandlers);
-
-  document.body.addEventListener('project:afterSwap', (event) => {
-    const customEvent = event as CustomEvent<{ element?: HTMLElement; isOpen?: boolean }>;
-    const { element, isOpen } = customEvent.detail;
-
-    if (element?.classList?.contains('project-details')) {
-      const projectItem = element.closest<HTMLElement>('.project-item');
-      if (projectItem && isOpen) {
-        setTimeout(() => attachProjectControlHandlers(projectItem), 50);
-      }
-    }
-  });
-
-  if (isIsolationMode()) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectItem = document.querySelector<HTMLElement>('.project-item.active');
-    const slug = projectItem?.dataset.slug;
-
-    if (slug) {
-      if (urlParams.has('edit') || urlParams.has('settings')) {
-        if (urlParams.has('settings')) {
-          const nextUrl = new URL(window.location.href);
-          nextUrl.searchParams.delete('settings');
-          nextUrl.searchParams.set('edit', '');
-          window.history.replaceState({}, '', nextUrl.toString());
-        }
-
-        setTimeout(async () => {
-          if (!window.EditMode) {
-            await loadEditModeScripts();
-          }
-          window.EditMode?.init(slug);
-        }, 100);
-      }
-    }
-  }
+  attachHomepageProjectControlHandlers();
 
   if (window.location.pathname === '/me') {
     const urlParams = new URLSearchParams(window.location.search);
@@ -360,6 +350,8 @@ function initializeEditMode(): void {
       }, 100);
     }
   }
+
+  void bootProjectEditFromUrl();
 
   initEditModeKeyboardShortcut();
 }

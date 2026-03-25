@@ -22,6 +22,7 @@ import {
   fetchJSON,
   withShowDrafts,
 } from '../core/utils';
+import { getHomepageRuntime } from '../core/runtime-registry';
 import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
 import { escapeHtmlAttr } from '../core/text';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
@@ -177,6 +178,22 @@ let inlineToolbarUpdateRaf: number | null = null;
 
 const scrollAnchors = new ScrollAnchorManager();
 
+function getHomepageDetailScene(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('#homepage-detail-scene');
+}
+
+function getActiveProjectContentContainer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('#homepage-detail-content .project-content')
+    ?? document.querySelector<HTMLElement>('.project-content');
+}
+
+function getActiveProjectRoot(contentContainer?: HTMLElement | null): HTMLElement | null {
+  return contentContainer?.closest<HTMLElement>('.project-item')
+    ?? getHomepageDetailScene()
+    ?? document.querySelector<HTMLElement>('.project-item.active')
+    ?? null;
+}
+
 function updateToolbarLayoutMetrics(): void {
   if (!toolbar) return;
   const toolbarRect = toolbar.getBoundingClientRect();
@@ -224,7 +241,7 @@ export async function init(slug: string): Promise<void> {
 
     const url = new URL(window.location.href);
     url.searchParams.set('edit', '');
-    window.history.replaceState({}, '', url);
+    window.history.replaceState(window.history.state, '', url.toString());
   } catch (error) {
     console.error('Failed to load project:', error);
     showNotification('Failed to load project', 'error');
@@ -252,7 +269,7 @@ export async function initAbout(): Promise<void> {
 
     const url = new URL(window.location.href);
     url.searchParams.set('edit', '');
-    window.history.replaceState({}, '', url);
+    window.history.replaceState(window.history.state, '', url.toString());
   } catch (error) {
     console.error('Failed to load about content:', error);
     showNotification('Failed to load about content', 'error');
@@ -265,9 +282,9 @@ export async function initAbout(): Promise<void> {
 function setupEditor(data: ProjectData | AboutData): void {
   const contentContainer = editMode === 'about'
     ? document.querySelector<HTMLElement>('.about-content')
-    : document.querySelector<HTMLElement>('.project-content');
+    : getActiveProjectContentContainer();
   const projectItem = editMode === 'project'
-    ? contentContainer?.closest<HTMLElement>('.project-item') ?? null
+    ? getActiveProjectRoot(contentContainer)
     : null;
 
   if (!contentContainer) {
@@ -355,7 +372,8 @@ function setupEditor(data: ProjectData | AboutData): void {
     setupEditableProjectHeader(projectItem, project);
 
     const details = projectItem.querySelector<HTMLElement>('.project-details');
-    const videoContainer = details?.querySelector<HTMLElement>('.video-container');
+    const videoContainer = details?.querySelector<HTMLElement>('.video-container')
+      ?? projectItem.querySelector<HTMLElement>('.video-container');
     const insertionPoint = videoContainer ?? contentContainer;
 
     inlineProjectMetadataControls = createInlineProjectMetadataControls(project);
@@ -374,7 +392,7 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Render blocks
   renderBlocks();
   const stabilityRoot = editMode === 'project'
-    ? (contentContainer.closest('.project-item') ?? contentContainer)
+    ? (getActiveProjectRoot(contentContainer) ?? contentContainer)
     : contentContainer;
   if (initialContentBlockAnchor) {
     scrollAnchors.restoreModeSwitchBlockAnchor({
@@ -442,7 +460,7 @@ function syncProjectSlug(nextSlugValue: unknown): void {
 
   projectSlug = nextSlug;
 
-  const projectItem = document.querySelector<HTMLElement>('.project-item.active');
+  const projectItem = getActiveProjectRoot(document.querySelector<HTMLElement>('#homepage-detail-content .project-content'));
   if (projectItem) {
     projectItem.dataset.slug = nextSlug;
     if (previousSlug && projectItem.id === `project-${previousSlug}`) {
@@ -459,10 +477,15 @@ function syncProjectSlug(nextSlugValue: unknown): void {
     slugInput.value = nextSlug;
   }
 
-  const url = new URL(window.location.href);
-  if (url.pathname !== `/${nextSlug}`) {
-    url.pathname = `/${nextSlug}`;
-    window.history.replaceState({}, '', url.toString());
+  const homepageRuntime = getHomepageRuntime();
+  if (homepageRuntime) {
+    homepageRuntime.renameProjectSlug(previousSlug ?? '', nextSlug);
+  } else {
+    const url = new URL(window.location.href);
+    if (url.pathname !== `/${nextSlug}`) {
+      url.pathname = `/${nextSlug}`;
+      window.history.replaceState(window.history.state, '', url.toString());
+    }
   }
 }
 
@@ -628,7 +651,7 @@ export function cleanup(): void {
   // Remove edit param from URL
   const url = new URL(window.location.href);
   url.searchParams.delete('edit');
-  window.history.replaceState({}, '', url);
+  window.history.replaceState(window.history.state, '', url.toString());
 
   // Reset state
   editMode = null;
@@ -3537,9 +3560,9 @@ function getEditableProjectData(): ProjectData | null {
 }
 
 function setupEditableProjectHeader(projectItem: HTMLElement, project: ProjectData): void {
-  const header = projectItem.querySelector<HTMLElement>('.project-header');
-  const nameEl = projectItem.querySelector<HTMLElement>('.project-name');
-  const dateEl = projectItem.querySelector<HTMLElement>('.project-date');
+  const header = projectItem.querySelector<HTMLElement>('.project-header, .homepage-detail-header');
+  const nameEl = projectItem.querySelector<HTMLElement>('.project-name, .homepage-detail-title');
+  const dateEl = projectItem.querySelector<HTMLElement>('.project-date, .homepage-detail-date');
   if (!header || !nameEl || !dateEl) return;
 
   header.classList.add('edit-project-header-active');
@@ -3675,7 +3698,6 @@ function createProjectTopControls({
   wrapper.innerHTML = `
     <div class="edit-inline-top-controls-header">
       <h3>Project Controls</h3>
-      <p>Edit URL, publishing state, and hero media in one place.</p>
     </div>
   `;
 
@@ -3873,7 +3895,7 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   });
 
   captureBtn.addEventListener('click', async () => {
-    const projectItem = controls.closest('.project-item');
+    const projectItem = controls.closest('.project-item') ?? getHomepageDetailScene();
     const video = projectItem?.querySelector('.video-container video') as HTMLVideoElement | null;
 
     if (!video) {

@@ -36,6 +36,7 @@ function withInstantScroll(action: () => void): void {
 function findActiveContainer(preferredSelector: string | null = null): { element: HTMLElement | null; selector: string | null } {
   const selectorCandidates = [
     preferredSelector,
+    '#homepage-detail-content .project-content',
     '.project-item.active .project-content',
     '.about-content',
     '.project-content',

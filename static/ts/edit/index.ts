@@ -1,5 +1,5 @@
 /**
- * Edit Bundle Entry Point
+ * Edit Runtime Entry Point
  * Loaded in dev mode only - handles edit mode functionality
  */
 

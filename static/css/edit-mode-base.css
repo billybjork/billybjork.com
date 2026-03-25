@@ -17,6 +17,10 @@
     overflow: visible;
 }
 
+.homepage-detail-content:has(.edit-mode-active) {
+    overflow: visible;
+}
+
 .edit-mode-container {
     width: 100%;
     --edit-line-space: 0.45rem;
