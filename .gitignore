@@ -153,3 +153,8 @@ workdir/
 node_modules/
 static/build/
 *.js.map
+
+# Agent tooling
+.playwright-mcp/
+.claude/settings.local.json
+.claude/worktrees/

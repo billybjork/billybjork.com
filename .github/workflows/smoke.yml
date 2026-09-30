@@ -1,0 +1,16 @@
+# Production probe: both hostnames answer 200 over HTTPS with a certificate
+# more than 14 days from expiry. GitHub emails on a failed scheduled run.
+name: smoke
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/smoke.sh
