@@ -11,6 +11,8 @@ Railway hosts it; a push to `main` deploys production.
    domains, deploys, or env vars.
 3. `just` lists the entrypoints: `just setup`, `just dev`, `just check`,
    `just smoke`, `just domains`.
+4. Open work lives in Billy's private notes at `notes/` (gitignored; absent
+   in other clones): `notes/README.md`, then `notes/10 📋 Tasks/`.
 
 ## Ground rules
 

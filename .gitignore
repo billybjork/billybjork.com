@@ -158,3 +158,6 @@ static/build/
 .playwright-mcp/
 .claude/settings.local.json
 .claude/worktrees/
+
+# Private notes, a plain folder until it is mounted from the Obsidian vault
+/notes
