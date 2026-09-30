@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
+from pathlib import PurePosixPath
 
 from bs4 import BeautifulSoup
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
@@ -19,8 +21,14 @@ from utils.content import (
     load_all_project_info,
     load_project_info,
 )
+from utils.object_storage import (
+    get_bucket_name,
+    get_object_storage_client,
+    is_object_storage_configured,
+)
 
 router = APIRouter()
+PUBLIC_MEDIA_PREFIXES = ("images/", "videos/", "videos_mp4/")
 
 
 def is_partial_request(request: Request) -> bool:
@@ -90,6 +98,67 @@ def build_homepage_context(
     }
 
 
+def _is_public_media_key(object_key: str) -> bool:
+    if not object_key:
+        return False
+
+    normalized = object_key.strip().lstrip("/")
+    if not normalized:
+        return False
+
+    pure = PurePosixPath(normalized)
+    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+        return False
+
+    return normalized.startswith(PUBLIC_MEDIA_PREFIXES)
+
+
+def _fetch_media_object(object_key: str, range_header: str | None) -> tuple[bytes, dict[str, str], int]:
+    client = get_object_storage_client()
+    params: dict[str, str] = {
+        "Bucket": get_bucket_name(),
+        "Key": object_key,
+    }
+    if range_header:
+        params["Range"] = range_header
+
+    response = client.get_object(**params)
+    body = response["Body"].read()
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+    }
+
+    content_type = response.get("ContentType")
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    cache_control = response.get("CacheControl")
+    if cache_control:
+        headers["Cache-Control"] = cache_control
+
+    etag = response.get("ETag")
+    if etag:
+        headers["ETag"] = etag
+
+    last_modified = response.get("LastModified")
+    if last_modified:
+        headers["Last-Modified"] = last_modified.strftime("%a, %d %b %Y %H:%M:%S GMT")
+
+    content_range = response.get("ContentRange")
+    if content_range:
+        headers["Content-Range"] = content_range
+
+    content_length = response.get("ContentLength")
+    if content_length is not None:
+        headers["Content-Length"] = str(content_length)
+
+    status_code = 206 if content_range else 200
+    return body, headers, status_code
+
+
 @router.get("/", response_class=HTMLResponse)
 async def read_root(
     request: Request,
@@ -150,6 +219,38 @@ async def read_about(request: Request):
             "load_project_bundle": False,
         },
     )
+
+
+@router.get("/media/{object_key:path}", include_in_schema=False)
+async def get_media_asset(request: Request, object_key: str):
+    normalized_key = object_key.strip().lstrip("/")
+    if not _is_public_media_key(normalized_key):
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    if not is_object_storage_configured():
+        raise HTTPException(status_code=503, detail="Object storage is not configured")
+
+    range_header = request.headers.get("range")
+
+    try:
+        body, headers, status_code = await asyncio.to_thread(
+            _fetch_media_object,
+            normalized_key,
+            range_header,
+        )
+    except ClientError as exc:
+        error_code = str(exc.response.get("Error", {}).get("Code", ""))
+        if error_code in {"404", "NoSuchKey", "NotFound"}:
+            raise HTTPException(status_code=404, detail="Asset not found") from exc
+        if error_code in {"InvalidRange", "416"}:
+            raise HTTPException(status_code=416, detail="Invalid range") from exc
+        logger.warning("Failed to fetch object-storage asset %s", normalized_key, exc_info=True)
+        raise HTTPException(status_code=502, detail="Asset fetch failed") from exc
+    except Exception as exc:
+        logger.warning("Unexpected media fetch error for %s", normalized_key, exc_info=True)
+        raise HTTPException(status_code=502, detail="Asset fetch failed") from exc
+
+    return Response(content=body, status_code=status_code, headers=headers)
 
 
 @router.get("/{project_slug}", response_class=HTMLResponse)

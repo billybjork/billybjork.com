@@ -17,7 +17,11 @@ from .media_paths import (
     hero_sprite_key,
     hero_thumbnail_key,
 )
-from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, get_s3_client
+from .object_storage import (
+    get_bucket_name,
+    get_object_storage_client,
+    public_asset_url,
+)
 
 CACHE_CONTROL_IMMUTABLE = 'max-age=31536000'
 ProgressCallback = Callable[[str, float], None]
@@ -177,7 +181,7 @@ def _upload_local_file(
     with open(local_path, 'rb') as f:
         s3_client.upload_fileobj(
             f,
-            S3_BUCKET,
+            get_bucket_name(),
             s3_key,
             ExtraArgs={
                 'ContentType': content_type,
@@ -203,7 +207,7 @@ def _upload_hls_outputs(
     for i, file_path in enumerate(hls_files):
         _report_progress(
             progress_callback,
-            f'Uploading HLS to S3... ({i + 1}/{total_hls})',
+            f'Uploading HLS assets... ({i + 1}/{total_hls})',
             progress_start + (i / max(total_hls, 1)) * progress_span,
         )
         relative_path = file_path.relative_to(hls_dir).as_posix()
@@ -211,7 +215,7 @@ def _upload_hls_outputs(
         content_type = 'application/vnd.apple.mpegurl' if file_path.suffix == '.m3u8' else 'video/mp2t'
         _upload_local_file(s3_client, file_path, s3_key, content_type=content_type)
 
-    return f'https://{CLOUDFRONT_DOMAIN}/{hls_prefix}/master.m3u8'
+    return public_asset_url(f"{hls_prefix}/master.m3u8")
 
 
 def check_ffmpeg() -> bool:
@@ -640,7 +644,7 @@ def process_hero_video(
 
     Args:
         video_path: Path to source video
-        project_slug: Project slug for S3 key organization
+        project_slug: Project slug for object key organization
         trim_start: Start time for video trim
         sprite_start: Start time for sprite sheet (relative to trim_start)
         sprite_duration: Duration for sprite sheet
@@ -697,7 +701,7 @@ def process_hero_video(
                 else:
                     _report('HLS ready, waiting for sprite sheet...' if completed < 2 else 'Encoding complete!', 10 + completed * 20)
 
-        s3 = get_s3_client()
+        s3 = get_object_storage_client()
         results['hls'] = _upload_hls_outputs(
             s3,
             hls_dir,
@@ -708,12 +712,12 @@ def process_hero_video(
             progress_span=25,
         )
 
-        # Upload sprite sheet to S3 with versioned filename
+        # Upload sprite sheet with a versioned filename
         _report('Uploading sprite sheet...', 78)
         sprite_key = hero_sprite_key(project_slug, version)
         _upload_local_file(s3, sprite_path, sprite_key, content_type='image/jpeg')
 
-        results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
+        results['spriteSheet'] = public_asset_url(sprite_key)
         results['spriteMeta'] = sprite_meta
 
         # Generate and upload thumbnail with versioned filename
@@ -729,7 +733,7 @@ def process_hero_video(
         thumbnail_key = hero_thumbnail_key(project_slug, version)
         _upload_local_file(s3, thumb_path, thumbnail_key, content_type='image/webp')
 
-        results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
+        results['thumbnail'] = public_asset_url(thumbnail_key)
         _report('Complete!', 100)
 
     return results
@@ -749,12 +753,12 @@ def generate_hls_only(
 
     Args:
         video_path: Path to source video
-        project_slug: Project slug for S3 key organization
+        project_slug: Project slug for object key organization
         trim_start: Start time for video trim
         progress_callback: Optional callable(stage: str, progress: float)
 
     Returns:
-        CloudFront URL for the HLS master playlist
+        Public URL for the HLS master playlist
     """
     if not check_ffmpeg():
         raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
@@ -771,7 +775,7 @@ def generate_hls_only(
         _report('Generating HLS streams...', 10)
         generate_hls(video_path, hls_dir, start_time=trim_start)
 
-        s3 = get_s3_client()
+        s3 = get_object_storage_client()
         hls_url = _upload_hls_outputs(
             s3,
             hls_dir,
@@ -794,7 +798,7 @@ def generate_sprite_and_thumbnail(
     progress_callback=None,
 ) -> dict:
     """
-    Generate sprite sheet and hero poster thumbnail, upload to S3.
+    Generate sprite sheet and hero poster thumbnail, then upload them.
 
     This is called after the user confirms their sprite range selection.
     Can run independently of HLS generation.
@@ -802,7 +806,7 @@ def generate_sprite_and_thumbnail(
 
     Args:
         video_path: Path to source video
-        project_slug: Project slug for S3 key organization
+        project_slug: Project slug for object key organization
         sprite_start: Start time for sprite sheet
         sprite_duration: Duration for sprite sheet
         progress_callback: Optional callable(stage: str, progress: float)
@@ -832,13 +836,13 @@ def generate_sprite_and_thumbnail(
             duration=sprite_duration,
         )
 
-        # Upload sprite sheet to S3 with versioned filename
+        # Upload sprite sheet with a versioned filename
         _report('Uploading sprite sheet...', 40)
-        s3 = get_s3_client()
+        s3 = get_object_storage_client()
         sprite_key = hero_sprite_key(project_slug, version)
         _upload_local_file(s3, sprite_path, sprite_key, content_type='image/jpeg')
 
-        results['spriteSheet'] = f'https://{CLOUDFRONT_DOMAIN}/{sprite_key}'
+        results['spriteSheet'] = public_asset_url(sprite_key)
         results['spriteMeta'] = sprite_meta
 
         # Generate and upload thumbnail
@@ -855,7 +859,7 @@ def generate_sprite_and_thumbnail(
         thumbnail_key = hero_thumbnail_key(project_slug, version)
         _upload_local_file(s3, thumb_path, thumbnail_key, content_type='image/webp')
 
-        results['thumbnail'] = f'https://{CLOUDFRONT_DOMAIN}/{thumbnail_key}'
+        results['thumbnail'] = public_asset_url(thumbnail_key)
         _report('Complete!', 100)
 
     return results
@@ -869,7 +873,7 @@ def process_content_video(video_path: str) -> str:
         video_path: Path to source video
 
     Returns:
-        CloudFront URL for the compressed video
+        Public URL for the compressed video
     """
     if not check_ffmpeg():
         raise RuntimeError("ffmpeg not found. Please install ffmpeg.")
@@ -883,8 +887,8 @@ def process_content_video(video_path: str) -> str:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         s3_key = content_video_key(f"{timestamp}.mp4")
 
-        # Upload to S3
-        s3 = get_s3_client()
+        # Upload to object storage
+        s3 = get_object_storage_client()
         _upload_local_file(s3, output_path, s3_key, content_type='video/mp4')
 
-        return f'https://{CLOUDFRONT_DOMAIN}/{s3_key}'
+        return public_asset_url(s3_key)

@@ -322,11 +322,16 @@ def _resolve_absolute_asset_url(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
     if value.startswith(("http://", "https://")):
-        return value
+        try:
+            from utils.object_storage import rewrite_managed_public_url
 
-    from utils.s3 import CLOUDFRONT_DOMAIN
+            return rewrite_managed_public_url(value)
+        except Exception:
+            return value
 
-    return f"https://{CLOUDFRONT_DOMAIN}/{value.lstrip('/')}"
+    from utils.object_storage import public_asset_url
+
+    return public_asset_url(value.lstrip("/"))
 
 
 def _compute_aspect_ratio(width: Optional[int], height: Optional[int]) -> Optional[float]:
@@ -350,7 +355,7 @@ def normalize_project_video(video) -> dict[str, str | int]:
     for source_key in VIDEO_URL_FIELD_MAP:
         value = _normalize_non_empty_string(video.get(source_key))
         if value:
-            normalized[source_key] = value
+            normalized[source_key] = _resolve_absolute_asset_url(value) or value
 
     for source_key in VIDEO_INT_FIELD_MAP:
         value = _normalize_positive_int(video.get(source_key))
@@ -598,6 +603,12 @@ def load_project(
     parsed = _get_cached_project_parse(slug, filepath)
     frontmatter = parsed.frontmatter
     markdown_content = parsed.markdown_content
+    try:
+        from utils.object_storage import rewrite_public_urls_in_text
+
+        markdown_content = rewrite_public_urls_in_text(markdown_content) or markdown_content
+    except Exception:
+        logger.warning("Failed to rewrite managed asset URLs for %s", slug, exc_info=True)
     html_content = ""
     if include_html:
         now = monotonic()
@@ -630,7 +641,7 @@ def load_project(
         'is_draft': frontmatter.get('draft', False),
         'pinned': frontmatter.get('pinned', False),
         'youtube_link': frontmatter.get('youtube'),
-        'og_image': frontmatter.get('og_image'),
+        'og_image': _resolve_absolute_asset_url(frontmatter.get('og_image')),
         'html_content': html_content,
         'markdown_content': markdown_content,
         'revision': parsed.revision if include_revision else None,
@@ -720,7 +731,7 @@ def load_all_project_info(
 
 def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
     """
-    Save a project to a markdown file and sync to S3.
+    Save a project to a markdown file and sync to object storage.
     """
     if not validate_slug(slug):
         raise ValueError(f"Invalid slug: {slug}")
@@ -734,23 +745,23 @@ def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
         f.write(content)
 
     _invalidate_project_cache(slug)
-    _sync_to_s3(filepath)
+    _sync_to_object_storage(filepath)
     return True
 
 
 def delete_project(slug: str) -> bool:
     """
-    Delete a project file.  Archives to S3 first as a safety net,
-    then removes from both local filesystem and S3.
+    Delete a project file. Archives to object storage first as a safety net,
+    then removes from both local filesystem and object storage.
     """
     if not validate_slug(slug):
         raise ValueError(f"Invalid slug: {slug}")
     filepath = _projects_dir() / f"{slug}.md"
     if filepath.exists():
-        _archive_to_s3(filepath)
+        _archive_to_object_storage(filepath)
         filepath.unlink()
         _invalidate_project_cache(slug)
-        _delete_from_s3(filepath)
+        _delete_from_object_storage(filepath)
         return True
     return False
 
@@ -770,27 +781,32 @@ class SiteSettings:
     def from_storage_dict(cls, settings: dict) -> "SiteSettings":
         social = settings.get("social_links", {})
         about = settings.get("about", {})
+        about_photo_link = _resolve_absolute_asset_url(about.get("photo_url"))
+        from utils.object_storage import rewrite_public_urls_in_text
+
         return cls(
             youtube_link=social.get("youtube"),
             vimeo_link=social.get("vimeo"),
             instagram_link=social.get("instagram"),
             linkedin_link=social.get("linkedin"),
             github_link=social.get("github"),
-            about_photo_link=about.get("photo_url"),
-            about_photo_srcset=about.get("photo_srcset"),
+            about_photo_link=about_photo_link,
+            about_photo_srcset=rewrite_public_urls_in_text(about.get("photo_srcset")),
             about_photo_sizes=about.get("photo_sizes"),
         )
 
     @classmethod
     def from_legacy_dict(cls, settings: dict) -> "SiteSettings":
+        from utils.object_storage import rewrite_public_urls_in_text
+
         return cls(
             youtube_link=settings.get("youtube_link"),
             vimeo_link=settings.get("vimeo_link"),
             instagram_link=settings.get("instagram_link"),
             linkedin_link=settings.get("linkedin_link"),
             github_link=settings.get("github_link"),
-            about_photo_link=settings.get("about_photo_link"),
-            about_photo_srcset=settings.get("about_photo_srcset"),
+            about_photo_link=_resolve_absolute_asset_url(settings.get("about_photo_link")),
+            about_photo_srcset=rewrite_public_urls_in_text(settings.get("about_photo_srcset")),
             about_photo_sizes=settings.get("about_photo_sizes"),
         )
 
@@ -858,7 +874,7 @@ def save_settings(settings: dict | SiteSettings) -> bool:
     with open(settings_file, 'w', encoding='utf-8') as f:
         json.dump(site_settings.to_storage_dict(), f, indent=2)
 
-    _sync_to_s3(settings_file)
+    _sync_to_object_storage(settings_file)
     return True
 
 
@@ -885,6 +901,12 @@ def load_about() -> tuple[str, str, Optional[str]]:
         content = f.read()
 
     _, markdown_content = parse_frontmatter(content)
+    try:
+        from utils.object_storage import rewrite_public_urls_in_text
+
+        markdown_content = rewrite_public_urls_in_text(markdown_content) or markdown_content
+    except Exception:
+        logger.warning("Failed to rewrite managed asset URLs for about page", exc_info=True)
     html_content = markdown_to_html(markdown_content)
     revision = _revision_from_content(content)
 
@@ -904,7 +926,7 @@ def load_about() -> tuple[str, str, Optional[str]]:
 
 def save_about(markdown_content: str) -> bool:
     """
-    Save about page content and sync to S3.
+    Save about page content and sync to object storage.
     """
     content_dir = _content_dir()
     about_file = _about_file()
@@ -917,35 +939,43 @@ def save_about(markdown_content: str) -> bool:
         f.write(content)
 
     _invalidate_about_cache()
-    _sync_to_s3(about_file)
+    _sync_to_object_storage(about_file)
     return True
 
 
-def _sync_to_s3(filepath: Path) -> None:
-    """Best-effort sync a content file to S3 after writing."""
+def _sync_to_object_storage(filepath: Path) -> None:
+    """Best-effort sync a content file to object storage after writing."""
     try:
-        from utils.content_sync import sync_to_s3
-        sync_to_s3(filepath)
+        from utils.content_sync import sync_to_object_storage
+
+        sync_to_object_storage(filepath)
     except Exception:
-        logger.exception("Best-effort S3 sync failed for %s", filepath)
+        logger.exception("Best-effort object-storage sync failed for %s", filepath)
 
 
-def _delete_from_s3(filepath: Path) -> None:
-    """Best-effort delete a content file from S3."""
+def _delete_from_object_storage(filepath: Path) -> None:
+    """Best-effort delete a content file from object storage."""
     try:
-        from utils.content_sync import delete_from_s3
-        delete_from_s3(filepath)
+        from utils.content_sync import delete_from_object_storage
+
+        delete_from_object_storage(filepath)
     except Exception:
-        logger.exception("Best-effort S3 delete failed for %s", filepath)
+        logger.exception("Best-effort object-storage delete failed for %s", filepath)
 
 
-def _archive_to_s3(filepath: Path) -> None:
-    """Best-effort archive a content file to S3 before deletion."""
+def _archive_to_object_storage(filepath: Path) -> None:
+    """Best-effort archive a content file to object storage before deletion."""
     try:
-        from utils.content_sync import archive_to_s3
-        archive_to_s3(filepath)
+        from utils.content_sync import archive_to_object_storage
+
+        archive_to_object_storage(filepath)
     except Exception:
-        logger.exception("Best-effort S3 archive failed for %s", filepath)
+        logger.exception("Best-effort object-storage archive failed for %s", filepath)
+
+
+_sync_to_s3 = _sync_to_object_storage
+_delete_from_s3 = _delete_from_object_storage
+_archive_to_s3 = _archive_to_object_storage
 
 
 def format_date(d) -> str:
@@ -1031,9 +1061,9 @@ class ProjectInfo:
         self.id = hash(self.slug)
         self.name = _normalize_non_empty_string(self.name) or self.slug
         self.formatted_date = format_date(self.creation_date)
-        self.video_link = _normalize_non_empty_string(self.video_link)
-        self.thumbnail_link = _normalize_non_empty_string(self.thumbnail_link)
-        self.sprite_sheet_link = _normalize_non_empty_string(self.sprite_sheet_link)
+        self.video_link = _resolve_absolute_asset_url(_normalize_non_empty_string(self.video_link))
+        self.thumbnail_link = _resolve_absolute_asset_url(_normalize_non_empty_string(self.thumbnail_link))
+        self.sprite_sheet_link = _resolve_absolute_asset_url(_normalize_non_empty_string(self.sprite_sheet_link))
         self.frames = _normalize_positive_int(self.frames)
         self.columns = _normalize_positive_int(self.columns)
         self.rows = _normalize_positive_int(self.rows)
@@ -1043,7 +1073,7 @@ class ProjectInfo:
         self.video_width = _normalize_positive_int(self.video_width)
         self.video_height = _normalize_positive_int(self.video_height)
         self.youtube_link = _normalize_non_empty_string(self.youtube_link)
-        self.og_image = _normalize_non_empty_string(self.og_image)
+        self.og_image = _resolve_absolute_asset_url(_normalize_non_empty_string(self.og_image))
         self.revision = _normalize_non_empty_string(self.revision)
 
         # Compute og_image_link with fallback chain: explicit og_image -> thumbnail -> spriteSheet

@@ -24,13 +24,13 @@ logger = logging.getLogger(__name__)
 
 
 def _run_startup_content_sync(settings: AppSettings) -> None:
-    from utils.content_sync import sync_from_s3
+    from utils.content_sync import sync_from_object_storage
 
     policy = settings.resolved_startup_content_sync_policy()
 
     if policy in {"off", "disabled", "none"}:
         logger.info(
-            "Startup: content sync from S3 disabled by CONTENT_STARTUP_SYNC_POLICY=%s",
+            "Startup: content sync from object storage disabled by CONTENT_STARTUP_SYNC_POLICY=%s",
             policy,
         )
         return
@@ -41,9 +41,9 @@ def _run_startup_content_sync(settings: AppSettings) -> None:
         )
 
     require_marker = policy not in {"always", "legacy"}
-    count = sync_from_s3(require_marker=require_marker)
+    count = sync_from_object_storage(require_marker=require_marker)
     if count:
-        logger.info("Startup: synced %d content file(s) from S3", count)
+        logger.info("Startup: synced %d content file(s) from object storage", count)
 
 
 async def _run_temp_video_cleanup_loop(interval_seconds: int) -> None:
@@ -71,7 +71,7 @@ async def app_lifespan(app: FastAPI):
             try:
                 _run_startup_content_sync(settings)
             except Exception:
-                logger.exception("Startup S3 content sync failed (using local files)")
+                logger.exception("Startup object-storage content sync failed (using local files)")
 
         if settings.run_temp_video_cleanup_on_startup:
             await asyncio.to_thread(admin.cleanup_old_temp_videos)

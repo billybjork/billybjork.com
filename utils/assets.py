@@ -1,34 +1,33 @@
 """
-Asset Registry Module
-Handles S3 asset deduplication and orphan cleanup.
+Asset registry and object-storage cleanup helpers.
 """
 import hashlib
 import json
 import logging
-import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 from .content import get_content_paths
 from .media_paths import hero_hls_prefix
-from .s3 import CLOUDFRONT_DOMAIN, S3_BUCKET, delete_file, get_s3_client
+from .object_storage import (
+    delete_file,
+    extract_object_key,
+    get_bucket_name,
+    get_object_storage_client,
+    managed_public_base_urls,
+)
 
 __all__ = [
     "compute_hash",
     "find_by_hash",
     "register_asset",
-    "extract_s3_key",
-    "extract_cloudfront_urls",
+    "extract_object_key",
+    "extract_public_asset_urls",
     "cleanup_orphans",
     "delete_video_prefix",
     "cleanup_old_hls_versions",
 ]
-
-# CloudFront URL pattern
-CLOUDFRONT_PATTERN = re.compile(
-    rf'https?://{re.escape(CLOUDFRONT_DOMAIN)}/([^\s"\'<>\)]+)'
-)
 
 
 def _load_registry() -> dict:
@@ -42,17 +41,21 @@ def _load_registry() -> dict:
 
 
 def _save_registry(registry: dict) -> None:
-    """Save the asset registry to disk and sync to S3."""
+    """Save the asset registry to disk and sync to object storage."""
     content_paths = get_content_paths()
     content_paths.content_dir.mkdir(parents=True, exist_ok=True)
     with open(content_paths.assets_file, "w", encoding="utf-8") as f:
         json.dump(registry, f, indent=2)
 
     try:
-        from .content_sync import sync_to_s3
-        sync_to_s3(content_paths.assets_file)
+        from .content_sync import sync_to_object_storage
+
+        sync_to_object_storage(content_paths.assets_file)
     except Exception:
-        logger.exception("Best-effort S3 sync failed for %s", content_paths.assets_file)
+        logger.exception(
+            "Best-effort object-storage sync failed for %s",
+            content_paths.assets_file,
+        )
 
 
 def compute_hash(data: bytes) -> str:
@@ -76,88 +79,91 @@ def find_by_hash(content_hash: str) -> Optional[str]:
         content_hash: Hash to look up
 
     Returns:
-        S3 key if found, None otherwise
+        Object key if found, None otherwise
     """
     registry = _load_registry()
-    for s3_key, asset_info in registry.get("assets", {}).items():
+    for object_key, asset_info in registry.get("assets", {}).items():
         if asset_info.get("hash") == content_hash:
-            return s3_key
+            return object_key
     return None
 
 
-def register_asset(s3_key: str, content_hash: str, size: int) -> None:
+def register_asset(object_key: str, content_hash: str, size: int) -> None:
     """
     Add an asset to the registry.
 
     Args:
-        s3_key: S3 key (path within bucket)
+        object_key: Object key (path within bucket)
         content_hash: Hash of the content
         size: File size in bytes
     """
     registry = _load_registry()
-    registry["assets"][s3_key] = {
+    registry["assets"][object_key] = {
         "hash": content_hash,
         "size": size,
     }
     _save_registry(registry)
 
 
-def unregister_asset(s3_key: str) -> bool:
+def unregister_asset(object_key: str) -> bool:
     """
     Remove an asset from the registry.
 
     Args:
-        s3_key: S3 key to remove
+        object_key: Object key to remove
 
     Returns:
         True if asset was found and removed
     """
     registry = _load_registry()
-    if s3_key in registry.get("assets", {}):
-        del registry["assets"][s3_key]
+    if object_key in registry.get("assets", {}):
+        del registry["assets"][object_key]
         _save_registry(registry)
         return True
     return False
 
 
-def extract_s3_key(cloudfront_url: str) -> Optional[str]:
-    """
-    Extract S3 key from a CloudFront URL.
+def extract_public_asset_urls(content: str) -> set[str]:
+    """Extract known managed public URLs from arbitrary text content."""
+    matches: set[str] = set()
+    if not content:
+        return matches
 
-    Args:
-        cloudfront_url: Full CloudFront URL
+    for base_url in managed_public_base_urls():
+        prefix = f"{base_url}/"
+        start = 0
+        while True:
+            index = content.find(prefix, start)
+            if index == -1:
+                break
+            end = index + len(prefix)
+            while end < len(content) and content[end] not in {
+                '"',
+                "'",
+                "<",
+                ">",
+                " ",
+                "\n",
+                "\r",
+                "\t",
+                ")",
+                ",",
+                "]",
+                "}",
+            }:
+                end += 1
+            matches.add(content[index:end])
+            start = end
 
-    Returns:
-        S3 key or None if not a valid CloudFront URL
-    """
-    match = CLOUDFRONT_PATTERN.match(cloudfront_url)
-    if match:
-        return match.group(1)
-    return None
-
-
-def extract_cloudfront_urls(content: str) -> set[str]:
-    """
-    Extract all CloudFront URLs from content.
-
-    Args:
-        content: Markdown or other text content
-
-    Returns:
-        Set of CloudFront URLs found
-    """
-    return set(
-        f"https://{CLOUDFRONT_DOMAIN}/{match}"
-        for match in CLOUDFRONT_PATTERN.findall(content)
-    )
+    return matches
 
 
 def scan_all_references() -> set[str]:
     """
-    Scan all markdown files for CloudFront URLs.
+    Scan all content files for managed public asset URLs.
 
     Returns:
-        Set of S3 keys that are referenced in content
+        Set of object keys that are referenced in content
     """
     content_paths = get_content_paths()
     referenced_keys = set()
@@ -167,8 +173,8 @@ def scan_all_references() -> set[str]:
         for filepath in content_paths.projects_dir.glob("*.md"):
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
-            for url in extract_cloudfront_urls(content):
-                key = extract_s3_key(url)
+            for url in extract_public_asset_urls(content):
+                key = extract_object_key(url)
                 if key:
                     referenced_keys.add(key)
 
@@ -176,8 +182,8 @@ def scan_all_references() -> set[str]:
     if content_paths.about_file.exists():
         with open(content_paths.about_file, "r", encoding="utf-8") as f:
             content = f.read()
-        for url in extract_cloudfront_urls(content):
-            key = extract_s3_key(url)
+        for url in extract_public_asset_urls(content):
+            key = extract_object_key(url)
             if key:
                 referenced_keys.add(key)
 
@@ -185,8 +191,8 @@ def scan_all_references() -> set[str]:
     if content_paths.settings_file.exists():
         with open(content_paths.settings_file, "r", encoding="utf-8") as f:
             content = f.read()
-        for url in extract_cloudfront_urls(content):
-            key = extract_s3_key(url)
+        for url in extract_public_asset_urls(content):
+            key = extract_object_key(url)
             if key:
                 referenced_keys.add(key)
 
@@ -195,10 +201,10 @@ def scan_all_references() -> set[str]:
 
 def cleanup_orphans(keys_to_check: set[str]) -> list[str]:
     """
-    Delete S3 keys that are not referenced anywhere.
+    Delete object-storage keys that are not referenced anywhere.
 
     Args:
-        keys_to_check: Set of S3 keys to potentially delete
+        keys_to_check: Set of object keys to potentially delete
 
     Returns:
         List of keys that were deleted
@@ -241,16 +247,16 @@ def delete_video_prefix(project_slug: str) -> list[str]:
     prefix = f"{hero_hls_prefix(project_slug)}/"
 
     try:
-        s3 = get_s3_client()
+        client = get_object_storage_client()
         deleted = []
         continuation_token = None
 
         while True:
-            kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+            kwargs = {"Bucket": get_bucket_name(), "Prefix": prefix}
             if continuation_token:
                 kwargs["ContinuationToken"] = continuation_token
 
-            response = s3.list_objects_v2(**kwargs)
+            response = client.list_objects_v2(**kwargs)
 
             for obj in response.get("Contents", []):
                 key = obj["Key"]
@@ -299,16 +305,16 @@ def cleanup_old_hls_versions(project_slug: str, current_hls_url: Optional[str]) 
     prefix = f"videos/{project_slug}/"
 
     try:
-        s3 = get_s3_client()
+        client = get_object_storage_client()
         deleted = []
         continuation_token = None
 
         while True:
-            kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+            kwargs = {"Bucket": get_bucket_name(), "Prefix": prefix}
             if continuation_token:
                 kwargs["ContinuationToken"] = continuation_token
 
-            response = s3.list_objects_v2(**kwargs)
+            response = client.list_objects_v2(**kwargs)
 
             for obj in response.get("Contents", []):
                 key = obj["Key"]
@@ -336,3 +342,7 @@ def cleanup_old_hls_versions(project_slug: str, current_hls_url: Optional[str]) 
     except Exception as e:
         logger.exception("Error cleaning up old HLS versions for: %s", project_slug)
         return []
+
+
+extract_s3_key = extract_object_key
+extract_cloudfront_urls = extract_public_asset_urls

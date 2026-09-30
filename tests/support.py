@@ -98,6 +98,15 @@ def managed_test_app() -> Iterator[TestAppHarness]:
         content_root = root / "content"
         _seed_content_root(content_root)
 
+        stack.enter_context(
+            patch("utils.content._sync_to_object_storage", return_value=None)
+        )
+        stack.enter_context(
+            patch("utils.content._delete_from_object_storage", return_value=None)
+        )
+        stack.enter_context(
+            patch("utils.content._archive_to_object_storage", return_value=None)
+        )
         stack.enter_context(patch("utils.content._sync_to_s3", return_value=None))
         stack.enter_context(patch("utils.content._delete_from_s3", return_value=None))
         stack.enter_context(patch("utils.content._archive_to_s3", return_value=None))

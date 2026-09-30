@@ -1,11 +1,10 @@
 """
-Content Sync — S3-backed persistence for the file-based CMS.
+Content sync for the file-based CMS using S3-compatible object storage.
 
-On every content save, the file is also uploaded to S3 so edits
-survive ephemeral container redeployments.  On app startup,
-sync_from_s3() pulls the latest content back to the local filesystem.
-
-Uses the same S3 client, bucket, and credentials as media uploads.
+On every content save, the file is also uploaded to object storage so edits
+survive ephemeral container redeployments. On app startup,
+`sync_from_object_storage()` pulls the latest content back to the local
+filesystem.
 """
 import argparse
 import json
@@ -18,164 +17,167 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
 from .content import get_content_paths
-from .s3 import S3_BUCKET, get_s3_client
+from .object_storage import get_bucket_name, get_object_storage_client
 
 logger = logging.getLogger(__name__)
 
-S3_CONTENT_PREFIX = "content/"
-S3_CANONICAL_MARKER_KEY = f"{S3_CONTENT_PREFIX}.s3-canonical.json"
+OBJECT_STORAGE_CONTENT_PREFIX = "content/"
+OBJECT_STORAGE_CANONICAL_MARKER_KEY = f"{OBJECT_STORAGE_CONTENT_PREFIX}.object-storage-canonical.json"
+LEGACY_S3_CANONICAL_MARKER_KEY = f"{OBJECT_STORAGE_CONTENT_PREFIX}.s3-canonical.json"
 
 # Archive prefix for soft-deleted projects
-S3_ARCHIVE_PREFIX = "content-archive/"
+OBJECT_STORAGE_ARCHIVE_PREFIX = "content-archive/"
 
 
-def sync_to_s3(local_path: Path) -> bool:
-    """Upload a single content file to S3 after a local write."""
+def sync_to_object_storage(local_path: Path) -> bool:
+    """Upload a single content file after a local write."""
     try:
-        s3_key = local_to_s3_key(local_path)
+        object_key = local_to_object_storage_key(local_path)
 
-        s3 = get_s3_client()
+        client = get_object_storage_client()
         with open(local_path, "rb") as f:
-            s3.upload_fileobj(
+            client.upload_fileobj(
                 f,
-                S3_BUCKET,
-                s3_key,
+                get_bucket_name(),
+                object_key,
                 ExtraArgs={"ContentType": _content_type(local_path)},
             )
-        logger.info("Synced to S3: %s", s3_key)
+        logger.info("Synced to object storage: %s", object_key)
         return True
     except Exception:
-        logger.exception("Failed to sync %s to S3", local_path)
+        logger.exception("Failed to sync %s to object storage", local_path)
         return False
 
 
-def delete_from_s3(local_path: Path) -> bool:
-    """Delete a content file from S3 (e.g. after project deletion)."""
+def delete_from_object_storage(local_path: Path) -> bool:
+    """Delete a content file from object storage (e.g. after project deletion)."""
     try:
-        s3_key = local_to_s3_key(local_path)
+        object_key = local_to_object_storage_key(local_path)
 
-        s3 = get_s3_client()
-        s3.delete_object(Bucket=S3_BUCKET, Key=s3_key)
-        logger.info("Deleted from S3: %s", s3_key)
+        client = get_object_storage_client()
+        client.delete_object(Bucket=get_bucket_name(), Key=object_key)
+        logger.info("Deleted from object storage: %s", object_key)
         return True
     except Exception:
-        logger.exception("Failed to delete %s from S3", local_path)
+        logger.exception("Failed to delete %s from object storage", local_path)
         return False
 
 
-def archive_to_s3(local_path: Path) -> bool:
-    """Archive a content file to S3 before deletion (safety net)."""
+def archive_to_object_storage(local_path: Path) -> bool:
+    """Archive a content file before deletion (safety net)."""
     try:
         from datetime import datetime
 
         relative = local_path.relative_to(get_content_paths().content_dir)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        s3_key = f"{S3_ARCHIVE_PREFIX}{relative.stem}_{timestamp}{relative.suffix}"
+        object_key = f"{OBJECT_STORAGE_ARCHIVE_PREFIX}{relative.stem}_{timestamp}{relative.suffix}"
 
-        s3 = get_s3_client()
+        client = get_object_storage_client()
         with open(local_path, "rb") as f:
-            s3.upload_fileobj(
+            client.upload_fileobj(
                 f,
-                S3_BUCKET,
-                s3_key,
+                get_bucket_name(),
+                object_key,
                 ExtraArgs={"ContentType": _content_type(local_path)},
             )
-        logger.info("Archived to S3: %s", s3_key)
+        logger.info("Archived to object storage: %s", object_key)
         return True
     except Exception:
-        logger.exception("Failed to archive %s to S3", local_path)
+        logger.exception("Failed to archive %s to object storage", local_path)
         return False
 
 
-def sync_from_s3(*, require_marker: bool = False) -> int:
-    """Download all content files from S3 to local filesystem.
+def sync_from_object_storage(*, require_marker: bool = False) -> int:
+    """Download all content files from object storage to local filesystem.
 
-    Called on app startup so the container has the latest content
-    even after a redeploy.
+    Called on app startup so the container has the latest content even after a
+    redeploy.
 
     Returns:
         Number of files synced.
     """
     if require_marker and not has_canonical_marker():
         logger.warning(
-            "Skipping startup S3 content sync: canonical marker missing (%s). "
-            "Run `uv run python -m utils.content_sync seed` to establish S3 as source of truth.",
-            S3_CANONICAL_MARKER_KEY,
+            "Skipping startup object-storage content sync: canonical marker missing (%s). "
+            "Run `uv run python -m utils.content_sync seed` to establish object storage as source of truth.",
+            OBJECT_STORAGE_CANONICAL_MARKER_KEY,
         )
         return 0
 
-    s3 = get_s3_client()
+    client = get_object_storage_client()
     synced = 0
 
     try:
-        paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_CONTENT_PREFIX):
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=get_bucket_name(), Prefix=OBJECT_STORAGE_CONTENT_PREFIX):
             for obj in page.get("Contents", []):
-                s3_key = obj["Key"]
-                if _is_metadata_key(s3_key):
+                object_key = obj["Key"]
+                if _is_metadata_key(object_key):
                     continue
-                relative = s3_key[len(S3_CONTENT_PREFIX):]
+                relative = object_key[len(OBJECT_STORAGE_CONTENT_PREFIX):]
                 local_path = _safe_local_content_path(relative)
                 if not local_path:
                     continue
 
                 local_path.parent.mkdir(parents=True, exist_ok=True)
 
-                s3.download_file(S3_BUCKET, s3_key, str(local_path))
+                client.download_file(get_bucket_name(), object_key, str(local_path))
                 synced += 1
 
         if synced:
             logger.info(
-                "Synced %d file(s) from S3 to %s",
+                "Synced %d file(s) from object storage to %s",
                 synced,
                 get_content_paths().content_dir,
             )
     except Exception:
-        logger.exception("S3 content sync failed")
+        logger.exception("Object-storage content sync failed")
 
     return synced
 
 
 def has_canonical_marker() -> bool:
-    """Return True if the S3 canonical marker exists."""
-    s3 = get_s3_client()
-    try:
-        s3.head_object(Bucket=S3_BUCKET, Key=S3_CANONICAL_MARKER_KEY)
-        return True
-    except ClientError as e:
-        code = str(e.response.get("Error", {}).get("Code", ""))
-        if code in {"404", "NoSuchKey", "NotFound"}:
+    """Return True if the object-storage canonical marker exists."""
+    client = get_object_storage_client()
+    for marker_key in (OBJECT_STORAGE_CANONICAL_MARKER_KEY, LEGACY_S3_CANONICAL_MARKER_KEY):
+        try:
+            client.head_object(Bucket=get_bucket_name(), Key=marker_key)
+            return True
+        except ClientError as e:
+            code = str(e.response.get("Error", {}).get("Code", ""))
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                continue
+            logger.warning("Unable to check canonical marker (%s): %s", marker_key, code)
             return False
-        logger.warning("Unable to check canonical marker (%s): %s", S3_CANONICAL_MARKER_KEY, code)
-        return False
+    return False
 
 
 def write_canonical_marker(*, source: str) -> None:
-    """Write/update canonical marker indicating S3 is runtime source of truth."""
-    s3 = get_s3_client()
+    """Write/update canonical marker indicating object storage is runtime source of truth."""
+    client = get_object_storage_client()
     payload = {
-        "canonical": "s3",
-        "content_prefix": S3_CONTENT_PREFIX,
+        "canonical": "object_storage",
+        "content_prefix": OBJECT_STORAGE_CONTENT_PREFIX,
         "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=S3_CANONICAL_MARKER_KEY,
+    client.put_object(
+        Bucket=get_bucket_name(),
+        Key=OBJECT_STORAGE_CANONICAL_MARKER_KEY,
         Body=json.dumps(payload, indent=2).encode("utf-8"),
         ContentType="application/json; charset=utf-8",
     )
-    logger.info("Wrote S3 canonical marker: %s", S3_CANONICAL_MARKER_KEY)
+    logger.info("Wrote object-storage canonical marker: %s", OBJECT_STORAGE_CANONICAL_MARKER_KEY)
 
 
-def local_to_s3_key(local_path: Path) -> str:
-    """Translate a local content path to its S3 key."""
+def local_to_object_storage_key(local_path: Path) -> str:
+    """Translate a local content path to its object-storage key."""
     relative = local_path.relative_to(get_content_paths().content_dir)
-    return f"{S3_CONTENT_PREFIX}{relative.as_posix()}"
+    return f"{OBJECT_STORAGE_CONTENT_PREFIX}{relative.as_posix()}"
 
 
-def seed_s3_from_local(*, delete_extra: bool = False) -> tuple[int, int]:
-    """Upload all local content files to S3 and write canonical marker.
+def seed_object_storage_from_local(*, delete_extra: bool = False) -> tuple[int, int]:
+    """Upload all local content files and write a canonical marker.
 
     Returns:
         tuple(uploaded_count, deleted_count)
@@ -185,26 +187,26 @@ def seed_s3_from_local(*, delete_extra: bool = False) -> tuple[int, int]:
     local_keys: set[str] = set()
 
     for local_path in _iter_local_content_files():
-        s3_key = local_to_s3_key(local_path)
-        if sync_to_s3(local_path):
+        object_key = local_to_object_storage_key(local_path)
+        if sync_to_object_storage(local_path):
             uploaded += 1
-            local_keys.add(s3_key)
+            local_keys.add(object_key)
 
     write_canonical_marker(source="seed")
-    local_keys.add(S3_CANONICAL_MARKER_KEY)
+    local_keys.add(OBJECT_STORAGE_CANONICAL_MARKER_KEY)
 
     if delete_extra:
-        s3 = get_s3_client()
-        paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_CONTENT_PREFIX):
+        client = get_object_storage_client()
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=get_bucket_name(), Prefix=OBJECT_STORAGE_CONTENT_PREFIX):
             for obj in page.get("Contents", []):
-                s3_key = obj["Key"]
-                if s3_key.endswith("/"):
+                object_key = obj["Key"]
+                if object_key.endswith("/"):
                     continue
-                if s3_key not in local_keys:
-                    s3.delete_object(Bucket=S3_BUCKET, Key=s3_key)
+                if object_key not in local_keys:
+                    client.delete_object(Bucket=get_bucket_name(), Key=object_key)
                     deleted += 1
-                    logger.info("Deleted extra S3 content key: %s", s3_key)
+                    logger.info("Deleted extra object-storage content key: %s", object_key)
 
     return uploaded, deleted
 
@@ -227,8 +229,8 @@ def _iter_local_content_files() -> list[Path]:
     return files
 
 
-def _is_metadata_key(s3_key: str) -> bool:
-    return s3_key == S3_CANONICAL_MARKER_KEY
+def _is_metadata_key(object_key: str) -> bool:
+    return object_key in {OBJECT_STORAGE_CANONICAL_MARKER_KEY, LEGACY_S3_CANONICAL_MARKER_KEY}
 
 
 def _content_type(path: Path) -> str:
@@ -241,7 +243,7 @@ def _content_type(path: Path) -> str:
 
 
 def _safe_local_content_path(relative_key: str) -> Path | None:
-    """Map an S3 key suffix to a safe local path under CONTENT_DIR."""
+    """Map an object-storage key suffix to a safe local path under CONTENT_DIR."""
     if not relative_key:
         return None
 
@@ -249,7 +251,7 @@ def _safe_local_content_path(relative_key: str) -> Path | None:
     if relative_key.endswith("/"):
         return None
 
-    # S3 keys are POSIX-style paths; reject traversal or absolute paths.
+    # Object-storage keys are POSIX-style paths; reject traversal or absolute paths.
     pure = PurePosixPath(relative_key)
     if pure.is_absolute() or any(part in ("", ".", "..") for part in pure.parts):
         logger.warning("Skipping unsafe content key: %s", relative_key)
@@ -270,44 +272,59 @@ def _main() -> int:
     load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description="Content sync utilities for S3-backed CMS content."
+        description="Content sync utilities for object-storage-backed CMS content."
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     seed = sub.add_parser(
         "seed",
-        help="Upload local content/ files to S3 and mark S3 as canonical.",
+        help="Upload local content/ files and mark object storage as canonical.",
     )
     seed.add_argument(
         "--delete-extra",
         action="store_true",
-        help="Delete S3 content/ keys that do not exist locally.",
+        help="Delete object-storage content/ keys that do not exist locally.",
     )
 
     status = sub.add_parser(
         "status",
-        help="Show local/S3 content sync status and canonical marker state.",
+        help="Show local/object-storage sync status and canonical marker state.",
     )
 
     args = parser.parse_args()
 
     if args.command == "seed":
-        uploaded, deleted = seed_s3_from_local(delete_extra=args.delete_extra)
-        print(f"Uploaded {uploaded} file(s) to s3://{S3_BUCKET}/{S3_CONTENT_PREFIX}")
+        uploaded, deleted = seed_object_storage_from_local(delete_extra=args.delete_extra)
+        print(
+            f"Uploaded {uploaded} file(s) to s3://{get_bucket_name()}/{OBJECT_STORAGE_CONTENT_PREFIX}"
+        )
         if args.delete_extra:
-            print(f"Deleted {deleted} extra S3 key(s)")
-        print(f"Canonical marker: s3://{S3_BUCKET}/{S3_CANONICAL_MARKER_KEY}")
+            print(f"Deleted {deleted} extra object-storage key(s)")
+        print(
+            f"Canonical marker: s3://{get_bucket_name()}/{OBJECT_STORAGE_CANONICAL_MARKER_KEY}"
+        )
         return 0
 
     if args.command == "status":
         local_count = len(_iter_local_content_files())
         marker = has_canonical_marker()
         print(f"Local content files: {local_count}")
-        print(f"S3 canonical marker ({S3_CANONICAL_MARKER_KEY}): {'present' if marker else 'missing'}")
+        print(
+            f"Object-storage canonical marker ({OBJECT_STORAGE_CANONICAL_MARKER_KEY}): "
+            f"{'present' if marker else 'missing'}"
+        )
         return 0
 
     parser.print_help()
     return 1
+
+
+sync_to_s3 = sync_to_object_storage
+delete_from_s3 = delete_from_object_storage
+archive_to_s3 = archive_to_object_storage
+sync_from_s3 = sync_from_object_storage
+local_to_s3_key = local_to_object_storage_key
+seed_s3_from_local = seed_object_storage_from_local
 
 
 if __name__ == "__main__":

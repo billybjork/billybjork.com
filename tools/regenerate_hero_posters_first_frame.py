@@ -21,10 +21,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.assets import cleanup_orphans, extract_s3_key
+from utils.assets import cleanup_orphans, extract_object_key
 from utils.content import PROJECTS_DIR, parse_frontmatter, save_project, validate_slug
 from utils.media_paths import hero_thumbnail_key
-from utils.s3 import upload_file
+from utils.object_storage import upload_file
 from utils.video import generate_thumbnail
 
 
@@ -137,7 +137,7 @@ def main() -> int:
             save_project(slug, frontmatter, markdown)
 
             if isinstance(old_thumbnail, str) and old_thumbnail and old_thumbnail != new_thumbnail:
-                old_key = extract_s3_key(old_thumbnail)
+                old_key = extract_object_key(old_thumbnail)
                 if old_key:
                     replaced_keys.add(old_key)
 

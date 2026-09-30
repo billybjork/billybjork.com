@@ -48,7 +48,7 @@ from utils.content import (
     save_project,
     validate_slug,
 )
-from utils.s3 import CLOUDFRONT_DOMAIN
+from utils.object_storage import is_managed_public_url, public_asset_url
 
 logger = logging.getLogger(__name__)
 
@@ -353,7 +353,7 @@ async def upload_media(request: Request):
         existing_key = await asyncio.to_thread(find_by_hash, content_hash)
         if existing_key:
             # Return existing URL (deduplication)
-            url = f"https://{CLOUDFRONT_DOMAIN}/{existing_key}"
+            url = public_asset_url(existing_key)
             return {"success": True, "url": url, "deduplicated": True}
 
         # Upload new asset
@@ -810,8 +810,11 @@ async def extract_content_video_poster(request: Request):
     parsed = urlparse(source_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=400, detail="source_url must be an absolute http(s) URL")
-    if parsed.netloc != CLOUDFRONT_DOMAIN:
-        raise HTTPException(status_code=400, detail="source_url must use configured CloudFront domain")
+    if not is_managed_public_url(source_url):
+        raise HTTPException(
+            status_code=400,
+            detail="source_url must use a configured managed asset base URL",
+        )
 
     try:
         frame_time = float(frame_time_raw)
@@ -846,7 +849,7 @@ async def extract_content_video_poster(request: Request):
         if existing_key:
             return {
                 "success": True,
-                "url": f"https://{CLOUDFRONT_DOMAIN}/{existing_key}",
+                "url": public_asset_url(existing_key),
                 "deduplicated": True,
             }
 
@@ -869,7 +872,7 @@ def cleanup_old_temp_videos():
     Called on server startup and can be called periodically if needed.
 
     For HLS sessions that completed but sprite sheet was never requested,
-    this also deletes the orphaned HLS files from S3.
+    this also deletes the orphaned HLS files from object storage.
     """
     now = datetime.now()
     expiry = timedelta(hours=1)

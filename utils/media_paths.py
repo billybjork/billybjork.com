@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def hero_hls_prefix(project_slug: str, version: str | None = None) -> str:
-    """Return S3 prefix for HLS video files.
+    """Return the object prefix for HLS video files.
 
     When version is provided, uses versioned path to bust CDN cache.
     """
@@ -12,7 +12,7 @@ def hero_hls_prefix(project_slug: str, version: str | None = None) -> str:
 
 
 def hero_sprite_key(project_slug: str, version: str | None = None) -> str:
-    """Return S3 key for sprite sheet.
+    """Return the object key for a sprite sheet.
 
     When version is provided, includes it in filename to bust CDN cache.
     """
@@ -22,7 +22,7 @@ def hero_sprite_key(project_slug: str, version: str | None = None) -> str:
 
 
 def hero_thumbnail_key(project_slug: str, version: str | None = None) -> str:
-    """Return S3 key for thumbnail.
+    """Return the object key for a thumbnail.
 
     When version is provided, includes it in filename to bust CDN cache.
     """

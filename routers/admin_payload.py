@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
-from utils.assets import extract_cloudfront_urls, extract_s3_key
+from utils.assets import extract_object_key, extract_public_asset_urls
 from utils.content import normalize_project_video, validate_slug
 
 
@@ -59,7 +59,7 @@ def collect_asset_refs(
     video: Optional[dict[str, Any]] = None,
     og_image: Optional[str] = None,
 ) -> set[str]:
-    refs = extract_cloudfront_urls(markdown_content or "")
+    refs = extract_public_asset_urls(markdown_content or "")
     if isinstance(video, dict):
         for key in ("hls", "thumbnail", "spriteSheet"):
             value = video.get(key)
@@ -87,7 +87,7 @@ def collect_cleanup_candidates(data: dict[str, Any], limit: int = 200) -> set[st
 def extract_s3_keys(urls: set[str]) -> set[str]:
     keys = set()
     for url in urls:
-        key = extract_s3_key(url)
+        key = extract_object_key(url)
         if key:
             keys.add(key)
     return keys
