@@ -7,7 +7,13 @@ draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/airdrop/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/airdrop_1772496783.webp
-  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/airdrop-1_sprite_sheet.jpg
+  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/airdrop_1791510211_sprite_sheet.jpg
+  frames: 60
+  columns: 5
+  rows: 12
+  frame_width: 180
+  frame_height: 320
+  fps: 20
   video_width: 608
   video_height: 1080
 youtube: https://www.youtube.com/watch?v=_o0aRJG_Otw

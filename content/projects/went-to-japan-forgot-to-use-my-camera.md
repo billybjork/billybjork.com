@@ -7,12 +7,12 @@ draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/japan-simulated/1771550729/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/went-to-japan-forgot-to-use-my-camera_1772496998.webp
-  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/went-to-japan-forgot-to-use-my-camera_1772151483_sprite_sheet.jpg
-  frames: 60
+  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/went-to-japan-forgot-to-use-my-camera_1791510211_sprite_sheet.jpg
+  frames: 38
   columns: 5
-  rows: 12
-  frame_width: 320
-  frame_height: 180
+  rows: 8
+  frame_width: 180
+  frame_height: 320
   fps: 20
   video_width: 1216
   video_height: 2160

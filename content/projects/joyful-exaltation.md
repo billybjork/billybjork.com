@@ -7,7 +7,13 @@ draft: false
 video:
   hls: https://d17y8p6t5eu2ht.cloudfront.net/videos/joyful_exaltation_/master.m3u8
   thumbnail: https://d17y8p6t5eu2ht.cloudfront.net/images/thumbnails/joyful-exaltation_1772496865.webp
-  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/JE_sprite_sheet.jpg
+  spriteSheet: https://d17y8p6t5eu2ht.cloudfront.net/images/sprite-sheets/joyful-exaltation_1791510211_sprite_sheet.jpg
+  frames: 60
+  columns: 5
+  rows: 12
+  frame_width: 256
+  frame_height: 320
+  fps: 20
   video_width: 1080
   video_height: 1350
 youtube: https://www.youtube.com/watch?v=9UkKPIJnDwo
