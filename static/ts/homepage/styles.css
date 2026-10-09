@@ -76,7 +76,10 @@ main.homepage-shared-element {
 }
 
 .homepage-thumb-frame {
-    width: 100%;
+    /* Native shape at full list width; tall (portrait) media narrows to fit the viewport. */
+    width: min(100%, calc(80vh * var(--homepage-thumb-aspect, 16 / 9)));
+    width: min(100%, calc(80svh * var(--homepage-thumb-aspect, 16 / 9)));
+    margin-inline: auto;
     aspect-ratio: var(--homepage-thumb-aspect, 16 / 9);
     border-radius: 0;
     overflow: hidden;

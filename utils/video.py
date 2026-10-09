@@ -64,6 +64,22 @@ def _floor_even(value: int) -> int:
     return max(2, floored)
 
 
+SPRITE_FRAME_LONG_EDGE = 320
+
+
+def sprite_frame_size(source_width: int, source_height: int) -> tuple[int, int]:
+    """Sprite frame size in the source's aspect ratio, long edge SPRITE_FRAME_LONG_EDGE.
+
+    Homepage thumbnails take the video's shape, so sprites must too; a 16:9 crop
+    of a portrait video would be cropped again to fit its thumbnail.
+    """
+    if source_width <= 0 or source_height <= 0:
+        return SPRITE_FRAME_LONG_EDGE, _round_even(SPRITE_FRAME_LONG_EDGE * 9 / 16)
+    if source_width >= source_height:
+        return SPRITE_FRAME_LONG_EDGE, _round_even(SPRITE_FRAME_LONG_EDGE * source_height / source_width)
+    return _round_even(SPRITE_FRAME_LONG_EDGE * source_width / source_height), SPRITE_FRAME_LONG_EDGE
+
+
 def _pick_stable_variant_dimensions(
     source_width: int,
     source_height: int,
@@ -231,13 +247,14 @@ def get_video_info(video_path: str) -> dict:
     """
     Get video information using ffprobe.
 
-    Returns dict with: width, height, duration, fps
+    Returns dict with: width, height, duration, fps, start_time (the container's
+    first timestamp; HLS streams often start above zero)
     """
     cmd = [
         'ffprobe',
         '-v', 'error',
         '-select_streams', 'v:0',
-        '-show_entries', 'stream=width,height,r_frame_rate,duration:format=duration',
+        '-show_entries', 'stream=width,height,r_frame_rate,duration:format=duration,start_time',
         '-of', 'json',
         video_path
     ]
@@ -266,6 +283,7 @@ def get_video_info(video_path: str) -> dict:
         'height': int(stream.get('height', 1080)),
         'duration': duration,
         'fps': fps,
+        'start_time': float(data.get('format', {}).get('start_time', 0) or 0),
     }
 
 
@@ -416,11 +434,16 @@ def generate_sprite_sheet(
                 f'crop={frame_width}:{frame_height}'
             )
 
+        # Input seeking (before -i) is frame-accurate when re-encoding; output
+        # seeking after the fps filter can land a second or more off the range.
+        # It seeks on the container clock, so offset by the first timestamp to
+        # keep start_time relative to the first frame, as the editor timeline is.
+        seek_time = start_time + get_video_info(video_path)['start_time']
         cmd = [
             'ffmpeg',
             '-y',
+            '-ss', str(seek_time),
             '-i', video_path,
-            '-ss', str(start_time),
             '-t', str(duration),
             '-vf', video_filter,
             '-q:v', '5',
@@ -458,8 +481,8 @@ def generate_sprite_sheet(
             ffmpeg_tile_cmd = [
                 'ffmpeg',
                 '-y',
+                '-ss', str(seek_time),
                 '-i', video_path,
-                '-ss', str(start_time),
                 '-t', str(duration),
                 '-vf', f'{video_filter},tile={tile_w}x{tile_h}',
                 '-frames:v', '1',
@@ -677,11 +700,16 @@ def process_hero_video(
             return 'hls'
 
         def _generate_sprite_task():
+            info = get_video_info(video_path)
+            frame_width, frame_height = sprite_frame_size(info['width'], info['height'])
             _, meta = generate_sprite_sheet(
                 video_path,
                 sprite_path,
                 start_time=trim_start + sprite_start,
                 duration=sprite_duration,
+                frame_width=frame_width,
+                frame_height=frame_height,
+                preserve_aspect=True,
             )
             return ('sprite', meta)
 
@@ -829,11 +857,16 @@ def generate_sprite_and_thumbnail(
 
         # Generate sprite sheet
         _report('Generating sprite sheet...', 10)
+        info = get_video_info(video_path)
+        frame_width, frame_height = sprite_frame_size(info['width'], info['height'])
         _, sprite_meta = generate_sprite_sheet(
             video_path,
             sprite_path,
             start_time=sprite_start,
             duration=sprite_duration,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            preserve_aspect=True,
         )
 
         # Upload sprite sheet with a versioned filename

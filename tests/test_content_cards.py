@@ -4,7 +4,7 @@ from utils.content import ProjectInfo
 
 
 class ProjectCardInfoTests(unittest.TestCase):
-    def test_thumbnail_aspect_ratio_follows_sprite_frames_not_hero(self) -> None:
+    def test_thumbnail_aspect_ratio_prefers_hero_ratio_for_display(self) -> None:
         project = ProjectInfo(
             slug="went-to-japan-forgot-to-use-my-camera",
             name="Went to Japan. Forgot to use my camera.",
@@ -22,7 +22,7 @@ class ProjectCardInfoTests(unittest.TestCase):
 
         card = project.to_card()
 
-        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 320 / 180)
+        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 1216 / 2160)
         self.assertAlmostEqual(card.sprite_aspect_ratio or 0, 320 / 180)
         self.assertAlmostEqual(card.hero_aspect_ratio or 0, 1216 / 2160)
         self.assertAlmostEqual(card.primary_aspect_ratio or 0, 1216 / 2160)
@@ -59,9 +59,7 @@ class ProjectCardInfoTests(unittest.TestCase):
         self.assertIsNone(card.frame_width)
         self.assertIsNone(card.frame_height)
         self.assertIsNone(card.sprite_aspect_ratio)
-        # Generated sprites are crop-to-fill 320x180 frames.
-        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 16 / 9)
-        self.assertAlmostEqual(card.hero_aspect_ratio or 0, 1216 / 2160)
+        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 1216 / 2160)
 
 
 if __name__ == "__main__":

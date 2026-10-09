@@ -1259,14 +1259,7 @@ class ProjectCardInfo:
 
     @property
     def thumbnail_aspect_ratio(self) -> Optional[float]:
-        """List thumbnails take the shape of what they show: the sprite frame when
-        the card animates (sprites are crop-to-fill 16:9 unless their metadata
-        says otherwise), else the hero media."""
-        if self.has_sprite_animation:
-            return self.sprite_aspect_ratio or (
-                DEFAULT_SPRITE_FRAME_WIDTH / DEFAULT_SPRITE_FRAME_HEIGHT
-            )
-        return self.hero_aspect_ratio
+        return self.hero_aspect_ratio or self.sprite_aspect_ratio
 
     @property
     def primary_aspect_ratio(self) -> Optional[float]:

@@ -49,7 +49,7 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
   private readonly frameWidth: number;
   private readonly frameHeight: number;
   private readonly spriteAspectRatio: number;
-  private displayAspectRatio: number;
+  private readonly displayAspectRatio: number;
   private sheetPixelWidth: number | null = null;
   private sheetPixelHeight: number | null = null;
   private currentFrameIndex = 0;
@@ -79,15 +79,16 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
       || readPositiveNumber(cardEl.dataset.thumbnailAspectRatio)
       || readPositiveNumber(cardEl.dataset.heroAspectRatio)
       || (16 / 9);
-    this.hasSprite = !!(this.thumbMedia && this.spriteSheetUrl && this.frames > 0);
     this.displayAspectRatio = readPositiveNumber(cardEl.dataset.thumbnailAspectRatio)
-      || (this.hasSprite ? this.spriteAspectRatio : readPositiveNumber(cardEl.dataset.heroAspectRatio))
+      || readPositiveNumber(cardEl.dataset.heroAspectRatio)
+      || this.spriteAspectRatio
       || (16 / 9);
+    this.hasSprite = !!(this.thumbMedia && this.spriteSheetUrl && this.frames > 0);
   }
 
   init(): boolean {
     if (!this.thumbFrame || !this.thumbMedia) return false;
-    this.applyDisplayAspectRatio();
+    this.thumbFrame.style.setProperty('--homepage-thumb-aspect', this.displayAspectRatio.toString());
     this.primeSheetDimensions();
     return true;
   }
@@ -221,19 +222,9 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
       if (image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
       this.sheetPixelWidth = image.naturalWidth;
       this.sheetPixelHeight = image.naturalHeight;
-      // The sheet is the authority on frame shape; metadata can be missing or stale.
-      const measuredAspectRatio = this.resolveSourceAspectRatio();
-      if (Math.abs(measuredAspectRatio - this.displayAspectRatio) > 0.01) {
-        this.displayAspectRatio = measuredAspectRatio;
-        this.applyDisplayAspectRatio();
-      }
       this.refresh();
     };
     image.src = this.spriteSheetUrl;
-  }
-
-  private applyDisplayAspectRatio(): void {
-    this.thumbFrame?.style.setProperty('--homepage-thumb-aspect', this.displayAspectRatio.toString());
   }
 
   private resolveDisplayHeight(width: number): number {
