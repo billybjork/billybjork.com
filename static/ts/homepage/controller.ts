@@ -12,6 +12,7 @@ const OPEN_DURATION_MS = 340;
 const CLOSE_DURATION_MS = 300;
 const HERO_BRIDGE_FADE_MS = 180;
 const EASING_STANDARD = 'cubic-bezier(0.2, 0.0, 0, 1)';
+const MORPH_KEYFRAME_STEPS = 12;
 
 type SceneState =
   | 'idle:list'
@@ -54,6 +55,13 @@ interface TransitionSnapshot {
   targetRect: DOMRect;
 }
 
+interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 interface OpenProjectOptions {
   reason?: string;
   pushHistory?: boolean;
@@ -92,6 +100,69 @@ function readPositiveNumber(value: string | number | null | undefined): number |
   if (value === null || value === undefined || value === '') return null;
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+/** The box media of `aspectRatio` fills when cover-fit and centered in `frame`. */
+export function coverBox(frame: Box, aspectRatio: number): Box {
+  if (!(aspectRatio > 0) || frame.width <= 0 || frame.height <= 0) {
+    return { left: frame.left, top: frame.top, width: frame.width, height: frame.height };
+  }
+  const fitsWidth = frame.width / frame.height > aspectRatio;
+  const width = fitsWidth ? frame.width : frame.height * aspectRatio;
+  const height = fitsWidth ? frame.width / aspectRatio : frame.height;
+  return {
+    left: frame.left + (frame.width - width) / 2,
+    top: frame.top + (frame.height - height) / 2,
+    width,
+    height,
+  };
+}
+
+function lerp(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+function lerpBox(from: Box, to: Box, t: number): Box {
+  return {
+    left: lerp(from.left, to.left, t),
+    top: lerp(from.top, to.top, t),
+    width: lerp(from.width, to.width, t),
+    height: lerp(from.height, to.height, t),
+  };
+}
+
+/**
+ * Shared-element morph between frames of different shapes. The media keeps its
+ * own aspect ratio and only scales uniformly, while a clip-path crops it to the
+ * frame, so a 16:9 thumbnail can open into a portrait hero without stretching.
+ * Keyframes sample the frame and media boxes linearly so the visible window
+ * tracks a straight interpolation between the two frames.
+ */
+export function buildMorphKeyframes(sourceFrame: Box, targetFrame: Box, mediaAspectRatio: number): Keyframe[] {
+  const sourceMedia = coverBox(sourceFrame, mediaAspectRatio);
+  const targetMedia = coverBox(targetFrame, mediaAspectRatio);
+  const keyframes: Keyframe[] = [];
+
+  for (let step = 0; step <= MORPH_KEYFRAME_STEPS; step += 1) {
+    const t = step / MORPH_KEYFRAME_STEPS;
+    const frame = lerpBox(sourceFrame, targetFrame, t);
+    const media = lerpBox(sourceMedia, targetMedia, t);
+    const scale = sourceMedia.width > 0 ? media.width / sourceMedia.width : 1;
+    const toLocal = (value: number): number => Math.max(0, value / (scale || 1));
+    const insetTop = toLocal(frame.top - media.top);
+    const insetRight = toLocal((media.left + media.width) - (frame.left + frame.width));
+    const insetBottom = toLocal((media.top + media.height) - (frame.top + frame.height));
+    const insetLeft = toLocal(frame.left - media.left);
+
+    keyframes.push({
+      offset: t,
+      transform: `translate3d(${media.left - sourceMedia.left}px, ${media.top - sourceMedia.top}px, 0px) scale(${scale})`,
+      clipPath: `inset(${insetTop}px ${insetRight}px ${insetBottom}px ${insetLeft}px)`,
+      opacity: 1,
+    });
+  }
+
+  return keyframes;
 }
 
 export class HomepageController implements HomepageRuntimeApi {
@@ -526,6 +597,7 @@ export class HomepageController implements HomepageRuntimeApi {
     this.transitionLayer.style.width = '0px';
     this.transitionLayer.style.height = '0px';
     this.transitionLayer.style.transform = 'none';
+    this.transitionLayer.style.clipPath = '';
     this.transitionLayer.style.opacity = '0';
     this.transitionLayer.innerHTML = '';
   }
@@ -662,60 +734,64 @@ export class HomepageController implements HomepageRuntimeApi {
     await this.fadeOutHeroBridge(token);
   }
 
-  private createTransitionNode(card: HomepageProjectCard, sourceRect: DOMRect, frameIndex: number): HTMLElement {
+  /** Aspect ratio of the media the transition layer shows, before any frame crops it. */
+  private resolveTransitionMediaAspectRatio(card: HomepageProjectCard): number {
+    if (card.spriteController) {
+      return card.spriteController.getSourceAspectRatio();
+    }
+    const thumbImg = card.thumbImg;
+    if (thumbImg && thumbImg.naturalWidth > 0 && thumbImg.naturalHeight > 0) {
+      return thumbImg.naturalWidth / thumbImg.naturalHeight;
+    }
+    return card.thumbnailAspectRatio || card.heroAspectRatio || (16 / 9);
+  }
+
+  private createTransitionNode(card: HomepageProjectCard, mediaBox: Box, frameIndex: number): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'homepage-transition-visual';
-    const previewWidth = Math.max(1, Math.round(sourceRect.width || card.thumbFrame.clientWidth || 1));
-    const previewHeight = Math.max(1, Math.round(sourceRect.height || card.thumbFrame.clientHeight || 1));
     wrapper.appendChild(this.createCardPreviewNode(card, {
       frameIndex,
       className: 'homepage-transition-media-layer',
-      width: previewWidth,
-      height: previewHeight,
+      width: Math.max(1, Math.round(mediaBox.width)),
+      height: Math.max(1, Math.round(mediaBox.height)),
     }));
     return wrapper;
   }
 
-  private mountTransitionLayer(node: HTMLElement, rect: DOMRect): void {
+  private mountTransitionLayer(node: HTMLElement, mediaBox: Box, initialKeyframe: Keyframe | undefined): void {
     this.transitionLayer.innerHTML = '';
     this.transitionLayer.appendChild(node);
-    this.transitionLayer.style.left = `${rect.left}px`;
-    this.transitionLayer.style.top = `${rect.top}px`;
-    this.transitionLayer.style.width = `${rect.width}px`;
-    this.transitionLayer.style.height = `${rect.height}px`;
-    this.transitionLayer.style.transform = 'translate3d(0px, 0px, 0px) scale(1, 1)';
+    this.transitionLayer.style.left = `${mediaBox.left}px`;
+    this.transitionLayer.style.top = `${mediaBox.top}px`;
+    this.transitionLayer.style.width = `${mediaBox.width}px`;
+    this.transitionLayer.style.height = `${mediaBox.height}px`;
+    this.transitionLayer.style.transform = String(initialKeyframe?.transform ?? 'none');
+    this.transitionLayer.style.clipPath = String(initialKeyframe?.clipPath ?? '');
     this.transitionLayer.style.opacity = '1';
     this.transitionLayer.classList.add('homepage-active');
   }
 
-  private buildMorphKeyframes(sourceRect: DOMRect, targetRect: DOMRect): Keyframe[] {
-    const scaleX = sourceRect.width > 0 ? targetRect.width / sourceRect.width : 1;
-    const scaleY = sourceRect.height > 0 ? targetRect.height / sourceRect.height : 1;
-    const translateX = targetRect.left - sourceRect.left;
-    const translateY = targetRect.top - sourceRect.top;
-
-    return [
-      {
-        transform: 'translate3d(0px, 0px, 0px) scale(1, 1)',
-        opacity: 1,
-      },
-      {
-        transform: `translate3d(${translateX}px, ${translateY}px, 0px) scale(${scaleX}, ${scaleY})`,
-        opacity: 1,
-      },
-    ];
-  }
-
-  private async runMorphAnimation(options: {
+  private async runMorphTransition(options: {
+    card: HomepageProjectCard;
     sourceRect: DOMRect;
     targetRect: DOMRect;
+    frameIndex: number;
     durationMs: number;
     token: number;
   }): Promise<void> {
     if (!this.isTokenActive(options.token)) return;
 
+    const mediaAspectRatio = this.resolveTransitionMediaAspectRatio(options.card);
+    const keyframes = buildMorphKeyframes(options.sourceRect, options.targetRect, mediaAspectRatio);
+    const sourceMedia = coverBox(options.sourceRect, mediaAspectRatio);
+    this.mountTransitionLayer(
+      this.createTransitionNode(options.card, sourceMedia, options.frameIndex),
+      sourceMedia,
+      keyframes[0]
+    );
+
     const animation = this.trackAnimation(
-      this.transitionLayer.animate(this.buildMorphKeyframes(options.sourceRect, options.targetRect), {
+      this.transitionLayer.animate(keyframes, {
         duration: options.durationMs,
         easing: EASING_STANDARD,
         fill: 'forwards',
@@ -1014,13 +1090,11 @@ export class HomepageController implements HomepageRuntimeApi {
 
       this.state = 'opening:animate';
       this.detailScene.dataset.sceneState = this.state;
-      this.mountTransitionLayer(
-        this.createTransitionNode(card, snapshot.sourceRect, transitionFrameIndex),
-        snapshot.sourceRect
-      );
-      await this.runMorphAnimation({
+      await this.runMorphTransition({
+        card,
         sourceRect: snapshot.sourceRect,
         targetRect: snapshot.targetRect,
+        frameIndex: transitionFrameIndex,
         durationMs: OPEN_DURATION_MS,
         token,
       });
@@ -1100,13 +1174,11 @@ export class HomepageController implements HomepageRuntimeApi {
 
       this.state = 'closing:animate';
       this.detailScene.dataset.sceneState = this.state;
-      this.mountTransitionLayer(
-        this.createTransitionNode(card, snapshot.sourceRect, this.getTransitionFrameIndex(card)),
-        snapshot.sourceRect
-      );
-      await this.runMorphAnimation({
+      await this.runMorphTransition({
+        card,
         sourceRect: snapshot.sourceRect,
         targetRect: snapshot.targetRect,
+        frameIndex: this.getTransitionFrameIndex(card),
         durationMs: CLOSE_DURATION_MS,
         token,
       });
