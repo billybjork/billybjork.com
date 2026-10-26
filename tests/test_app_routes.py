@@ -144,6 +144,19 @@ class AppRoutesIntegrationTests(unittest.TestCase):
                 app.project_file.read_text(encoding="utf-8"),
             )
 
+    def test_homepage_list_shows_project_title_and_date(self) -> None:
+        with managed_test_app() as app:
+            response = app.client.get("/")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(
+                '<time class="homepage-card-date">January, 2024</time>',
+                response.text,
+            )
+            self.assertIn(
+                '<h2 class="homepage-card-title">Sample Project</h2>',
+                response.text,
+            )
+
     def test_public_about_page_renders_seeded_content(self) -> None:
         with managed_test_app() as app:
             response = app.client.get("/me")

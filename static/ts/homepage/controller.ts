@@ -39,6 +39,7 @@ interface HomepageProjectCard {
   openButton: HTMLElement;
   thumbFrame: HTMLElement;
   thumbImg: HTMLImageElement | null;
+  heading: HTMLElement | null;
   title: string;
   formattedDate: string;
   thumbnail: string;
@@ -49,10 +50,17 @@ interface HomepageProjectCard {
   spriteController: SpriteThumbnailHandle | null;
 }
 
+interface HeadingEnd {
+  el: HTMLElement;
+  rect: DOMRect;
+}
+
 interface TransitionSnapshot {
   card: HomepageProjectCard;
   sourceRect: DOMRect;
   targetRect: DOMRect;
+  sourceHeading: HeadingEnd | null;
+  targetHeading: HeadingEnd | null;
 }
 
 interface Box {
@@ -118,6 +126,12 @@ export function coverBox(frame: Box, aspectRatio: number): Box {
   };
 }
 
+function measureHeading(el: HTMLElement | null): HeadingEnd | null {
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  return rect.width >= 1 && rect.height >= 1 ? { el, rect } : null;
+}
+
 function lerp(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
@@ -170,6 +184,7 @@ export class HomepageController implements HomepageRuntimeApi {
   private readonly detailScene: HTMLElement;
   private readonly detailDate: HTMLElement;
   private readonly detailTitle: HTMLElement;
+  private readonly detailHeading: HTMLElement;
   private readonly detailHeroFrame: HTMLElement;
   private readonly detailHeroMedia: HTMLElement;
   private readonly detailContent: HTMLElement;
@@ -184,6 +199,7 @@ export class HomepageController implements HomepageRuntimeApi {
   private transitionToken = 0;
   private activeTransitionToken: number | null = null;
   private activeAnimations: Animation[] = [];
+  private headingFlights: HTMLElement[] = [];
   private activeFetchController: AbortController | null = null;
   private isDestroying = false;
   private isHandlingPopState = false;
@@ -197,6 +213,7 @@ export class HomepageController implements HomepageRuntimeApi {
     this.detailScene = options.detailScene;
     this.detailDate = options.detailDate;
     this.detailTitle = options.detailTitle;
+    this.detailHeading = options.detailTitle.closest<HTMLElement>('.homepage-detail-heading') ?? options.detailTitle;
     this.detailHeroFrame = options.detailHeroFrame;
     this.detailHeroMedia = options.detailHeroMedia;
     this.detailContent = options.detailContent;
@@ -276,7 +293,9 @@ export class HomepageController implements HomepageRuntimeApi {
       this.cardsBySlug.delete(resolvedPreviousSlug);
       card.slug = resolvedNextSlug;
       card.cardEl.dataset.slug = resolvedNextSlug;
-      card.openButton.setAttribute('data-open-project', resolvedNextSlug);
+      card.cardEl.querySelectorAll('[data-open-project]').forEach((trigger) => {
+        trigger.setAttribute('data-open-project', resolvedNextSlug);
+      });
       this.cardsBySlug.set(resolvedNextSlug, card);
       this.spriteRuntime?.renameThumbnail(resolvedPreviousSlug, resolvedNextSlug, card.cardEl);
     }
@@ -302,7 +321,7 @@ export class HomepageController implements HomepageRuntimeApi {
       const slug = cardEl.dataset.slug;
       if (!slug) return;
 
-      const openButton = cardEl.querySelector<HTMLElement>('[data-open-project]');
+      const openButton = cardEl.querySelector<HTMLElement>('button[data-open-project]');
       const thumbFrame = cardEl.querySelector<HTMLElement>('[data-homepage-thumb-frame]');
       if (!openButton || !thumbFrame) return;
 
@@ -319,6 +338,7 @@ export class HomepageController implements HomepageRuntimeApi {
         openButton,
         thumbFrame,
         thumbImg,
+        heading: cardEl.querySelector<HTMLElement>('.homepage-card-heading'),
         title: (cardEl.dataset.title || slug).trim(),
         formattedDate: (cardEl.dataset.formattedDate || '').trim(),
         thumbnail: (cardEl.dataset.thumbnail || '').trim(),
@@ -584,10 +604,12 @@ export class HomepageController implements HomepageRuntimeApi {
 
   private markSourceVisibility(card: HomepageProjectCard | null | undefined, hidden: boolean): void {
     card?.thumbFrame.classList.toggle('homepage-source-hidden', hidden);
+    card?.heading?.classList.toggle('homepage-source-hidden', hidden);
   }
 
   private markTargetVisibility(hidden: boolean): void {
     this.detailHeroFrame.classList.toggle('homepage-target-hidden', hidden);
+    this.detailHeading.classList.toggle('homepage-target-hidden', hidden);
   }
 
   private clearTransitionLayer(): void {
@@ -600,6 +622,8 @@ export class HomepageController implements HomepageRuntimeApi {
     this.transitionLayer.style.clipPath = '';
     this.transitionLayer.style.opacity = '0';
     this.transitionLayer.innerHTML = '';
+    this.headingFlights.forEach((flight) => flight.remove());
+    this.headingFlights = [];
   }
 
   private resetDetailContent(): void {
@@ -771,10 +795,70 @@ export class HomepageController implements HomepageRuntimeApi {
     this.transitionLayer.classList.add('homepage-active');
   }
 
+  private mountHeadingFlight(end: HeadingEnd): HTMLElement {
+    const flight = end.el.cloneNode(true) as HTMLElement;
+    flight.removeAttribute('id');
+    flight.removeAttribute('data-open-project');
+    flight.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+    flight.classList.remove('homepage-source-hidden', 'homepage-target-hidden');
+    flight.classList.add('homepage-heading-flight');
+    flight.setAttribute('aria-hidden', 'true');
+
+    const computed = window.getComputedStyle(end.el);
+    flight.style.left = `${end.rect.left}px`;
+    flight.style.top = `${end.rect.top}px`;
+    flight.style.width = `${end.rect.width}px`;
+    flight.style.fontFamily = computed.fontFamily;
+    flight.style.fontSize = computed.fontSize;
+    flight.style.fontWeight = computed.fontWeight;
+    flight.style.lineHeight = computed.lineHeight;
+
+    document.body.appendChild(flight);
+    this.headingFlights.push(flight);
+    return flight;
+  }
+
+  /**
+   * Flies the date and title between the list card and the detail header on
+   * the media morph's timing. Headings that wrap the same way move as one
+   * layer; when the wider detail header rewraps the title, the two layouts
+   * cross-fade along the same path instead of snapping at the end.
+   */
+  private startHeadingFlight(source: HeadingEnd | null, target: HeadingEnd | null, durationMs: number): Animation[] {
+    if (!source || !target) return [];
+
+    const dx = target.rect.left - source.rect.left;
+    const dy = target.rect.top - source.rect.top;
+    const sameLayout = Math.abs(source.rect.height - target.rect.height) < 1;
+    const fromColor = window.getComputedStyle(source.el).color;
+    const toColor = window.getComputedStyle(target.el).color;
+    const timing: KeyframeAnimationOptions = {
+      duration: durationMs,
+      easing: EASING_STANDARD,
+      fill: 'forwards',
+    };
+
+    const animations = [
+      this.mountHeadingFlight(source).animate([
+        { transform: 'translate3d(0px, 0px, 0px)', color: fromColor, opacity: 1 },
+        { transform: `translate3d(${dx}px, ${dy}px, 0px)`, color: toColor, opacity: sameLayout ? 1 : 0 },
+      ], timing),
+    ];
+    if (!sameLayout) {
+      animations.push(this.mountHeadingFlight(target).animate([
+        { transform: `translate3d(${-dx}px, ${-dy}px, 0px)`, color: fromColor, opacity: 0 },
+        { transform: 'translate3d(0px, 0px, 0px)', color: toColor, opacity: 1 },
+      ], timing));
+    }
+    return animations.map((animation) => this.trackAnimation(animation));
+  }
+
   private async runMorphTransition(options: {
     card: HomepageProjectCard;
     sourceRect: DOMRect;
     targetRect: DOMRect;
+    sourceHeading: HeadingEnd | null;
+    targetHeading: HeadingEnd | null;
     frameIndex: number;
     durationMs: number;
     token: number;
@@ -790,6 +874,7 @@ export class HomepageController implements HomepageRuntimeApi {
       keyframes[0]
     );
 
+    const headingAnimations = this.startHeadingFlight(options.sourceHeading, options.targetHeading, options.durationMs);
     const animation = this.trackAnimation(
       this.transitionLayer.animate(keyframes, {
         duration: options.durationMs,
@@ -797,7 +882,7 @@ export class HomepageController implements HomepageRuntimeApi {
         fill: 'forwards',
       })
     );
-    await waitForAnimationFinish(animation);
+    await Promise.all([animation, ...headingAnimations].map(waitForAnimationFinish));
     this.activeAnimations = [];
   }
 
@@ -811,7 +896,13 @@ export class HomepageController implements HomepageRuntimeApi {
       return null;
     }
 
-    return { card, sourceRect, targetRect };
+    return {
+      card,
+      sourceRect,
+      targetRect,
+      sourceHeading: measureHeading(card.heading),
+      targetHeading: measureHeading(this.detailHeading),
+    };
   }
 
   private measureCloseSnapshot(slug: string): TransitionSnapshot | null {
@@ -824,7 +915,13 @@ export class HomepageController implements HomepageRuntimeApi {
       return null;
     }
 
-    return { card, sourceRect, targetRect };
+    return {
+      card,
+      sourceRect,
+      targetRect,
+      sourceHeading: measureHeading(this.detailHeading),
+      targetHeading: measureHeading(card.heading),
+    };
   }
 
   private async fetchDetailsHtml(slug: string, token: number): Promise<string> {
@@ -1094,6 +1191,8 @@ export class HomepageController implements HomepageRuntimeApi {
         card,
         sourceRect: snapshot.sourceRect,
         targetRect: snapshot.targetRect,
+        sourceHeading: snapshot.sourceHeading,
+        targetHeading: snapshot.targetHeading,
         frameIndex: transitionFrameIndex,
         durationMs: OPEN_DURATION_MS,
         token,
@@ -1178,6 +1277,8 @@ export class HomepageController implements HomepageRuntimeApi {
         card,
         sourceRect: snapshot.sourceRect,
         targetRect: snapshot.targetRect,
+        sourceHeading: snapshot.sourceHeading,
+        targetHeading: snapshot.targetHeading,
         frameIndex: this.getTransitionFrameIndex(card),
         durationMs: CLOSE_DURATION_MS,
         token,

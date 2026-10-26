@@ -41,6 +41,10 @@ function createHomepageFixture(): {
             data-sprite-aspect-ratio="1.7777778"
             data-hero-aspect-ratio="1.7777778"
             data-thumbnail="/thumb.webp">
+            <header class="homepage-card-heading" data-open-project="project-one">
+              <time class="homepage-card-date">2024</time>
+              <h2 class="homepage-card-title">Project One</h2>
+            </header>
             <button class="homepage-open-button" type="button" data-open-project="project-one">
               <span class="homepage-thumb-frame" data-homepage-thumb-frame>
                 <span class="homepage-thumb-media" data-homepage-thumb-media>
@@ -63,8 +67,8 @@ function createHomepageFixture(): {
         <article class="homepage-detail-shell">
           <header class="homepage-detail-header">
             <div class="homepage-detail-heading">
-              <time id="homepage-detail-date"></time>
-              <h2 id="homepage-detail-title"></h2>
+              <time class="homepage-detail-date" id="homepage-detail-date"></time>
+              <h2 class="homepage-detail-title" id="homepage-detail-title"></h2>
             </div>
             <div class="homepage-detail-actions">
               <button type="button" data-homepage-edit-project data-project-slug=""></button>
@@ -165,6 +169,49 @@ describe('HomepageController', () => {
     expect(detailScene.dataset.sceneState).toBe('closed');
     expect(window.location.pathname).toBe('/');
     expect(detailContent.querySelector('.project-content')).toBeNull();
+
+    controller.destroy();
+  });
+
+  it('flies the date and title between the list card and the detail header', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      text: async () => DETAIL_RESPONSE_HTML,
+    })));
+    // jsdom has no layout; give every element a box so the animated path runs.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(10, 20, 300, 40)
+    );
+    const flightsMidAnimation: string[][] = [];
+    vi.spyOn(HTMLElement.prototype, 'animate').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('homepage-heading-flight')) {
+        flightsMidAnimation.push([this.textContent?.replace(/\s+/g, ' ').trim() || '', this.id]);
+      }
+      return { finished: Promise.resolve(), cancel: vi.fn() } as unknown as Animation;
+    });
+
+    const { controller, detailScene, openButton, closeButton } = createHomepageFixture();
+    const cardHeading = document.querySelector<HTMLElement>('.homepage-card-heading');
+    const detailHeading = detailScene.querySelector<HTMLElement>('.homepage-detail-heading');
+    controller.init();
+
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    expect(detailScene.dataset.sceneState).toBe('open:detail');
+    expect(flightsMidAnimation).toEqual([['2024 Project One', '']]);
+    expect(document.querySelector('.homepage-heading-flight')).toBeNull();
+    expect(cardHeading?.classList.contains('homepage-source-hidden')).toBe(true);
+    expect(detailHeading?.classList.contains('homepage-target-hidden')).toBe(false);
+
+    closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    expect(detailScene.dataset.sceneState).toBe('closed');
+    expect(flightsMidAnimation).toHaveLength(2);
+    expect(flightsMidAnimation[1][0]).toBe('2024 Project One');
+    expect(document.querySelector('.homepage-heading-flight')).toBeNull();
+    expect(cardHeading?.classList.contains('homepage-source-hidden')).toBe(false);
 
     controller.destroy();
   });

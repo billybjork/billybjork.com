@@ -88,7 +88,7 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
 
   init(): boolean {
     if (!this.thumbFrame || !this.thumbMedia) return false;
-    this.thumbFrame.style.setProperty('--homepage-thumb-aspect', this.displayAspectRatio.toString());
+    this.cardEl.style.setProperty('--homepage-thumb-aspect', this.displayAspectRatio.toString());
     this.primeSheetDimensions();
     return true;
   }

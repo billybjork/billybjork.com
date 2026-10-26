@@ -441,8 +441,8 @@
 .project-header.edit-project-header-active .project-date,
 .project-item.active .project-header.edit-project-header-active .project-name,
 .project-item.active .project-header.edit-project-header-active .project-date,
-.homepage-detail-header.edit-project-header-active .project-name,
-.homepage-detail-header.edit-project-header-active .project-date {
+.homepage-detail-header.edit-project-header-active .homepage-detail-title,
+.homepage-detail-header.edit-project-header-active .homepage-detail-date {
     transform: none;
     max-width: 100%;
 }

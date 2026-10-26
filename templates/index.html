@@ -31,19 +31,21 @@
                 {% if homepage_thumb_aspect_ratio %}data-thumbnail-aspect-ratio="{{ homepage_thumb_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.hero_aspect_ratio %}data-hero-aspect-ratio="{{ project.hero_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
-                {% if project.video_link %}data-hls-url="{{ project.video_link }}"{% endif %}>
+                {% if project.video_link %}data-hls-url="{{ project.video_link }}"{% endif %}
+                {% if homepage_thumb_aspect_ratio %}
+                style="--homepage-thumb-aspect: {{ homepage_thumb_aspect_ratio | round(8) }};"
+                {% endif %}>
+                <header class="homepage-card-heading" data-open-project="{{ project.slug }}">
+                    {% if project.formatted_date %}<time class="homepage-card-date">{{ project.formatted_date }}</time>{% endif %}
+                    <h2 class="homepage-card-title">{{ project.name }}</h2>
+                </header>
                 <button
                     class="homepage-open-button"
                     type="button"
                     data-open-project="{{ project.slug }}"
                     aria-controls="homepage-detail-scene"
                     aria-label="Open {{ project.name }}">
-                    <span
-                        class="homepage-thumb-frame"
-                        data-homepage-thumb-frame
-                        {% if homepage_thumb_aspect_ratio %}
-                        style="--homepage-thumb-aspect: {{ homepage_thumb_aspect_ratio | round(8) }};"
-                        {% endif %}>
+                    <span class="homepage-thumb-frame" data-homepage-thumb-frame>
                         <span class="homepage-thumb-media" data-homepage-thumb-media>
                             {% if project.thumbnail_link %}
                             <img
@@ -78,8 +80,8 @@
         <article class="homepage-detail-shell" role="dialog" aria-modal="true" aria-labelledby="homepage-detail-title">
             <header class="homepage-detail-header">
                 <div class="homepage-detail-heading">
-                    <time class="homepage-detail-date project-date" id="homepage-detail-date"></time>
-                    <h2 class="homepage-detail-title project-name" id="homepage-detail-title"></h2>
+                    <time class="homepage-detail-date" id="homepage-detail-date"></time>
+                    <h2 class="homepage-detail-title" id="homepage-detail-title"></h2>
                 </div>
                 <div class="homepage-detail-actions edit-buttons">
                     {% if is_dev_mode %}

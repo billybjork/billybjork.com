@@ -75,11 +75,36 @@ main.homepage-shared-element {
     outline-offset: 3px;
 }
 
+.homepage-card-heading,
 .homepage-thumb-frame {
     /* Native shape at full list width; tall (portrait) media narrows to fit the viewport. */
     width: min(100%, calc(80vh * var(--homepage-thumb-aspect, 16 / 9)));
     width: min(100%, calc(80svh * var(--homepage-thumb-aspect, 16 / 9)));
     margin-inline: auto;
+}
+
+.homepage-card-heading {
+    display: grid;
+    gap: 0.25rem;
+    margin-bottom: 0.8rem;
+    cursor: pointer;
+}
+
+.homepage-card-date,
+.homepage-detail-date {
+    color: #8f8f87;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.homepage-card-title,
+.homepage-detail-title {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    margin: 0;
+}
+
+.homepage-thumb-frame {
     aspect-ratio: var(--homepage-thumb-aspect, 16 / 9);
     border-radius: 0;
     overflow: hidden;
@@ -90,6 +115,19 @@ main.homepage-shared-element {
 
 .homepage-thumb-frame.homepage-source-hidden {
     opacity: 0;
+}
+
+.homepage-card-heading.homepage-source-hidden,
+.homepage-detail-heading.homepage-target-hidden {
+    visibility: hidden;
+}
+
+.homepage-heading-flight {
+    position: fixed;
+    margin: 0;
+    z-index: 91;
+    pointer-events: none;
+    will-change: transform, opacity;
 }
 
 .homepage-thumb-media,
@@ -174,18 +212,6 @@ img.homepage-detail-fallback-media {
     min-width: 0;
     display: grid;
     gap: 0.25rem;
-}
-
-.homepage-detail-date {
-    color: #8f8f87;
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-}
-
-.homepage-detail-title {
-    font-size: clamp(1rem, 2vw, 1.25rem);
-    margin: 0;
 }
 
 .homepage-detail-actions {
