@@ -132,6 +132,27 @@ function measureHeading(el: HTMLElement | null): HeadingEnd | null {
   return rect.width >= 1 && rect.height >= 1 ? { el, rect } : null;
 }
 
+/**
+ * Pins each node of a heading clone to its source's resolved type metrics, so
+ * the clone lays out identically outside the source's cascade. Pinning only
+ * the root would hand its resolved px line-height to smaller children (the
+ * date), stretching their lines and offsetting the clone from the real heading.
+ */
+export function pinFlightTypography(source: HTMLElement, clone: HTMLElement): void {
+  const sources = [source, ...source.querySelectorAll<HTMLElement>('*')];
+  const clones = [clone, ...clone.querySelectorAll<HTMLElement>('*')];
+  sources.forEach((sourceNode, index) => {
+    const cloneNode = clones[index];
+    if (!cloneNode) return;
+    const computed = window.getComputedStyle(sourceNode);
+    cloneNode.style.fontFamily = computed.fontFamily;
+    cloneNode.style.fontSize = computed.fontSize;
+    cloneNode.style.fontWeight = computed.fontWeight;
+    cloneNode.style.lineHeight = computed.lineHeight;
+    cloneNode.style.letterSpacing = computed.letterSpacing;
+  });
+}
+
 function lerp(from: number, to: number, t: number): number {
   return from + (to - from) * t;
 }
@@ -804,14 +825,10 @@ export class HomepageController implements HomepageRuntimeApi {
     flight.classList.add('homepage-heading-flight');
     flight.setAttribute('aria-hidden', 'true');
 
-    const computed = window.getComputedStyle(end.el);
     flight.style.left = `${end.rect.left}px`;
     flight.style.top = `${end.rect.top}px`;
     flight.style.width = `${end.rect.width}px`;
-    flight.style.fontFamily = computed.fontFamily;
-    flight.style.fontSize = computed.fontSize;
-    flight.style.fontWeight = computed.fontWeight;
-    flight.style.lineHeight = computed.lineHeight;
+    pinFlightTypography(end.el, flight);
 
     document.body.appendChild(flight);
     this.headingFlights.push(flight);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildMorphKeyframes, coverBox } from '../../static/ts/homepage/controller';
+import { buildMorphKeyframes, coverBox, pinFlightTypography } from '../../static/ts/homepage/controller';
 
 function parseKeyframe(keyframe: Keyframe): { tx: number; ty: number; scale: number; inset: number[] } {
   const transform = String(keyframe.transform);
@@ -69,5 +69,25 @@ describe('buildMorphKeyframes', () => {
     for (const keyframe of buildMorphKeyframes(thumb, hero, 16 / 9)) {
       parseKeyframe(keyframe).inset.forEach((value) => expect(value).toBeCloseTo(0));
     }
+  });
+});
+
+describe('pinFlightTypography', () => {
+  it('pins every node to its own source metrics, not the root line-height', () => {
+    const source = document.createElement('header');
+    source.innerHTML = '<time style="font-size: 11.52px; line-height: 18.432px">2024</time><h2 style="font-size: 16px; line-height: 25.6px">Title</h2>';
+    source.style.lineHeight = '25.6px';
+    document.body.appendChild(source);
+    const clone = source.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll<HTMLElement>('*').forEach((node) => node.removeAttribute('style'));
+
+    pinFlightTypography(source, clone);
+
+    const [date, title] = clone.children as HTMLCollectionOf<HTMLElement>;
+    expect(clone.style.lineHeight).toBe('25.6px');
+    expect(date.style.lineHeight).toBe('18.432px');
+    expect(date.style.fontSize).toBe('11.52px');
+    expect(title.style.lineHeight).toBe('25.6px');
+    source.remove();
   });
 });
