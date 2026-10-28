@@ -28,7 +28,9 @@ Railway hosts it; a push to `main` deploys production.
   that do not depend on it.
 - **Comments and docs state what is true now.** No history in code or
   runbooks; incidents go in `docs/retrospectives/YYYY-MM-DD-*.md`.
-- **Secrets never enter the repo.** `.env` locally, Railway service variables
+- **Secrets never enter the repo.** Locally they live in Bitwarden Secrets
+  Manager: `fnox.toml` names them, and `fnox exec -- <command>` runs a
+  command with them (`~/dev/rig` holds the setup). Railway service variables
   in production. The repo is public.
 - **Prefer a check to a paragraph.** A rule worth keeping becomes a test or a
   script (`scripts/smoke.sh`); keep this file an index.

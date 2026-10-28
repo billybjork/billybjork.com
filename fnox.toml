@@ -1,0 +1,11 @@
+# billybjork.com's secrets: each name and its key in Bitwarden Secrets Manager.
+# The providers and the token are in ~/.config/fnox/config.toml (~/dev/rig).
+# `fnox exec -- <command>` runs a command with them; values never live here.
+
+[secrets]
+AWS_ACCESS_KEY_ID     = { provider = "dev", value = "billybjork.com-AWS_ACCESS_KEY_ID" }
+AWS_SECRET_ACCESS_KEY = { provider = "dev", value = "billybjork.com-AWS_SECRET_ACCESS_KEY" }
+AWS_REGION            = { provider = "dev", value = "billybjork.com-AWS_REGION" }
+S3_BUCKET             = { provider = "dev", value = "billybjork.com-S3_BUCKET" }
+CLOUDFRONT_DOMAIN     = { provider = "dev", value = "billybjork.com-CLOUDFRONT_DOMAIN" }
+EDIT_TOKEN            = { provider = "dev", value = "billybjork.com-EDIT_TOKEN" }
