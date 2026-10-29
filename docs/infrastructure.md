@@ -29,7 +29,7 @@ terminates TLS and issues its own certificates:
 | `billybjork.com` | TXT | `google-site-verification=…` ×2 | Workspace and Search Console ownership |
 | `billybjork.com` | TXT | `v=spf1 include:_spf.google.com ~all` | SPF: Workspace is the only sender |
 | `google._domainkey` | TXT | `v=DKIM1; k=rsa; p=…` | DKIM key for Workspace (Admin console → Gmail → Authenticate email) |
-| `_dmarc` | TXT | `v=DMARC1; p=none; …` | DMARC, monitor-only; tighten to `quarantine` once reports show only Google sending |
+| `_dmarc` | TXT | `v=DMARC1; p=quarantine; …` | DMARC: mail failing SPF and DKIM goes to spam; tighten to `reject` once reports keep showing only Google sending |
 
 The Railway targets come from Railway, not from us: `just domains` shows the
 record each custom domain requires and whether it has propagated. Point
