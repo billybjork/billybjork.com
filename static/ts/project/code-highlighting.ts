@@ -4,9 +4,9 @@
  */
 
 // Prism.js CDN URLs
-const PRISM_CSS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css';
-const PRISM_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js';
-const PRISM_PYTHON_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js';
+const PRISM_CSS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.30.0/themes/prism-okaidia.min.css';
+const PRISM_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.30.0/prism.min.js';
+const PRISM_PYTHON_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.30.0/components/prism-python.min.js';
 
 /**
  * Dynamically load a JavaScript file
