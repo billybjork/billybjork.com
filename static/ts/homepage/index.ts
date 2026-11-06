@@ -4,42 +4,7 @@ import { initProjectInteractions } from '../project/interactions';
 import { HomepageController } from './controller';
 
 function initHomepage(): void {
-  const listScene = document.getElementById('homepage-list-scene');
-  const detailScene = document.getElementById('homepage-detail-scene');
-  const detailScroll = detailScene?.querySelector('.homepage-detail-scroll');
-  const detailDate = document.getElementById('homepage-detail-date');
-  const detailTitle = document.getElementById('homepage-detail-title');
-  const detailHeroFrame = document.getElementById('homepage-detail-hero-frame');
-  const detailHeroMedia = document.getElementById('homepage-detail-hero-media');
-  const detailContent = document.getElementById('homepage-detail-content');
-  const transitionLayer = document.getElementById('homepage-transition-layer');
-
-  if (
-    !(listScene instanceof HTMLElement)
-    || !(detailScene instanceof HTMLElement)
-    || !(detailScroll instanceof HTMLElement)
-    || !(detailDate instanceof HTMLElement)
-    || !(detailTitle instanceof HTMLElement)
-    || !(detailHeroFrame instanceof HTMLElement)
-    || !(detailHeroMedia instanceof HTMLElement)
-    || !(detailContent instanceof HTMLElement)
-    || !(transitionLayer instanceof HTMLElement)
-  ) {
-    return;
-  }
-
-  const controller = new HomepageController({
-    listScene,
-    detailScene,
-    detailScroll,
-    detailDate,
-    detailTitle,
-    detailHeroFrame,
-    detailHeroMedia,
-    detailContent,
-    transitionLayer,
-  });
-
+  const controller = new HomepageController();
   initProjectInteractions();
   registerHomepageRuntime(controller);
   controller.init();

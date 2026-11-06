@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pinFlightTypography } from '../../static/ts/homepage/controller';
+import { pinFlightTypography } from '../../static/ts/homepage/flight';
 import { buildMorphKeyframes, coverBox } from '../../static/ts/homepage/morph';
 
 function parseKeyframe(keyframe: Keyframe): { tx: number; ty: number; scale: number; inset: number[] } {

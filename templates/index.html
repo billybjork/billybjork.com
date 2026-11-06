@@ -14,7 +14,6 @@
     {% if projects %}
     <ul class="homepage-project-list" aria-label="Projects">
         {% for project in projects %}
-        {% set homepage_thumb_aspect_ratio = project.thumbnail_aspect_ratio %}
         <li>
             <article
                 class="homepage-project-card"
@@ -26,14 +25,11 @@
                 {% if project.has_sprite_animation %}data-frames="{{ project.frames }}"{% endif %}
                 {% if project.has_sprite_animation %}data-columns="{{ project.columns }}"{% endif %}
                 {% if project.has_sprite_animation %}data-rows="{{ project.rows }}"{% endif %}
-                {% if project.has_sprite_animation %}data-frame-width="{{ project.frame_width }}"{% endif %}
-                {% if project.has_sprite_animation %}data-frame-height="{{ project.frame_height }}"{% endif %}
                 {% if project.sprite_aspect_ratio %}data-sprite-aspect-ratio="{{ project.sprite_aspect_ratio | round(8) }}"{% endif %}
-                {% if homepage_thumb_aspect_ratio %}data-thumbnail-aspect-ratio="{{ homepage_thumb_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.hero_aspect_ratio %}data-hero-aspect-ratio="{{ project.hero_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
-                {% if homepage_thumb_aspect_ratio %}
-                style="--homepage-thumb-aspect: {{ homepage_thumb_aspect_ratio | round(8) }};"
+                {% if project.thumbnail_aspect_ratio %}
+                style="--homepage-thumb-aspect: {{ project.thumbnail_aspect_ratio | round(8) }};"
                 {% endif %}>
                 <header class="homepage-card-heading" data-open-project="{{ project.slug }}">
                     {% if project.formatted_date %}<time class="homepage-card-date">{{ project.formatted_date }}</time>{% endif %}

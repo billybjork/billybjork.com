@@ -55,8 +55,6 @@ export function createHomepageFixture(): {
             data-frames="6"
             data-columns="3"
             data-rows="2"
-            data-frame-width="320"
-            data-frame-height="180"
             data-sprite-aspect-ratio="1.7777778"
             data-hero-aspect-ratio="1.7777778"
             data-thumbnail="/thumb.webp">
@@ -129,43 +127,11 @@ export function createHomepageFixture(): {
   fullDetail.innerHTML = FULL_DETAIL_HTML;
   expectContract(fullDetail, contract.detailFragment);
 
-  const listScene = document.getElementById('homepage-list-scene');
-  const detailScene = document.getElementById('homepage-detail-scene');
-  const detailScroll = detailScene?.querySelector('.homepage-detail-scroll');
-  const detailDate = document.getElementById('homepage-detail-date');
-  const detailTitle = document.getElementById('homepage-detail-title');
-  const detailHeroFrame = document.getElementById('homepage-detail-hero-frame');
-  const detailHeroMedia = document.getElementById('homepage-detail-hero-media');
-  const detailContent = document.getElementById('homepage-detail-content');
-  const transitionLayer = document.getElementById('homepage-transition-layer');
+  const controller = new HomepageController();
+  const detailScene = document.getElementById('homepage-detail-scene') as HTMLElement;
+  const detailContent = document.getElementById('homepage-detail-content') as HTMLElement;
 
-  if (
-    !(listScene instanceof HTMLElement)
-    || !(detailScene instanceof HTMLElement)
-    || !(detailScroll instanceof HTMLElement)
-    || !(detailDate instanceof HTMLElement)
-    || !(detailTitle instanceof HTMLElement)
-    || !(detailHeroFrame instanceof HTMLElement)
-    || !(detailHeroMedia instanceof HTMLElement)
-    || !(detailContent instanceof HTMLElement)
-    || !(transitionLayer instanceof HTMLElement)
-  ) {
-    throw new Error('Failed to build homepage test fixture');
-  }
-
-  const controller = new HomepageController({
-    listScene,
-    detailScene,
-    detailScroll,
-    detailDate,
-    detailTitle,
-    detailHeroFrame,
-    detailHeroMedia,
-    detailContent,
-    transitionLayer,
-  });
-
-  const openButton = detailScene.ownerDocument.querySelector<HTMLButtonElement>('button[data-open-project="project-one"]');
+  const openButton = document.querySelector<HTMLButtonElement>('button[data-open-project="project-one"]');
   const closeButton = detailScene.querySelector<HTMLButtonElement>('.homepage-close-button');
   const editButton = detailScene.querySelector<HTMLButtonElement>('[data-homepage-edit-project]');
   if (!openButton || !closeButton || !editButton) {

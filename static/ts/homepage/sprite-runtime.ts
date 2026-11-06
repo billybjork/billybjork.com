@@ -4,12 +4,6 @@ const BASE_DECELERATION = 15;
 const SPEED_DECAY_FACTOR = 0.1;
 const FRAME_EPSILON = 0.01;
 
-function readPositiveNumber(value: string | number | null | undefined): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 function normalizeFrameIndex(frameIndex: number, totalFrames: number): number {
   if (!Number.isFinite(totalFrames) || totalFrames <= 0) return 0;
   let normalized = Math.floor(frameIndex) % totalFrames;
@@ -17,38 +11,37 @@ function normalizeFrameIndex(frameIndex: number, totalFrames: number): number {
   return normalized;
 }
 
-export interface SpriteThumbnailHandle {
-  slug: string;
-  cardEl: HTMLElement;
-  thumbFrame: HTMLElement | null;
-  createFrameNode(
-    frameIndex: number,
-    options?: {
-      className?: string;
-      width?: number;
-      height?: number;
-    }
-  ): HTMLElement;
-  freeze(): void;
-  unfreeze(): void;
-  refresh(): void;
-  getCurrentFrameIndex(): number;
-  getSourceAspectRatio(): number;
+export interface SpriteSheet {
+  url: string;
+  frames: number;
+  columns: number;
+  rows: number;
+  aspectRatio: number;
 }
 
-class SpriteThumbnail implements SpriteThumbnailHandle {
-  slug: string;
+export interface SpriteThumbnailSource {
   cardEl: HTMLElement;
-  thumbFrame: HTMLElement | null;
-  private thumbMedia: HTMLElement | null;
+  thumbFrame: HTMLElement;
+  thumbMedia: HTMLElement;
+  thumbnailUrl: string;
+  sheet: SpriteSheet | null;
+  displayAspectRatio: number;
+}
+
+export interface FrameNodeOptions {
+  className?: string;
+  width?: number;
+  height?: number;
+}
+
+/** A card's picture: its sprite sheet when it has one, otherwise its still thumbnail. */
+export class SpriteThumbnail {
+  readonly cardEl: HTMLElement;
+  readonly hasSprite: boolean;
+  private readonly thumbFrame: HTMLElement;
+  private readonly thumbMedia: HTMLElement;
   private readonly thumbnailUrl: string;
-  private readonly spriteSheetUrl: string;
-  private readonly frames: number;
-  private readonly columns: number;
-  private readonly rows: number;
-  private readonly frameWidth: number;
-  private readonly frameHeight: number;
-  private readonly spriteAspectRatio: number;
+  private readonly sheet: SpriteSheet | null;
   private readonly displayAspectRatio: number;
   private sheetPixelWidth: number | null = null;
   private sheetPixelHeight: number | null = null;
@@ -58,59 +51,25 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
   private isFrozen = false;
   private frozenFrameIndex = 0;
   private spriteNode: HTMLElement | null = null;
-  private isActivated = false;
-  readonly hasSprite: boolean;
 
-  constructor(cardEl: HTMLElement) {
-    this.cardEl = cardEl;
-    this.slug = cardEl.dataset.slug || '';
-    this.thumbFrame = cardEl.querySelector<HTMLElement>('[data-homepage-thumb-frame]');
-    this.thumbMedia = cardEl.querySelector<HTMLElement>('[data-homepage-thumb-media]');
-    this.thumbnailUrl = (cardEl.dataset.thumbnail || '').trim();
-    this.spriteSheetUrl = (cardEl.dataset.spriteSheet || '').trim();
-    this.frames = readPositiveNumber(cardEl.dataset.frames) || 0;
-    this.columns = readPositiveNumber(cardEl.dataset.columns) || 1;
-    this.rows = readPositiveNumber(cardEl.dataset.rows) || Math.max(1, Math.ceil(this.frames / this.columns));
-    this.frameWidth = readPositiveNumber(cardEl.dataset.frameWidth) || 0;
-    this.frameHeight = readPositiveNumber(cardEl.dataset.frameHeight) || 0;
-    this.spriteAspectRatio = readPositiveNumber(cardEl.dataset.spriteAspectRatio)
-      || this.readSheetAspectRatioFromDataset()
-      || (this.frameWidth && this.frameHeight ? this.frameWidth / this.frameHeight : null)
-      || readPositiveNumber(cardEl.dataset.thumbnailAspectRatio)
-      || readPositiveNumber(cardEl.dataset.heroAspectRatio)
-      || (16 / 9);
-    this.displayAspectRatio = readPositiveNumber(cardEl.dataset.thumbnailAspectRatio)
-      || readPositiveNumber(cardEl.dataset.heroAspectRatio)
-      || this.spriteAspectRatio
-      || (16 / 9);
-    this.hasSprite = !!(this.thumbMedia && this.spriteSheetUrl && this.frames > 0);
+  constructor(source: SpriteThumbnailSource) {
+    this.cardEl = source.cardEl;
+    this.thumbFrame = source.thumbFrame;
+    this.thumbMedia = source.thumbMedia;
+    this.thumbnailUrl = source.thumbnailUrl;
+    this.sheet = source.sheet;
+    this.displayAspectRatio = source.displayAspectRatio;
+    this.hasSprite = source.sheet !== null;
   }
 
-  init(): boolean {
-    if (!this.thumbFrame || !this.thumbMedia) return false;
-    this.cardEl.style.setProperty('--homepage-thumb-aspect', this.displayAspectRatio.toString());
-    this.primeSheetDimensions();
-    return true;
-  }
-
-  destroy(): void {
-    this.spriteNode = null;
-  }
-
-  activate(): boolean {
-    if (!this.hasSprite || this.isActivated || !this.thumbMedia || !this.thumbFrame) return false;
+  activate(): void {
+    if (!this.hasSprite || this.spriteNode) return;
     this.thumbMedia.innerHTML = '';
 
-    const spriteNode = this.createFrameNode(0, {
-      className: 'homepage-sprite-sheet',
-      width: this.thumbFrame.clientWidth || this.frameWidth || 1,
-      height: this.thumbFrame.clientHeight || Math.max(1, Math.round((this.thumbFrame.clientWidth || this.frameWidth || 1) / this.displayAspectRatio)),
-    });
+    const spriteNode = this.createFrameNode(0, { className: 'homepage-sprite-sheet' });
     this.thumbMedia.appendChild(spriteNode);
     this.spriteNode = spriteNode;
-    this.isActivated = true;
     this.applyFrame(0);
-    return true;
   }
 
   freeze(): void {
@@ -124,34 +83,29 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
   }
 
   refresh(): void {
-    this.applyFrame(this.isFrozen ? this.frozenFrameIndex : this.currentFrameIndex);
+    this.applyFrame(this.getCurrentFrameIndex());
   }
 
   getCurrentFrameIndex(): number {
     return this.isFrozen ? this.frozenFrameIndex : this.currentFrameIndex;
   }
 
+  /** Aspect ratio of the media this card shows, before any frame crops it. */
   getSourceAspectRatio(): number {
-    return this.hasSprite ? this.resolveSourceAspectRatio() : this.displayAspectRatio;
+    if (!this.sheet) return this.displayAspectRatio;
+    if (this.sheetPixelWidth && this.sheetPixelHeight) {
+      return (this.sheetPixelWidth / this.sheet.columns) / (this.sheetPixelHeight / this.sheet.rows);
+    }
+    return this.sheet.aspectRatio;
   }
 
   update(progress: number): void {
-    if (!this.spriteNode || !this.hasSprite) return;
-    const nextFrameIndex = this.isFrozen
-      ? this.frozenFrameIndex
-      : normalizeFrameIndex(progress, this.frames);
-    this.applyFrame(nextFrameIndex);
+    if (!this.sheet) return;
+    this.applyFrame(this.isFrozen ? this.frozenFrameIndex : normalizeFrameIndex(progress, this.sheet.frames));
   }
 
-  createFrameNode(
-    frameIndex: number,
-    options: {
-      className?: string;
-      width?: number;
-      height?: number;
-    } = {}
-  ): HTMLElement {
-    if (!this.hasSprite) {
+  createFrameNode(frameIndex: number, options: FrameNodeOptions = {}): HTMLElement {
+    if (!this.sheet) {
       const fallback = document.createElement(this.thumbnailUrl ? 'img' : 'div');
       if (fallback instanceof HTMLImageElement) {
         fallback.src = this.thumbnailUrl;
@@ -166,31 +120,36 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
       return fallback;
     }
 
-    const width = Math.max(1, Math.round(options.width || this.thumbFrame?.clientWidth || this.frameWidth || 1));
-    const height = Math.max(1, Math.round(options.height || this.resolveDisplayHeight(width)));
-    const resolvedFrameIndex = normalizeFrameIndex(frameIndex, this.frames);
-    const renderBox = this.resolveSpriteRenderBox(width, height);
+    const width = Math.max(1, Math.round(options.width || this.thumbFrame.clientWidth || 1));
+    const height = Math.max(1, Math.round(options.height || this.thumbFrame.clientHeight || width / this.displayAspectRatio));
     const node = document.createElement('div');
     node.className = options.className || '';
-    node.style.backgroundImage = `url("${this.spriteSheetUrl.replace(/"/g, '\\"')}")`;
+    node.style.backgroundImage = `url("${this.sheet.url.replace(/"/g, '\\"')}")`;
     node.style.backgroundRepeat = 'no-repeat';
-    node.style.backgroundSize = `${renderBox.frameWidth * this.columns}px ${renderBox.frameHeight * this.rows}px`;
-    node.style.backgroundPosition = this.buildBackgroundPosition(resolvedFrameIndex, renderBox);
+    this.paintFrame(node, this.sheet, normalizeFrameIndex(frameIndex, this.sheet.frames), width, height);
     return node;
   }
 
-  rebindCard(cardEl: HTMLElement): void {
-    this.cardEl = cardEl;
-    this.thumbFrame = cardEl.querySelector<HTMLElement>('[data-homepage-thumb-frame]');
-    this.thumbMedia = cardEl.querySelector<HTMLElement>('[data-homepage-thumb-media]');
+  primeSheetDimensions(): void {
+    if (!this.sheet) return;
+    const image = new Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+      this.sheetPixelWidth = image.naturalWidth;
+      this.sheetPixelHeight = image.naturalHeight;
+      this.lastRenderedWidth = -1;
+      this.refresh();
+    };
+    image.src = this.sheet.url;
   }
 
   private applyFrame(frameIndex: number): void {
-    if (!this.spriteNode || !this.hasSprite) return;
+    if (!this.spriteNode || !this.sheet) return;
 
-    const width = Math.max(1, Math.round(this.thumbFrame?.clientWidth || this.frameWidth || 1));
-    const height = Math.max(1, Math.round(this.thumbFrame?.clientHeight || this.resolveDisplayHeight(width)));
-    const resolvedFrameIndex = normalizeFrameIndex(frameIndex, this.frames);
+    const width = Math.max(1, Math.round(this.thumbFrame.clientWidth || 1));
+    const height = Math.max(1, Math.round(this.thumbFrame.clientHeight || width / this.displayAspectRatio));
+    const resolvedFrameIndex = normalizeFrameIndex(frameIndex, this.sheet.frames);
     if (
       resolvedFrameIndex === this.currentFrameIndex
       && width === this.lastRenderedWidth
@@ -202,40 +161,15 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
     this.currentFrameIndex = resolvedFrameIndex;
     this.lastRenderedWidth = width;
     this.lastRenderedHeight = height;
-    const renderBox = this.resolveSpriteRenderBox(width, height);
-    this.spriteNode.style.backgroundSize = `${renderBox.frameWidth * this.columns}px ${renderBox.frameHeight * this.rows}px`;
-    this.spriteNode.style.backgroundPosition = this.buildBackgroundPosition(resolvedFrameIndex, renderBox);
+    this.paintFrame(this.spriteNode, this.sheet, resolvedFrameIndex, width, height);
   }
 
-  private readSheetAspectRatioFromDataset(): number | null {
-    if (!this.frameWidth || !this.frameHeight) {
-      return null;
-    }
-    return this.frameWidth / this.frameHeight;
-  }
-
-  private primeSheetDimensions(): void {
-    if (!this.hasSprite || typeof Image === 'undefined') return;
-    const image = new Image();
-    image.decoding = 'async';
-    image.onload = () => {
-      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
-      this.sheetPixelWidth = image.naturalWidth;
-      this.sheetPixelHeight = image.naturalHeight;
-      this.refresh();
-    };
-    image.src = this.spriteSheetUrl;
-  }
-
-  private resolveDisplayHeight(width: number): number {
-    return (width / this.displayAspectRatio) || this.frameHeight || 1;
-  }
-
-  private resolveSourceAspectRatio(): number {
-    if (this.sheetPixelWidth && this.sheetPixelHeight && this.columns > 0 && this.rows > 0) {
-      return (this.sheetPixelWidth / this.columns) / (this.sheetPixelHeight / this.rows);
-    }
-    return this.spriteAspectRatio;
+  private paintFrame(node: HTMLElement, sheet: SpriteSheet, frameIndex: number, width: number, height: number): void {
+    const box = this.resolveSpriteRenderBox(width, height);
+    const col = frameIndex % sheet.columns;
+    const row = Math.floor(frameIndex / sheet.columns);
+    node.style.backgroundSize = `${box.frameWidth * sheet.columns}px ${box.frameHeight * sheet.rows}px`;
+    node.style.backgroundPosition = `${box.offsetX - (col * box.frameWidth)}px ${box.offsetY - (row * box.frameHeight)}px`;
   }
 
   private resolveSpriteRenderBox(containerWidth: number, containerHeight: number): {
@@ -244,7 +178,7 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
     offsetX: number;
     offsetY: number;
   } {
-    const sourceAspectRatio = this.resolveSourceAspectRatio();
+    const sourceAspectRatio = this.getSourceAspectRatio();
     let frameWidth = containerWidth;
     let frameHeight = containerHeight;
 
@@ -266,32 +200,11 @@ class SpriteThumbnail implements SpriteThumbnailHandle {
       offsetY: Math.round((containerHeight - frameHeight) / 2),
     };
   }
-
-  private buildBackgroundPosition(
-    frameIndex: number,
-    renderBox: {
-      frameWidth: number;
-      frameHeight: number;
-      offsetX: number;
-      offsetY: number;
-    }
-  ): string {
-    const col = frameIndex % this.columns;
-    const row = Math.floor(frameIndex / this.columns);
-    return `${renderBox.offsetX - (col * renderBox.frameWidth)}px ${renderBox.offsetY - (row * renderBox.frameHeight)}px`;
-  }
 }
 
-export interface HomepageSpriteRuntimeApi {
-  init(): void;
-  destroy(): void;
-  getThumbnail(slug: string): SpriteThumbnailHandle | null;
-  renameThumbnail(previousSlug: string, nextSlug: string, cardEl: HTMLElement): void;
-}
-
-class HomepageSpriteRuntime implements HomepageSpriteRuntimeApi {
-  private readonly listScene: HTMLElement;
-  private readonly thumbnails = new Map<string, SpriteThumbnail>();
+/** Scrubs every card's sprite with scroll velocity, activating each as it nears the viewport. */
+export class HomepageSpriteRuntime {
+  private readonly thumbnails: SpriteThumbnail[];
   private animationProgress = 0;
   private animationSpeed = 0;
   private lastScrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
@@ -304,23 +217,13 @@ class HomepageSpriteRuntime implements HomepageSpriteRuntimeApi {
   private readonly boundOnResize = this.onResize.bind(this);
   private readonly boundOnVisibilityChange = this.onVisibilityChange.bind(this);
 
-  constructor(listScene: HTMLElement) {
-    this.listScene = listScene;
+  constructor(thumbnails: SpriteThumbnail[]) {
+    this.thumbnails = thumbnails;
   }
 
   init(): void {
-    const cards = this.listScene.querySelectorAll<HTMLElement>('[data-homepage-project-card]');
-    cards.forEach((cardEl) => {
-      const thumbnail = new SpriteThumbnail(cardEl);
-      thumbnail.init();
-      if (thumbnail.hasSprite && !cardEl.dataset.thumbnail) {
-        thumbnail.activate();
-      }
-      this.thumbnails.set(thumbnail.slug, thumbnail);
-    });
-
+    this.thumbnails.forEach((thumbnail) => thumbnail.primeSheetDimensions());
     this.initActivationObserver();
-    this.updateAll();
     window.addEventListener('scroll', this.boundOnScroll, { passive: true });
     window.addEventListener('resize', this.boundOnResize, { passive: true });
     document.addEventListener('visibilitychange', this.boundOnVisibilityChange);
@@ -333,23 +236,6 @@ class HomepageSpriteRuntime implements HomepageSpriteRuntimeApi {
     document.removeEventListener('visibilitychange', this.boundOnVisibilityChange);
     this.activationObserver?.disconnect();
     this.activationObserver = null;
-    this.thumbnails.forEach((thumbnail) => thumbnail.destroy());
-    this.thumbnails.clear();
-  }
-
-  getThumbnail(slug: string): SpriteThumbnailHandle | null {
-    return this.thumbnails.get(slug) || null;
-  }
-
-  renameThumbnail(previousSlug: string, nextSlug: string, cardEl: HTMLElement): void {
-    if (!previousSlug || !nextSlug || previousSlug === nextSlug) return;
-    const thumbnail = this.thumbnails.get(previousSlug);
-    if (!thumbnail) return;
-
-    this.thumbnails.delete(previousSlug);
-    thumbnail.slug = nextSlug;
-    thumbnail.rebindCard(cardEl);
-    this.thumbnails.set(nextSlug, thumbnail);
   }
 
   private updateAll(): void {
@@ -357,19 +243,13 @@ class HomepageSpriteRuntime implements HomepageSpriteRuntimeApi {
   }
 
   private initActivationObserver(): void {
-    if (!('IntersectionObserver' in window)) {
-      this.thumbnails.forEach((thumbnail) => thumbnail.activate());
-      return;
-    }
+    const byCard = new Map(this.thumbnails.map((thumbnail) => [thumbnail.cardEl as Element, thumbnail]));
 
     this.activationObserver = new IntersectionObserver((entries, observer) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        const cardEl = entry.target as HTMLElement;
-        const slug = cardEl.dataset.slug || '';
-        const thumbnail = this.thumbnails.get(slug);
-        thumbnail?.activate();
-        observer.unobserve(cardEl);
+        byCard.get(entry.target)?.activate();
+        observer.unobserve(entry.target);
       });
     }, {
       rootMargin: '200px 0px 200px 0px',
@@ -377,8 +257,9 @@ class HomepageSpriteRuntime implements HomepageSpriteRuntimeApi {
     });
 
     this.thumbnails.forEach((thumbnail) => {
-      if (!thumbnail.cardEl || !thumbnail.hasSprite) return;
-      this.activationObserver?.observe(thumbnail.cardEl);
+      if (thumbnail.hasSprite) {
+        this.activationObserver?.observe(thumbnail.cardEl);
+      }
     });
   }
 
@@ -461,8 +342,4 @@ class HomepageSpriteRuntime implements HomepageSpriteRuntimeApi {
       this.animationFrameId = null;
     }
   }
-}
-
-export function createHomepageSpriteRuntime(options: { listScene: HTMLElement }): HomepageSpriteRuntimeApi {
-  return new HomepageSpriteRuntime(options.listScene);
 }
