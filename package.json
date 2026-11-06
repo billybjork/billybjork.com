@@ -12,7 +12,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "@types/three": "^0.162.0",
     "esbuild": "^0.20.0",
     "jsdom": "^29.0.1",
     "typescript": "^5.4.0",

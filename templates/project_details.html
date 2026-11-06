@@ -5,9 +5,7 @@
     {% if project.video.aspect_ratio %}
     style="--video-aspect-ratio: {{ project.video.aspect_ratio | round(8) }};"
     {% endif %}>
-    <video id="video-player-{{ project.slug }}"
-           class="lazy-video"
-           playsinline
+    <video playsinline
            controls
            preload="auto"
            fetchpriority="high"

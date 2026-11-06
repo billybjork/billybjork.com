@@ -66,7 +66,3 @@ export function checkAndHighlightCode(targetElement: Element): void {
     }
   }
 }
-
-export default {
-  checkAndHighlightCode,
-};

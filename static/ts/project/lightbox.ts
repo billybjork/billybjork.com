@@ -97,7 +97,7 @@ export function openVideoLightbox(video: HTMLVideoElement): void {
   const enlargedVideo = video.cloneNode(true) as HTMLVideoElement;
 
   enlargedVideo.removeAttribute('id');
-  enlargedVideo.classList.remove('lazy-video', 'lazy-inline-video', 'hls-video', LIGHTBOX_VIDEO_TRIGGER_CLASS);
+  enlargedVideo.classList.remove('lazy-inline-video', LIGHTBOX_VIDEO_TRIGGER_CLASS);
 
   const shouldAutoplay = video.autoplay || video.hasAttribute('autoplay') || video.loop || video.hasAttribute('loop');
   const shouldLoop = video.loop || video.hasAttribute('loop');

@@ -5,8 +5,6 @@
 
 interface SandboxOptions {
   allowFullscreen?: boolean;
-  allowPointerLock?: boolean;
-  minHeight?: number;
 }
 
 interface IframeRegistry {
@@ -45,10 +43,6 @@ function initGlobalResizeListener(): void {
 
     entry.iframe.style.height = `${e.data.height}px`;
   });
-}
-
-function generateNonce(): string {
-  return crypto.randomUUID();
 }
 
 function extractPixelDimension(style: string, property: 'width' | 'height'): number | null {
@@ -155,17 +149,14 @@ export function createSandboxedIframe(
   const iframe = document.createElement('iframe');
   iframe.className = 'html-block-sandbox';
 
-  // Build sandbox attribute
-  const sandboxParts = ['allow-scripts'];
   if (options.allowFullscreen !== false) {
     iframe.setAttribute('allow', 'fullscreen');
   }
-  if (options.allowPointerLock) sandboxParts.push('allow-pointer-lock');
-  iframe.setAttribute('sandbox', sandboxParts.join(' '));
+  iframe.setAttribute('sandbox', 'allow-scripts');
 
-  const nonce = generateNonce();
+  const nonce = crypto.randomUUID();
   iframe.srcdoc = wrapHtmlContent(html, nonce);
-  iframe.style.minHeight = `${options.minHeight ?? 60}px`;
+  iframe.style.minHeight = '60px';
   iframe.dataset.autoHeight = 'true';
 
   // Register for resize messages
@@ -176,18 +167,6 @@ export function createSandboxedIframe(
   });
 
   return iframe;
-}
-
-export function updateIframeSrcdoc(iframe: HTMLIFrameElement, html: string): void {
-  const nonce = generateNonce();
-  iframe.srcdoc = wrapHtmlContent(html, nonce);
-
-  // Update registry on next load
-  iframe.addEventListener('load', () => {
-    if (iframe.contentWindow) {
-      iframeRegistry.set(iframe.contentWindow, { iframe, nonce });
-    }
-  }, { once: true });
 }
 
 export function cleanupIframe(iframe: HTMLIFrameElement): void {

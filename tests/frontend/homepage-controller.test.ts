@@ -472,7 +472,7 @@ describe('HomepageController', () => {
     await flushAsyncWork();
 
     const video = heroFrame.querySelector('video') as HTMLVideoElement;
-    expect(heroFrame.querySelector('.video-container')?.id).toBe('');
+    expect(document.getElementById('hero')).toBe(heroFrame.querySelector('.video-container'));
     expect(video.poster).toContain('/thumb.webp');
     expect(FakeHls.instances).toHaveLength(1);
     expect(heroFrame.querySelector('.homepage-hero-bridge')).not.toBeNull();

@@ -1014,7 +1014,7 @@ export class HomepageController implements HomepageRuntimeApi {
     if (card?.thumbnail && !video.poster) {
       video.poster = card.thumbnail;
     }
-    await projectDetailRuntime.setupHeroVideo(video, false);
+    await projectDetailRuntime.setupHeroVideo(video);
   }
 
   private waitForFirstVideoFrame(video: FrameAwareVideoElement, token: number, timeoutMs: number = 7000): Promise<boolean> {
@@ -1133,7 +1133,6 @@ export class HomepageController implements HomepageRuntimeApi {
 
     const heroNode = parser.querySelector<HTMLElement>('.video-container');
     if (heroNode) {
-      heroNode.removeAttribute('id');
       this.detailHeroMedia.appendChild(heroNode);
     } else {
       this.detailHeroMedia.appendChild(this.createCardPreviewNode(card, {

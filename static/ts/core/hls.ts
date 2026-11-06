@@ -1,23 +1,16 @@
-const DEFAULT_HLS_JS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
+const HLS_JS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
 const HLS_MIME_TYPE = 'application/vnd.apple.mpegurl';
 
-export const DEFAULT_HLS_CONFIG: HlsConfig = {
+const HLS_CONFIG: HlsConfig = {
   abrEwmaDefaultEstimate: 5000000,
   capLevelToPlayerSize: true,
 };
-
-export type HlsPlaybackMode = 'hlsjs' | 'native';
 
 export interface AttachHlsPlaybackOptions {
   videoElement: HTMLVideoElement;
   sourceUrl: string;
   signal?: AbortSignal;
   onManifestParsed?: (hls: Hls) => void;
-}
-
-export interface AttachHlsPlaybackResult {
-  mode: HlsPlaybackMode;
-  hls?: Hls;
 }
 
 let hlsScriptPromise: Promise<void> | null = null;
@@ -28,11 +21,11 @@ function createAbortError(): Error {
   return error;
 }
 
-function isAbortError(error: unknown): boolean {
+export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-export function loadHlsScript(): Promise<void> {
+function loadHlsScript(): Promise<void> {
   if (window.Hls) {
     return Promise.resolve();
   }
@@ -42,7 +35,7 @@ export function loadHlsScript(): Promise<void> {
 
   hlsScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = document.body.dataset.hlsJsSrc || DEFAULT_HLS_JS_SRC;
+    script.src = HLS_JS_SRC;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => {
@@ -54,10 +47,6 @@ export function loadHlsScript(): Promise<void> {
   });
 
   return hlsScriptPromise;
-}
-
-export function canPlayNativeHls(videoElement: HTMLVideoElement): boolean {
-  return !!videoElement.canPlayType(HLS_MIME_TYPE);
 }
 
 export function resetVideoElementSource(videoElement: HTMLVideoElement): void {
@@ -78,15 +67,10 @@ function prepareForPlaybackAttach(videoElement: HTMLVideoElement): void {
   resetVideoElementSource(videoElement);
 }
 
-function attachHlsJsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachHlsPlaybackResult> {
+function attachHlsJsPlayback(HlsClass: typeof Hls, options: AttachHlsPlaybackOptions): Promise<void> {
   const { videoElement, sourceUrl, signal, onManifestParsed } = options;
 
   return new Promise((resolve, reject) => {
-    if (!window.Hls || !window.Hls.isSupported()) {
-      reject(new Error('HLS.js not supported'));
-      return;
-    }
-
     if (signal?.aborted) {
       reject(createAbortError());
       return;
@@ -94,15 +78,15 @@ function attachHlsJsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachH
 
     prepareForPlaybackAttach(videoElement);
 
-    const hls = new window.Hls(DEFAULT_HLS_CONFIG);
+    const hls = new HlsClass(HLS_CONFIG);
     videoElement.hlsInstance = hls;
 
     let settled = false;
-    const finish = (result: AttachHlsPlaybackResult): void => {
+    const finish = (): void => {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve(result);
+      resolve();
     };
     const fail = (error: Error): void => {
       if (settled) return;
@@ -120,16 +104,16 @@ function attachHlsJsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachH
 
     signal?.addEventListener('abort', handleAbort, { once: true });
 
-    hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+    hls.on(HlsClass.Events.MANIFEST_PARSED, () => {
       if (signal?.aborted) {
         handleAbort();
         return;
       }
       onManifestParsed?.(hls);
-      finish({ mode: 'hlsjs', hls });
+      finish();
     });
 
-    hls.on(window.Hls.Events.ERROR, (_event: string, data: unknown) => {
+    hls.on(HlsClass.Events.ERROR, (_event: string, data: unknown) => {
       const errorData = data as { fatal?: boolean; type?: string; details?: string } | null;
       if (!errorData?.fatal) {
         if (errorData?.details === 'bufferAppendError') {
@@ -139,10 +123,10 @@ function attachHlsJsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachH
       }
 
       switch (errorData.type) {
-        case window.Hls.ErrorTypes.NETWORK_ERROR:
+        case HlsClass.ErrorTypes.NETWORK_ERROR:
           hls.startLoad();
           break;
-        case window.Hls.ErrorTypes.MEDIA_ERROR:
+        case HlsClass.ErrorTypes.MEDIA_ERROR:
           hls.recoverMediaError();
           break;
         default:
@@ -156,15 +140,10 @@ function attachHlsJsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachH
   });
 }
 
-function attachNativeHlsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachHlsPlaybackResult> {
+function attachNativeHlsPlayback(options: AttachHlsPlaybackOptions): Promise<void> {
   const { videoElement, sourceUrl, signal } = options;
 
   return new Promise((resolve, reject) => {
-    if (!canPlayNativeHls(videoElement)) {
-      reject(new Error('Native HLS not supported'));
-      return;
-    }
-
     if (signal?.aborted) {
       reject(createAbortError());
       return;
@@ -174,7 +153,7 @@ function attachNativeHlsPlayback(options: AttachHlsPlaybackOptions): Promise<Att
 
     const onLoadedMetadata = (): void => {
       cleanup();
-      resolve({ mode: 'native' });
+      resolve();
     };
     const onError = (): void => {
       cleanup();
@@ -199,24 +178,17 @@ function attachNativeHlsPlayback(options: AttachHlsPlaybackOptions): Promise<Att
   });
 }
 
-export async function attachHlsPlayback(options: AttachHlsPlaybackOptions): Promise<AttachHlsPlaybackResult> {
-  const { videoElement } = options;
-  const canPlayNative = canPlayNativeHls(videoElement);
+/** Prefers hls.js, even where the browser plays HLS natively; native is the fallback. */
+export async function attachHlsPlayback(options: AttachHlsPlaybackOptions): Promise<void> {
+  const canPlayNative = !!options.videoElement.canPlayType(HLS_MIME_TYPE);
 
   try {
-    if (window.Hls && window.Hls.isSupported()) {
-      return await attachHlsJsPlayback(options);
-    }
-
     await loadHlsScript();
-    if (window.Hls && window.Hls.isSupported()) {
-      return await attachHlsJsPlayback(options);
+    if (window.Hls?.isSupported()) {
+      return await attachHlsJsPlayback(window.Hls, options);
     }
   } catch (error) {
-    if (isAbortError(error)) {
-      throw error;
-    }
-    if (!canPlayNative) {
+    if (isAbortError(error) || !canPlayNative) {
       throw error;
     }
   }

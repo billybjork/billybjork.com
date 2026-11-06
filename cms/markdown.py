@@ -77,10 +77,7 @@ def _optimize_media_loading(html_content: str) -> str:
         iframe.attrs.setdefault("loading", "lazy")
 
     for video in soup.find_all("video"):
-        classes = list(video.get("class", []))
-        if "lazy-video" not in classes:
-            classes.append("lazy-inline-video")
-        video["class"] = classes
+        video["class"] = [*video.get("class", []), "lazy-inline-video"]
         video["preload"] = "none"
 
         for element in (video, *video.find_all("source")):
