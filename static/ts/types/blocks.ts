@@ -1,9 +1,12 @@
-/**
- * Block type definitions for the editor
- */
-
 export type BlockType = 'text' | 'image' | 'video' | 'code' | 'html' | 'callout' | 'divider' | 'row';
 export type Alignment = 'left' | 'center' | 'right';
+export type RowColumnSide = 'left' | 'right';
+
+/** Where a block sits: a top-level index, plus the column when it is inside a row. */
+export interface BlockContext {
+  index: number;
+  rowSide?: RowColumnSide;
+}
 
 interface BaseBlock {
   id: string;
@@ -39,7 +42,6 @@ export interface CodeBlock extends BaseBlock {
   type: 'code';
   code: string;
   language: string;
-  align?: Alignment;
 }
 
 export interface HtmlBlock extends BaseBlock {
@@ -75,38 +77,3 @@ export type Block =
   | CalloutBlock
   | DividerBlock
   | RowBlock;
-
-/**
- * Type guard functions for block types
- */
-export function isTextBlock(block: Block): block is TextBlock {
-  return block.type === 'text';
-}
-
-export function isImageBlock(block: Block): block is ImageBlock {
-  return block.type === 'image';
-}
-
-export function isVideoBlock(block: Block): block is VideoBlock {
-  return block.type === 'video';
-}
-
-export function isCodeBlock(block: Block): block is CodeBlock {
-  return block.type === 'code';
-}
-
-export function isHtmlBlock(block: Block): block is HtmlBlock {
-  return block.type === 'html';
-}
-
-export function isCalloutBlock(block: Block): block is CalloutBlock {
-  return block.type === 'callout';
-}
-
-export function isDividerBlock(block: Block): block is DividerBlock {
-  return block.type === 'divider';
-}
-
-export function isRowBlock(block: Block): block is RowBlock {
-  return block.type === 'row';
-}

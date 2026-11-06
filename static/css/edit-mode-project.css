@@ -1,9 +1,9 @@
 /* ========================================
-   Create/Settings Modal Base
+   Create and Hero Video Dialogs
    ======================================== */
 
 .edit-create-modal,
-.edit-settings-modal {
+.edit-hero-dialog-modal {
     position: fixed;
     inset: 0;
     z-index: 10000;
@@ -13,14 +13,14 @@
 }
 
 .edit-create-overlay,
-.edit-settings-overlay {
+.edit-hero-dialog-overlay {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.85);
 }
 
 .edit-create-content,
-.edit-settings-content {
+.edit-hero-dialog-content {
     position: relative;
     width: 90%;
     max-width: 480px;
@@ -32,7 +32,7 @@
 }
 
 .edit-create-header,
-.edit-settings-header {
+.edit-hero-dialog-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -41,7 +41,7 @@
 }
 
 .edit-create-header h2,
-.edit-settings-header h2 {
+.edit-hero-dialog-header h2 {
     margin: 0;
     font-size: 18px;
     font-weight: 600;
@@ -49,7 +49,7 @@
 }
 
 .edit-create-close,
-.edit-settings-close {
+.edit-hero-dialog-close {
     background: none;
     border: none;
     color: #666;
@@ -61,7 +61,7 @@
 }
 
 .edit-create-close:hover,
-.edit-settings-close:hover {
+.edit-hero-dialog-close:hover {
     color: #fff;
 }
 
@@ -69,8 +69,7 @@
    Form Styles
    ======================================== */
 
-.edit-create-form,
-.edit-settings-form {
+.edit-create-form {
     padding: 20px;
 }
 
@@ -132,40 +131,6 @@
     height: 18px;
     accent-color: #3b82f6;
 }
-
-.edit-form-section {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid #333;
-}
-
-.edit-form-section h3 {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #fff;
-}
-
-.edit-video-info {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 10px 12px;
-    background: #111;
-    border-radius: 6px;
-    font-size: 13px;
-    color: #888;
-}
-
-.edit-video-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
 .edit-btn-small {
     padding: 6px 12px;
     background: #333;
@@ -186,7 +151,7 @@
    ======================================== */
 
 /* Wider modal when showing video view */
-.edit-settings-content.edit-settings-content--video {
+.edit-hero-dialog-content.edit-hero-dialog-content--video {
     max-width: 720px;
     transition: max-width 0.3s ease;
 }
@@ -204,16 +169,6 @@
     background: #000;
     display: block;
 }
-
-.edit-hero-no-preview {
-    padding: 32px 20px;
-    text-align: center;
-    color: #888;
-    font-size: 13px;
-    background: #111;
-    border-radius: 8px;
-}
-
 /* File info bar */
 .edit-hero-file-info {
     padding: 0 20px;
@@ -412,6 +367,10 @@
     transition: width 0.3s ease;
 }
 
+.edit-hero-progress-fill.has-error {
+    background: #ef4444;
+}
+
 .edit-hero-progress-text {
     margin-top: 8px;
     font-size: 13px;
@@ -431,16 +390,11 @@
    Inline Settings (project edit mode)
    ======================================== */
 
-.project-header.edit-project-header-active,
 .homepage-detail-header.edit-project-header-active {
     cursor: default;
     transform: none;
 }
 
-.project-header.edit-project-header-active .project-name,
-.project-header.edit-project-header-active .project-date,
-.project-item.active .project-header.edit-project-header-active .project-name,
-.project-item.active .project-header.edit-project-header-active .project-date,
 .homepage-detail-header.edit-project-header-active .homepage-detail-title,
 .homepage-detail-header.edit-project-header-active .homepage-detail-date {
     transform: none;
@@ -649,12 +603,6 @@
     line-height: 1.45;
     color: #a3a3a3;
 }
-
-.edit-hero-thumbnail-note--subtle {
-    margin-top: 6px;
-    color: #848484;
-}
-
 .edit-hero-video-buttons,
 .edit-hero-thumbnail-buttons {
     display: flex;
@@ -781,30 +729,11 @@
    Modal Actions
    ======================================== */
 
-.edit-create-actions,
-.edit-settings-actions {
+.edit-create-actions {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
     margin-top: 24px;
     padding-top: 20px;
     border-top: 1px solid #333;
-}
-
-.edit-settings-actions {
-    justify-content: space-between;
-}
-
-.edit-settings-actions-right {
-    display: flex;
-    gap: 12px;
-}
-
-.edit-btn-danger {
-    background: #dc2626;
-    color: white;
-}
-
-.edit-btn-danger:hover {
-    background: #b91c1c;
 }

@@ -1,11 +1,10 @@
-/**
- * Link Dialog Component
- * Modal dialog for inserting/editing links with internal anchor support
- */
+import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
+import { onEscape } from './modal';
 
-import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
+// Matches the .link-dialog-backdrop opacity transition in edit-mode-extras.css.
+const FADE_OUT_MS = 150;
 
-export interface LinkDialogResult {
+interface LinkDialogResult {
   action: 'insert' | 'remove' | 'cancel';
   url?: string;
 }
@@ -20,9 +19,6 @@ interface AnchorItem {
   anchor: string;
 }
 
-/**
- * Discover anchors (headings with IDs + hero section) from the container
- */
 function discoverAnchors(container: HTMLElement): AnchorItem[] {
   const anchors: AnchorItem[] = [
     { label: 'Top of page', anchor: '#hero' }
@@ -39,41 +35,32 @@ function discoverAnchors(container: HTMLElement): AnchorItem[] {
   return anchors;
 }
 
-/**
- * Show link dialog and return user's choice
- */
 export function showLinkDialog(options: LinkDialogOptions): Promise<LinkDialogResult> {
   return new Promise((resolve) => {
     const { existingUrl, container } = options;
     const anchors = discoverAnchors(container);
     const isEditing = !!existingUrl;
 
-    // Create backdrop
     const backdrop = document.createElement('div');
     backdrop.className = 'link-dialog-backdrop';
 
-    // Create dialog
     const dialog = document.createElement('div');
     dialog.className = 'link-dialog';
 
-    // Header
     const header = document.createElement('div');
     header.className = 'link-dialog-header';
     header.textContent = isEditing ? 'Edit Link' : 'Insert Link';
 
-    // URL input
     const urlInput = document.createElement('input');
     urlInput.type = 'text';
     urlInput.className = 'link-dialog-url';
     urlInput.placeholder = 'Paste or type a URL...';
     urlInput.value = existingUrl || '';
 
-    // Divider
     const divider = document.createElement('div');
     divider.className = 'link-dialog-divider';
     divider.textContent = 'or link to a section';
 
-    // Sections list
     const sectionsContainer = document.createElement('div');
     sectionsContainer.className = 'link-dialog-sections';
 
@@ -89,7 +76,6 @@ export function showLinkDialog(options: LinkDialogOptions): Promise<LinkDialogRe
       sectionsContainer.appendChild(btn);
     });
 
-    // Actions
     const actions = document.createElement('div');
     actions.className = 'link-dialog-actions';
 
@@ -130,7 +116,6 @@ export function showLinkDialog(options: LinkDialogOptions): Promise<LinkDialogRe
 
     actions.appendChild(insertBtn);
 
-    // Assemble dialog
     dialog.appendChild(header);
     dialog.appendChild(urlInput);
     dialog.appendChild(divider);
@@ -138,33 +123,30 @@ export function showLinkDialog(options: LinkDialogOptions): Promise<LinkDialogRe
     dialog.appendChild(actions);
     backdrop.appendChild(dialog);
 
-    // Cleanup function
+    const listeners = new AbortController();
     const cleanup = (): void => {
+      listeners.abort();
       backdrop.classList.remove('visible');
       setTimeout(() => {
         backdrop.remove();
         unlockBodyScroll();
-        document.removeEventListener('keydown', handleKeydown);
-      }, 150);
+      }, FADE_OUT_MS);
     };
 
-    // Keyboard handling
-    const handleKeydown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
+    onEscape(() => {
+      cleanup();
+      resolve({ action: 'cancel' });
+    }, listeners.signal);
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const url = urlInput.value.trim();
+      if (url) {
         cleanup();
-        resolve({ action: 'cancel' });
-      } else if (e.key === 'Enter' && document.activeElement === urlInput) {
-        e.preventDefault();
-        const url = urlInput.value.trim();
-        if (url) {
-          cleanup();
-          resolve({ action: 'insert', url });
-        }
+        resolve({ action: 'insert', url });
       }
-    };
+    });
 
-    // Backdrop click to close
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) {
         cleanup();
@@ -172,12 +154,9 @@ export function showLinkDialog(options: LinkDialogOptions): Promise<LinkDialogRe
       }
     });
 
-    // Add to DOM and show
     document.body.appendChild(backdrop);
     lockBodyScroll();
-    document.addEventListener('keydown', handleKeydown);
 
-    // Trigger animation
     requestAnimationFrame(() => {
       backdrop.classList.add('visible');
       urlInput.focus();

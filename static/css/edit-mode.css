@@ -1,8 +1,0 @@
-/**
- * Edit Mode Styles
- * Split into focused partials to keep maintenance manageable.
- */
-
-@import url('./edit-mode-base.css');
-@import url('./edit-mode-settings.css');
-@import url('./edit-mode-extras.css');

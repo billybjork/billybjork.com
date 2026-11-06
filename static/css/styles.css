@@ -176,63 +176,6 @@ a:hover {
     }
 }
 
-#main-header .new-project-btn,
-#main-header .show-drafts-toggle {
-    padding: 6px 12px;
-    background: rgba(100, 100, 100, 0.8);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    line-height: 1;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-#main-header .new-project-btn *,
-#main-header .show-drafts-toggle * {
-    color: inherit;
-}
-
-#main-header .new-project-btn:hover,
-#main-header .show-drafts-toggle:hover {
-    background: rgba(120, 120, 120, 0.9);
-}
-
-#main-header .new-project-btn .btn-icon,
-#main-header .show-drafts-toggle .btn-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-}
-
-#main-header nav.compact-edit-actions {
-    gap: var(--spacing-small);
-}
-
-#main-header nav.compact-edit-actions .new-project-btn .btn-label,
-#main-header nav.compact-edit-actions .show-drafts-toggle .btn-label {
-    display: none;
-}
-
-#main-header nav.compact-edit-actions .new-project-btn,
-#main-header nav.compact-edit-actions .show-drafts-toggle {
-    padding: 6px;
-    min-width: 30px;
-    justify-content: center;
-    gap: 0;
-}
-
-#main-header .show-drafts-toggle.active {
-    background: var(--highlight-color);
-    color: var(--background-color);
-}
-
 footer {
     display: flex;
     align-items: center;

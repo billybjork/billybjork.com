@@ -1,8 +1,3 @@
-/**
- * Global type declarations for external libraries and browser APIs
- */
-
-// Prism.js syntax highlighting
 declare namespace Prism {
   function highlightAllUnder(element: Element): void;
   function highlightAll(): void;
@@ -11,7 +6,6 @@ declare namespace Prism {
 
 declare const Prism: typeof Prism | undefined;
 
-// HLS.js video streaming
 declare namespace Hls {
   const Events: {
     MEDIA_ATTACHED: string;
@@ -59,22 +53,12 @@ interface HlsLevel {
   bitrate: number;
 }
 
-// Extend HTMLVideoElement with HLS instance
 interface HTMLVideoElement {
   hlsInstance?: Hls | null;
   videoLayoutCleanup?: (() => void) | null;
 }
 
-// Window extensions for our modules
 interface Window {
-  // Edit mode modules
-  EditMode?: typeof import('../edit/mode').default;
-
-  // Project modules
-  ProjectSettings?: typeof import('../edit/project-settings').default;
-  ProjectCreate?: typeof import('../edit/project-create').default;
-
-  // External libraries
   Hls: typeof Hls;
   Prism: typeof Prism;
 }

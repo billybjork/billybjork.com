@@ -1,17 +1,12 @@
-export function renderProjectSettingsTimelineFrames(
-  root: ParentNode | null,
-  framesB64: string[]
-): number {
-  if (!root) return 0;
-  const canvas = root.querySelector('.edit-hero-timeline-thumbs') as HTMLCanvasElement | null;
-  if (!canvas || !framesB64 || framesB64.length === 0) return 0;
+/** Draws base64 frames edge to edge on the timeline. @returns how many frames it drew. */
+export function renderTimelineFrames(canvas: HTMLCanvasElement, framesB64: string[]): number {
+  if (framesB64.length === 0) return 0;
 
   const track = canvas.parentElement;
   if (!track) return 0;
   const trackWidth = track.clientWidth;
   const trackHeight = track.clientHeight;
 
-  // Size canvas to match track at device pixel ratio
   const dpr = window.devicePixelRatio || 1;
   canvas.width = trackWidth * dpr;
   canvas.height = trackHeight * dpr;

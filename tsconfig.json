@@ -13,14 +13,6 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "rootDir": "./static/ts",
-    "baseUrl": "./static/ts",
-    "paths": {
-      "@/*": ["./*"],
-      "@types/*": ["./types/*"],
-      "@core/*": ["./core/*"],
-      "@edit/*": ["./edit/*"],
-      "@project/*": ["./project/*"]
-    },
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["static/ts/**/*.ts"],
