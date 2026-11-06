@@ -1,11 +1,6 @@
-/**
- * Edit Slash Command Module
- * Handles slash command menu for inserting blocks
- */
-
 import type { BlockType } from '../types/blocks';
-
-// ========== TYPES ==========
+import { ICONS } from './icons';
+import { clamp } from './text';
 
 interface SlashCommand {
   id: BlockType;
@@ -14,31 +9,27 @@ interface SlashCommand {
   description: string;
 }
 
-interface ExecuteData {
+export interface SlashSelection {
   commandId: BlockType;
   insertIndex: number;
+  /** Set when the source block was emptied by removing the typed command: the new block takes its place. */
   replaceBlockIndex: number | null;
 }
 
-type SlashCommandCallback = (data: ExecuteData) => void;
+/** Where the menu was opened from. */
+type MenuTrigger =
+  | { kind: 'textarea'; textarea: HTMLTextAreaElement; blockIndex: number; commit: () => void }
+  | { kind: 'button'; anchor: HTMLElement; insertIndex: number };
 
-// ========== CONFIGURATION ==========
+export interface SlashMenu {
+  showFromButton(button: HTMLElement, insertIndex: number): void;
+  handleTextareaInput(textarea: HTMLTextAreaElement, blockIndex: number, commit: () => void): void;
+  /** True when the open menu consumed the key. */
+  handleKeydown(event: KeyboardEvent): boolean;
+}
 
-const CONFIG = {
-  MENU_WIDTH: 240,
-  MOBILE_BREAKPOINT: 768,
-};
-
-// SVG icons for slash commands (consistent with codebase icon style)
-const ICONS = {
-  text: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
-  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
-  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/></svg>',
-  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
-  html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="12" y1="2" x2="12" y2="22" opacity="0.5"/></svg>',
-  callout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
-  divider: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><circle cx="8" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="16" cy="12" r="1" fill="currentColor"/></svg>',
-};
+const MENU_WIDTH_PX = 240;
+const MOBILE_BREAKPOINT_PX = 768;
 
 const COMMANDS: SlashCommand[] = [
   { id: 'text', label: 'Text', icon: ICONS.text, description: 'Plain text paragraph' },
@@ -47,428 +38,207 @@ const COMMANDS: SlashCommand[] = [
   { id: 'code', label: 'Code', icon: ICONS.code, description: 'Code block with syntax highlighting' },
   { id: 'html', label: 'HTML', icon: ICONS.html, description: 'Raw HTML (scripts, embeds, custom)' },
   { id: 'callout', label: 'Callout', icon: ICONS.callout, description: 'Highlighted message box' },
-  { id: 'divider', label: 'Divider', icon: ICONS.divider, description: 'Section break' }
+  { id: 'divider', label: 'Divider', icon: ICONS.dividerCommand, description: 'Section break' },
 ];
 
-// ========== STATE ==========
-
-let menuElement: HTMLDivElement | null = null;
-let isActiveState = false;
-let triggeredFromTextarea = false;
-let query = '';
-let selectedIndex = 0;
-let onExecuteCallback: SlashCommandCallback | null = null;
-let activeTextareaIndex: number | null = null;
-let anchorElement: HTMLElement | null = null;
-let scrollHandler: (() => void) | null = null;
-let clickOutsideHandler: ((e: MouseEvent) => void) | null = null;
-
-// ========== MENU CREATION ==========
-
-/**
- * Create the slash command menu element if it doesn't exist
- */
-function createMenu(): HTMLDivElement {
-  if (menuElement) return menuElement;
-
-  const menu = document.createElement('div');
-  menu.className = 'slash-command-menu';
-  menu.style.display = 'none';
-  document.body.appendChild(menu);
-  menuElement = menu;
-  return menu;
+function matchingCommands(query: string): SlashCommand[] {
+  if (!query) return COMMANDS;
+  const lower = query.toLowerCase();
+  return COMMANDS.filter((command) => (
+    command.label.toLowerCase().includes(lower)
+    || command.id.includes(lower)
+    || command.description.toLowerCase().includes(lower)
+  ));
 }
 
-/**
- * Position menu relative to an anchor element
- * Handles viewport overflow by positioning above if needed
- */
-function positionMenu(anchorRect: DOMRect): void {
-  if (!menuElement) return;
+function positionMenu(menu: HTMLElement, anchorRect: DOMRect): void {
+  menu.style.display = 'block';
 
-  menuElement.style.display = 'block';
-
-  const isMobileLayout = window.matchMedia(`(max-width: ${CONFIG.MOBILE_BREAKPOINT}px)`).matches;
-  if (isMobileLayout) {
-    menuElement.style.width = 'auto';
-    menuElement.style.left = '10px';
-    menuElement.style.right = '10px';
-    menuElement.style.top = 'auto';
-    menuElement.style.bottom = '10px';
-    menuElement.style.maxHeight = '50vh';
+  if (window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`).matches) {
+    Object.assign(menu.style, { width: 'auto', left: '10px', right: '10px', top: 'auto', bottom: '10px', maxHeight: '50vh' });
     return;
   }
 
-  menuElement.style.width = `${CONFIG.MENU_WIDTH}px`;
-  menuElement.style.left = `${Math.min(anchorRect.left, window.innerWidth - CONFIG.MENU_WIDTH - 20)}px`;
-  menuElement.style.right = 'auto';
+  menu.style.width = `${MENU_WIDTH_PX}px`;
+  menu.style.left = `${Math.min(anchorRect.left, window.innerWidth - MENU_WIDTH_PX - 20)}px`;
+  menu.style.right = 'auto';
 
-  const menuHeight = menuElement.offsetHeight || 200;
+  const menuHeight = menu.offsetHeight || 200;
   const spaceBelow = window.innerHeight - anchorRect.bottom - 10;
   const spaceAbove = anchorRect.top - 10;
 
   if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-    menuElement.style.top = 'auto';
-    menuElement.style.bottom = `${window.innerHeight - anchorRect.top + 5}px`;
-    menuElement.style.maxHeight = `${Math.min(300, spaceAbove)}px`;
+    menu.style.top = 'auto';
+    menu.style.bottom = `${window.innerHeight - anchorRect.top + 5}px`;
+    menu.style.maxHeight = `${Math.min(300, spaceAbove)}px`;
   } else {
-    menuElement.style.top = `${anchorRect.bottom + 5}px`;
-    menuElement.style.bottom = 'auto';
-    menuElement.style.maxHeight = `${Math.min(300, spaceBelow)}px`;
+    menu.style.top = `${anchorRect.bottom + 5}px`;
+    menu.style.bottom = 'auto';
+    menu.style.maxHeight = `${Math.min(300, spaceBelow)}px`;
   }
 }
 
-// ========== FILTERING ==========
+export function createSlashMenu(onSelect: (selection: SlashSelection) => void, signal: AbortSignal): SlashMenu {
+  const menu = document.createElement('div');
+  menu.className = 'slash-command-menu';
+  menu.style.display = 'none';
+  document.body.appendChild(menu);
 
-/**
- * Filter commands based on query string
- */
-function getFilteredCommands(queryStr: string): SlashCommand[] {
-  if (!queryStr) return COMMANDS;
-  const lowerQuery = queryStr.toLowerCase();
-  return COMMANDS.filter(cmd =>
-    cmd.label.toLowerCase().includes(lowerQuery) ||
-    cmd.id.toLowerCase().includes(lowerQuery) ||
-    cmd.description.toLowerCase().includes(lowerQuery)
+  let trigger: MenuTrigger | null = null;
+  let query = '';
+  let selectedIndex = 0;
+  let openListeners: AbortController | null = null;
+
+  const anchorOf = (current: MenuTrigger): HTMLElement => (
+    current.kind === 'textarea' ? current.textarea : current.anchor
   );
-}
 
-// ========== RENDERING ==========
-
-/**
- * Render the menu with filtered commands
- */
-function renderMenu(commands: SlashCommand[], selected: number = 0): void {
-  if (!menuElement) createMenu();
-  if (!menuElement) return;
-
-  selectedIndex = Math.max(0, Math.min(selected, commands.length - 1));
-
-  menuElement.innerHTML = commands.map((cmd, index) => {
-    const isSelected = index === selectedIndex;
-    return `
-      <button
-        class="slash-menu-item ${isSelected ? 'selected' : ''}"
-        data-command="${cmd.id}"
-      >
-        <span class="slash-menu-icon">${cmd.icon}</span>
+  const render = (commands: SlashCommand[], selected = 0): void => {
+    selectedIndex = clamp(selected, 0, commands.length - 1);
+    menu.innerHTML = commands.map((command, index) => `
+      <button class="slash-menu-item ${index === selectedIndex ? 'selected' : ''}" data-command="${command.id}">
+        <span class="slash-menu-icon">${command.icon}</span>
         <div class="slash-menu-content">
-          <span class="slash-menu-label">${cmd.label}</span>
-          <span class="slash-menu-description">${cmd.description}</span>
+          <span class="slash-menu-label">${command.label}</span>
+          <span class="slash-menu-description">${command.description}</span>
         </div>
       </button>
-    `;
-  }).join('');
+    `).join('');
 
-  // Add click handlers
-  menuElement.querySelectorAll('.slash-menu-item').forEach((item, index) => {
-    item.addEventListener('click', () => {
-      const cmd = commands[index];
-      if (cmd) {
-        executeCommand(cmd.id);
-      }
+    menu.querySelectorAll('.slash-menu-item').forEach((item, index) => {
+      item.addEventListener('click', () => {
+        const command = commands[index];
+        if (command) execute(command.id);
+      });
     });
-  });
-}
-
-/**
- * Scroll selected item into view
- */
-function scrollSelectedIntoView(): void {
-  if (!menuElement) return;
-  const selected = menuElement.querySelector('.slash-menu-item.selected');
-  if (selected) {
-    selected.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }
-}
-
-// ========== SHOW/HIDE ==========
-
-/**
- * Attach scroll and click-outside listeners while menu is open
- */
-function attachListeners(): void {
-  detachListeners();
-
-  // Reposition on scroll (use capture to catch scroll on any element)
-  scrollHandler = () => {
-    if (!isActiveState || !anchorElement) return;
-    positionMenu(anchorElement.getBoundingClientRect());
   };
-  window.addEventListener('scroll', scrollHandler, true);
 
-  // Close on click outside
-  clickOutsideHandler = (e: MouseEvent) => {
-    if (!isActiveState || !menuElement) return;
-    if (menuElement.contains(e.target as Node)) return;
-    // Don't close if clicking the anchor itself (it toggles)
-    if (anchorElement?.contains(e.target as Node)) return;
+  const hide = (): void => {
+    openListeners?.abort();
+    openListeners = null;
+    menu.style.display = 'none';
+    trigger = null;
+    query = '';
+    selectedIndex = 0;
+  };
+
+  const open = (next: MenuTrigger): void => {
+    trigger = next;
+    query = '';
+    render(COMMANDS);
+    const anchor = anchorOf(next);
+    positionMenu(menu, anchor.getBoundingClientRect());
+
+    openListeners?.abort();
+    openListeners = new AbortController();
+    const listeners = openListeners.signal;
+    window.addEventListener('scroll', () => positionMenu(menu, anchor.getBoundingClientRect()), { capture: true, signal: listeners });
+    // Attached a frame later so the click that opened the menu cannot close it.
+    requestAnimationFrame(() => {
+      if (listeners.aborted) return;
+      document.addEventListener('mousedown', (event) => {
+        const target = event.target as Node;
+        if (!menu.contains(target) && !anchor.contains(target)) hide();
+      }, { capture: true, signal: listeners });
+    });
+  };
+
+  /** Removes the typed `/query` from the textarea; true if that left the whole block empty. */
+  const removeTypedCommand = ({ textarea, commit }: Extract<MenuTrigger, { kind: 'textarea' }>): boolean => {
+    const cursor = textarea.selectionStart;
+    const text = textarea.value;
+    const lineStart = text.lastIndexOf('\n', cursor - 1) + 1;
+    if (text[lineStart] !== '/') return false;
+
+    textarea.value = (text.slice(0, lineStart) + text.slice(cursor)).replace(/\n+$/, '');
+    const blockIsEmpty = Array.from(textarea.closest('.block-wrapper')?.querySelectorAll<HTMLTextAreaElement>('.text-line-input') ?? [])
+      .every((input) => !input.value.trim());
+    commit();
+    return blockIsEmpty;
+  };
+
+  const execute = (commandId: BlockType): void => {
+    const current = trigger;
+    if (!current) return;
+
+    let selection: SlashSelection;
+    if (current.kind === 'textarea') {
+      const blockIsEmpty = removeTypedCommand(current);
+      selection = {
+        commandId,
+        insertIndex: blockIsEmpty ? current.blockIndex : current.blockIndex + 1,
+        replaceBlockIndex: blockIsEmpty ? current.blockIndex : null,
+      };
+    } else {
+      selection = { commandId, insertIndex: current.insertIndex, replaceBlockIndex: null };
+    }
+
     hide();
+    onSelect(selection);
   };
-  // Delay attachment so the opening click doesn't immediately close it
-  requestAnimationFrame(() => {
-    if (clickOutsideHandler) {
-      document.addEventListener('mousedown', clickOutsideHandler, true);
-    }
-  });
-}
 
-/**
- * Detach scroll and click-outside listeners
- */
-function detachListeners(): void {
-  if (scrollHandler) {
-    window.removeEventListener('scroll', scrollHandler, true);
-    scrollHandler = null;
-  }
-  if (clickOutsideHandler) {
-    document.removeEventListener('mousedown', clickOutsideHandler, true);
-    clickOutsideHandler = null;
-  }
-}
+  signal.addEventListener('abort', hide);
 
-/**
- * Show the slash command menu triggered by typing "/" in textarea
- */
-function showFromTextarea(textarea: HTMLTextAreaElement, textareaIndex: number): void {
-  if (!menuElement) createMenu();
+  return {
+    showFromButton(button, insertIndex) {
+      open({ kind: 'button', anchor: button, insertIndex });
+    },
 
-  isActiveState = true;
-  triggeredFromTextarea = true;
-  query = '';
-  selectedIndex = 0;
-  activeTextareaIndex = textareaIndex;
-  anchorElement = textarea;
+    handleTextareaInput(textarea, blockIndex, commit) {
+      const beforeCursor = textarea.value.slice(0, textarea.selectionStart);
+      const lineStart = beforeCursor.lastIndexOf('\n') + 1;
 
-  renderMenu(COMMANDS, 0);
-  positionMenu(textarea.getBoundingClientRect());
-  attachListeners();
-}
-
-/**
- * Show the slash command menu from "+" button
- */
-export function showFromButton(anchorRect: DOMRect, insertIndex: number, buttonEl?: HTMLElement): void {
-  if (!menuElement) createMenu();
-
-  isActiveState = true;
-  triggeredFromTextarea = false;
-  query = '';
-  selectedIndex = 0;
-  activeTextareaIndex = insertIndex;
-  anchorElement = buttonEl ?? null;
-
-  renderMenu(COMMANDS, 0);
-  positionMenu(anchorRect);
-  attachListeners();
-}
-
-/**
- * Hide the slash command menu
- */
-function hide(): void {
-  detachListeners();
-  if (menuElement) {
-    menuElement.style.display = 'none';
-  }
-  isActiveState = false;
-  triggeredFromTextarea = false;
-  query = '';
-  selectedIndex = 0;
-  anchorElement = null;
-}
-
-// ========== COMMAND EXECUTION ==========
-
-/**
- * Execute a slash command
- */
-function executeCommand(commandId: BlockType): void {
-  const sourceIndex = activeTextareaIndex ?? 0;
-  const wasFromTextarea = triggeredFromTextarea;
-  let blockBecameEmpty = false;
-
-  // Clean up "/" from textarea if triggered from typing
-  if (triggeredFromTextarea && activeTextareaIndex !== null) {
-    const textarea = anchorElement as HTMLTextAreaElement | null;
-
-    if (textarea) {
-      const cursorPos = textarea.selectionStart;
-      const text = textarea.value;
-
-      // Find the "/" that triggered the slash command (must be at start of line)
-      const textBeforeCursor = text.substring(0, cursorPos);
-      const lastNewline = textBeforeCursor.lastIndexOf('\n');
-      const lineStart = lastNewline + 1;
-
-      // Only remove if "/" is at the start of the current line
-      // This prevents accidentally removing "/" from URLs
-      if (text[lineStart] === '/') {
-        const slashIndex = lineStart;
-        const newText = (text.substring(0, slashIndex) + text.substring(cursorPos)).replace(/\n+$/, '');
-        textarea.value = newText;
-
-        const blockWrapper = textarea.closest('.block-wrapper');
-        const lineInputs = blockWrapper?.querySelectorAll<HTMLInputElement>('.text-line-input') ?? [];
-        blockBecameEmpty = Array.from(lineInputs).every(input => !input.value.trim());
-
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      if (beforeCursor.slice(lineStart) === '/') {
+        open({ kind: 'textarea', textarea, blockIndex, commit });
+        return;
       }
-    }
-  }
+      if (!trigger) return;
 
-  hide();
-
-  // Execute the command via callback
-  if (onExecuteCallback) {
-    if (wasFromTextarea) {
-      // If the source block is now empty, replace it with the new block.
-      // Otherwise insert the new block after it.
-      onExecuteCallback({
-        commandId,
-        insertIndex: blockBecameEmpty ? sourceIndex : sourceIndex + 1,
-        replaceBlockIndex: blockBecameEmpty ? sourceIndex : null
-      });
-    } else {
-      onExecuteCallback({
-        commandId,
-        insertIndex: sourceIndex,
-        replaceBlockIndex: null
-      });
-    }
-  }
-}
-
-// ========== KEYBOARD HANDLING ==========
-
-/**
- * Handle keydown events when menu is active
- * @returns True if event was handled
- */
-export function handleKeydown(e: KeyboardEvent): boolean {
-  if (!isActiveState) return false;
-
-  const filteredCommands = getFilteredCommands(query);
-
-  switch (e.key) {
-    case 'ArrowDown':
-      e.preventDefault();
-      e.stopPropagation();
-      selectedIndex = (selectedIndex + 1) % filteredCommands.length;
-      renderMenu(filteredCommands, selectedIndex);
-      scrollSelectedIntoView();
-      return true;
-
-    case 'ArrowUp':
-      e.preventDefault();
-      e.stopPropagation();
-      selectedIndex = (selectedIndex - 1 + filteredCommands.length) % filteredCommands.length;
-      renderMenu(filteredCommands, selectedIndex);
-      scrollSelectedIntoView();
-      return true;
-
-    case 'Enter':
-    case 'Tab':
-      e.preventDefault();
-      e.stopPropagation();
-      if (filteredCommands.length > 0) {
-        const cmd = filteredCommands[selectedIndex];
-        if (cmd) {
-          executeCommand(cmd.id);
-        }
-      }
-      return true;
-
-    case 'Escape':
-      e.preventDefault();
-      e.stopPropagation();
-      hide();
-      return true;
-  }
-  return false;
-}
-
-/**
- * Handle textarea input to detect "/" and filter commands
- */
-export function handleTextareaInput(textarea: HTMLTextAreaElement, textareaIndex: number): void {
-  const cursorPos = textarea.selectionStart;
-  const text = textarea.value;
-  const textBeforeCursor = text.substring(0, cursorPos);
-
-  // Check if "/" was typed at start of line
-  const lastNewline = textBeforeCursor.lastIndexOf('\n');
-  const lineStart = lastNewline + 1;
-  const lineBeforeCursor = textBeforeCursor.substring(lineStart);
-
-  if (lineBeforeCursor === '/') {
-    showFromTextarea(textarea, textareaIndex);
-    return;
-  }
-
-  // If slash command is active, update query
-  if (isActiveState) {
-    const slashIndex = textBeforeCursor.lastIndexOf('/');
-    if (slashIndex !== -1) {
-      const beforeSlash = textBeforeCursor.substring(0, slashIndex);
-      const isAtLineStart = beforeSlash === '' || beforeSlash.endsWith('\n');
-      if (isAtLineStart) {
-        query = textBeforeCursor.substring(slashIndex + 1);
-        const filteredCommands = getFilteredCommands(query);
-        if (filteredCommands.length === 0) {
-          hide();
-        } else {
-          renderMenu(filteredCommands, 0);
-        }
-      } else {
+      const slashIndex = beforeCursor.lastIndexOf('/');
+      const atLineStart = slashIndex !== -1 && (slashIndex === 0 || beforeCursor[slashIndex - 1] === '\n');
+      query = atLineStart ? beforeCursor.slice(slashIndex + 1) : '';
+      const commands = atLineStart ? matchingCommands(query) : [];
+      if (commands.length === 0) {
         hide();
+      } else {
+        render(commands);
       }
-    } else {
-      hide();
-    }
-  }
+    },
+
+    handleKeydown(event) {
+      if (!trigger) return false;
+
+      const commands = matchingCommands(query);
+      const consume = (): void => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      const moveSelection = (delta: number): void => {
+        consume();
+        render(commands, (selectedIndex + delta + commands.length) % commands.length);
+        menu.querySelector('.slash-menu-item.selected')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      };
+
+      switch (event.key) {
+        case 'ArrowDown':
+          moveSelection(1);
+          return true;
+        case 'ArrowUp':
+          moveSelection(-1);
+          return true;
+        case 'Enter':
+        case 'Tab': {
+          consume();
+          const command = commands[selectedIndex];
+          if (command) execute(command.id);
+          return true;
+        }
+        case 'Escape':
+          consume();
+          hide();
+          return true;
+      }
+      return false;
+    },
+  };
 }
-
-// ========== INITIALIZATION ==========
-
-/**
- * Initialize the slash command system
- */
-export function init(callback: SlashCommandCallback): void {
-  onExecuteCallback = callback;
-  createMenu();
-}
-
-/**
- * Cleanup and destroy the menu
- */
-export function cleanup(): void {
-  detachListeners();
-  if (menuElement) {
-    menuElement.remove();
-    menuElement = null;
-  }
-  isActiveState = false;
-  anchorElement = null;
-  onExecuteCallback = null;
-}
-
-// ========== PUBLIC API ==========
-
-/**
- * Check if menu is active
- */
-export function isActive(): boolean {
-  return isActiveState;
-}
-
-const EditSlash = {
-  init,
-  cleanup,
-  showFromButton,
-  handleKeydown,
-  handleTextareaInput,
-  isActive,
-};
-
-export default EditSlash;

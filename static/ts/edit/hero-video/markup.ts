@@ -1,26 +1,17 @@
-import { escapeHtml } from './text';
+import { escapeHtml, formatMegabytes } from '../text';
 
-interface VideoViewMarkupOptions {
-  isUploadFlow: boolean;
-  file: File | null;
-  processButtonText: string;
-}
-
-export function buildProjectVideoViewMarkup({
-  isUploadFlow,
-  file,
-  processButtonText,
-}: VideoViewMarkupOptions): string {
+export function buildHeroVideoMarkup(file: File | null, processButtonText: string): string {
+  const isUploadFlow = !!file;
   const modalTitle = isUploadFlow ? 'Process Hero Video' : 'Update Hero Sprite';
-  const fileInfoText = isUploadFlow && file
-    ? `${escapeHtml(file.name)} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`
+  const fileInfoText = file
+    ? `${escapeHtml(file.name)} (${formatMegabytes(file.size)} MB)`
     : 'Using current hero HLS stream';
   const initialProgressText = isUploadFlow ? 'Uploading...' : 'Loading current video...';
 
   return `
-      <div class="edit-settings-header">
+      <div class="edit-hero-dialog-header">
         <h2>${modalTitle}</h2>
-        <button class="edit-settings-close">&times;</button>
+        <button class="edit-hero-dialog-close">&times;</button>
       </div>
       <div class="edit-hero-video-preview">
         <video class="edit-hero-video-player" controls playsinline></video>

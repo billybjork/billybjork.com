@@ -183,7 +183,7 @@ describe('editor stylesheets', () => {
     const hrefs = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).map((link) => link.getAttribute('href'));
     expect(hrefs).toEqual([
       '/static/css/edit-mode-base.css?v=abc123',
-      '/static/css/edit-mode-settings.css?v=abc123',
+      '/static/css/edit-mode-project.css?v=abc123',
       '/static/css/edit-mode-extras.css?v=abc123',
     ]);
   });

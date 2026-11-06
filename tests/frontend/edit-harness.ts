@@ -159,8 +159,9 @@ export async function openProjectEditor(harness: EditorHarness, markdown: string
     slug: (call.body as { slug: string }).slug,
     revision: `rev-${harness.saves().length + 1}`,
   }));
-  const { init } = await import('../../static/ts/edit/mode');
-  await init(PROJECT.slug);
+  const { openEditor } = await import('../../static/ts/edit/session');
+  const { projectPage } = await import('../../static/ts/edit/page-adapter');
+  await openEditor(projectPage(PROJECT.slug));
 }
 
 export async function openAboutEditor(harness: EditorHarness, markdown: string): Promise<void> {
@@ -170,8 +171,9 @@ export async function openAboutEditor(harness: EditorHarness, markdown: string):
     success: true,
     revision: `rev-${harness.saves().length + 1}`,
   }));
-  const { initAbout } = await import('../../static/ts/edit/mode');
-  await initAbout();
+  const { openEditor } = await import('../../static/ts/edit/session');
+  const { aboutPage } = await import('../../static/ts/edit/page-adapter');
+  await openEditor(aboutPage());
 }
 
 export function toolbarButton(action: string): HTMLButtonElement {

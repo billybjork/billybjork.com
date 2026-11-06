@@ -445,8 +445,9 @@ describe('opening the editor', () => {
 
   it('reports a failed load and stays out of edit mode', async () => {
     mountFailingProject(harness);
-    const { init } = await import('../../static/ts/edit/mode');
-    await init(PROJECT.slug);
+    const { openEditor } = await import('../../static/ts/edit/session');
+  const { projectPage } = await import('../../static/ts/edit/page-adapter');
+    await openEditor(projectPage(PROJECT.slug));
 
     expect(notifications()).toContain('Failed to load project');
     expect(document.body.classList.contains('editing')).toBe(false);

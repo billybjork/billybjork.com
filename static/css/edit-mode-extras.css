@@ -97,22 +97,11 @@
     outline: none;
 }
 
-
 /* ========================================
    Responsive
    ======================================== */
 
 @media (max-width: 768px) {
-    body.editing .project-item {
-        --project-shell-inline-padding: 0.3rem;
-    }
-
-    body.editing .project-item.active {
-        margin-bottom: 0.5rem;
-        padding: 0.5rem 0.35rem 0.6rem;
-        border-radius: 7px;
-    }
-
     body.editing .project-content {
         padding-inline: 0;
     }
@@ -275,8 +264,7 @@
     }
 
     .text-block-line-preview,
-    .text-line-input,
-    .block-textarea {
+.text-line-input {
         font-size: 15px;
         line-height: 1.58;
     }

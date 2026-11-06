@@ -1,13 +1,64 @@
-export interface InlineMatch {
+import { slugify, uniqueSlug } from './slug';
+
+export interface HeadingLine {
+  indent: string;
+  level: number;
+  body: string;
+  prefixLength: number;
+}
+
+export type LinePreviewType =
+  | 'empty'
+  | 'divider'
+  | 'heading-1'
+  | 'heading-2'
+  | 'heading-3'
+  | 'heading-4'
+  | 'heading-5'
+  | 'heading-6'
+  | 'quote'
+  | 'list'
+  | 'paragraph';
+
+export interface LinePreview {
+  node: Node;
+  type: LinePreviewType;
+}
+
+const HEADING_LINE = /^(\s*)(#{1,6})\s+(.*)$/;
+const QUOTE_LINE = /^(\s*)>\s+(.*)$/;
+const LIST_LINE = /^(\s*)([-*+]|\d+\.)\s+/;
+
+export const DIVIDER_LINE = /^(\*{3,}|-{3,}|_{3,})$/;
+export const LINK_PATTERN = String.raw`\[([^\]]*)\]\(([^)]*)\)`;
+
+export function parseHeadingLine(line: string): HeadingLine | null {
+  const match = line.match(HEADING_LINE);
+  if (!match) return null;
+  const body = match[3] ?? '';
+  return {
+    indent: match[1] ?? '',
+    level: match[2]?.length ?? 1,
+    body,
+    prefixLength: match[0].length - body.length,
+  };
+}
+
+/** Links with both a label and a URL; `[]()` and its parts stay plain text. */
+function* renderableLinks(text: string): Generator<RegExpExecArray> {
+  for (const match of text.matchAll(new RegExp(LINK_PATTERN, 'g'))) {
+    if (match[1] && match[2]) yield match as RegExpExecArray;
+  }
+}
+
+interface InlineMatch {
   index: number;
   length: number;
   tagName: 'strong' | 'em' | 'u' | 'code' | 's';
   content: string;
 }
 
-export const INLINE_MAX_DEPTH = 8;
-
-export const DIVIDER_LINE = /^(\*{3,}|-{3,}|_{3,})$/;
+const INLINE_MAX_DEPTH = 8;
 
 function appendInlineFormatted(container: Node, text: string): void {
   container.appendChild(parseInlineTokens(text));
@@ -52,7 +103,7 @@ function parseInlineTokensRecursive(text: string, depth: number): DocumentFragme
   return fragment;
 }
 
-export function findNextInlineMatch(text: string): InlineMatch | null {
+function findNextInlineMatch(text: string): InlineMatch | null {
   const matchers: Array<(input: string) => InlineMatch | null> = [
     matchInlineCodeBackticks,
     matchHtmlUnderline,
@@ -152,7 +203,7 @@ function matchMarkdownEmphasisUnderscore(input: string): InlineMatch | null {
   return toInlineMatch(input.match(/_([^_\n][^_\n]*?)_/), 'em');
 }
 
-export function sanitizeUrl(url: string): string | null {
+function sanitizeUrl(url: string): string | null {
   const trimmed = (url || '').trim();
   if (!trimmed) return null;
   if (trimmed.startsWith('#') || trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
@@ -173,13 +224,10 @@ export function sanitizeUrl(url: string): string | null {
 
 export function renderInlineMarkdown(text: string): DocumentFragment {
   const fragment = document.createDocumentFragment();
-  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
   let lastIndex = 0;
-  let match;
 
-  while ((match = linkRegex.exec(text)) !== null) {
+  for (const match of renderableLinks(text)) {
     const offset = match.index;
-
     if (offset > lastIndex) {
       appendInlineFormatted(fragment, text.slice(lastIndex, offset));
     }
@@ -188,11 +236,7 @@ export function renderInlineMarkdown(text: string): DocumentFragment {
     if (safeUrl) {
       const link = document.createElement('a');
       link.href = safeUrl;
-      const isInternalLink = safeUrl.startsWith('#')
-        || safeUrl.startsWith('/')
-        || safeUrl.startsWith('./')
-        || safeUrl.startsWith('../');
-      if (!isInternalLink) {
+      if (!/^(#|\/|\.\/|\.\.\/)/.test(safeUrl)) {
         link.rel = 'noopener';
         link.target = '_blank';
       }
@@ -210,4 +254,154 @@ export function renderInlineMarkdown(text: string): DocumentFragment {
   }
 
   return fragment;
+}
+
+/** The text a heading's id comes from: its rendered text, as the server's toc extension sees it. */
+function headingText(body: string): string {
+  const holder = document.createElement('span');
+  holder.appendChild(renderInlineMarkdown(body));
+  return holder.textContent?.trim() ?? '';
+}
+
+/** The heading ids taken by the lines before `upTo`, for numbering the next duplicate. */
+export function headingSlugsBefore(lines: string[], upTo: number): Set<string> {
+  const taken = new Set<string>();
+  for (const line of lines.slice(0, upTo)) {
+    const heading = parseHeadingLine(line);
+    const base = heading ? slugify(headingText(heading.body)) : '';
+    if (base) uniqueSlug(base, taken);
+  }
+  return taken;
+}
+
+/** The preview for one line of a text block. Approximates the server's markdown renderer. */
+export function renderLinePreview(line: string, takenHeadingSlugs: Set<string>): LinePreview {
+  const trimmed = line.trim();
+
+  if (!trimmed) {
+    const empty = document.createElement('span');
+    empty.innerHTML = '&nbsp;';
+    return { node: empty, type: 'empty' };
+  }
+
+  if (DIVIDER_LINE.test(trimmed)) {
+    const divider = document.createElement('hr');
+    divider.className = 'text-line-divider';
+    return { node: divider, type: 'divider' };
+  }
+
+  const heading = parseHeadingLine(line);
+  if (heading) {
+    const element = document.createElement(`h${heading.level}`);
+    element.appendChild(renderInlineMarkdown(heading.body));
+    const base = slugify(element.textContent?.trim() ?? '');
+    if (base) element.id = uniqueSlug(base, takenHeadingSlugs);
+    return { node: element, type: `heading-${heading.level}` as LinePreviewType };
+  }
+
+  const quote = line.match(QUOTE_LINE);
+  if (quote) {
+    const element = document.createElement('blockquote');
+    element.appendChild(renderInlineMarkdown(quote[2] ?? ''));
+    return { node: element, type: 'quote' };
+  }
+
+  const span = document.createElement('span');
+  span.appendChild(renderInlineMarkdown(line));
+  return { node: span, type: LIST_LINE.test(line) ? 'list' : 'paragraph' };
+}
+
+function literalBoundaries(text: string, rawStart: number): number[] {
+  const map = [rawStart];
+  for (let i = 0; i < text.length; i += 1) {
+    map.push(rawStart + i + 1);
+  }
+  return map;
+}
+
+function appendBoundaries(target: number[], incoming: number[]): void {
+  if (!incoming.length) return;
+  target[target.length - 1] = incoming[0] ?? target[target.length - 1] ?? 0;
+  target.push(...incoming.slice(1));
+}
+
+function inlineBoundaries(text: string, rawStart: number, depth = 0): number[] {
+  const map = [rawStart];
+  if (!text) return map;
+
+  if (depth >= INLINE_MAX_DEPTH) {
+    appendBoundaries(map, literalBoundaries(text, rawStart));
+    return map;
+  }
+
+  let cursor = 0;
+  while (cursor < text.length) {
+    const remaining = text.slice(cursor);
+    const match = findNextInlineMatch(remaining);
+
+    if (!match) {
+      appendBoundaries(map, literalBoundaries(remaining, rawStart + cursor));
+      break;
+    }
+
+    if (match.index > 0) {
+      appendBoundaries(map, literalBoundaries(remaining.slice(0, match.index), rawStart + cursor));
+    }
+
+    const tokenStart = cursor + match.index;
+    const tokenRawStart = rawStart + tokenStart;
+    const tokenText = remaining.slice(match.index, match.index + match.length);
+    const contentIndex = tokenText.indexOf(match.content);
+
+    if (contentIndex < 0) {
+      appendBoundaries(map, literalBoundaries(tokenText, tokenRawStart));
+    } else {
+      const contentRawStart = tokenRawStart + contentIndex;
+      appendBoundaries(map, match.tagName === 'code'
+        ? literalBoundaries(match.content, contentRawStart)
+        : inlineBoundaries(match.content, contentRawStart, depth + 1));
+    }
+
+    cursor = tokenStart + match.length;
+  }
+
+  return map;
+}
+
+/**
+ * For each character offset in a line's rendered preview, the offset in its raw markdown.
+ * Walks the same tokens as the renderer above, so clicks in the preview land the caret
+ * at the matching spot in the textarea.
+ */
+export function renderedToRawBoundaries(line: string, lineType: string | undefined): number[] {
+  if (!line) return [0];
+  if (lineType === 'divider') return [line.length];
+
+  let bodyStart = 0;
+  if (lineType?.startsWith('heading-')) {
+    bodyStart = parseHeadingLine(line)?.prefixLength ?? 0;
+  } else if (lineType === 'quote') {
+    bodyStart = line.match(/^(\s*)>\s+/)?.[0].length ?? 0;
+  }
+
+  const body = line.slice(bodyStart);
+  const map = [bodyStart];
+  let lastIndex = 0;
+
+  for (const match of renderableLinks(body)) {
+    const offset = match.index;
+    if (offset > lastIndex) {
+      appendBoundaries(map, inlineBoundaries(body.slice(lastIndex, offset), bodyStart + lastIndex));
+    }
+    appendBoundaries(map, sanitizeUrl(match[2] ?? '')
+      ? inlineBoundaries(match[1] ?? '', bodyStart + offset + 1)
+      : literalBoundaries(match[0], bodyStart + offset));
+    lastIndex = offset + match[0].length;
+  }
+
+  if (lastIndex < body.length) {
+    appendBoundaries(map, inlineBoundaries(body.slice(lastIndex), bodyStart + lastIndex));
+  }
+
+  return map;
 }

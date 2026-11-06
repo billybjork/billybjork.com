@@ -1,25 +1,22 @@
 import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
+import { isEditingActive } from '../core/edit-state';
 import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
-import { restorePersistedScroll } from './scroll-restore';
-import { init as initProjectEditor, initAbout as initAboutEditor } from './mode';
-import ProjectCreate from './project-create';
+import { restorePersistedScroll } from './scroll';
+import { openEditor } from './session';
+import { aboutPage, projectPage } from './page-adapter';
+import { ABOUT_PATH, findProjectContent, isAboutPage } from './page-content';
+import { showProjectCreateDialog } from './project-create';
+import { ICONS } from './icons';
 
-// ========== CONSTANTS ==========
-
-const EDIT_STYLESHEETS = ['edit-mode-base.css', 'edit-mode-settings.css', 'edit-mode-extras.css'];
-const NEW_PROJECT_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
-const EDIT_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-const DRAFTS_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+const EDIT_STYLESHEETS = ['edit-mode-base.css', 'edit-mode-project.css', 'edit-mode-extras.css'];
 
 let headerCompactionObserver: ResizeObserver | null = null;
 let headerCompactionResizeHandlerBound = false;
 let headerCompactionFrame: number | null = null;
 
-// ========== HELPERS ==========
-
 function readProjectSlugFromPath(): string | null {
   const pathname = window.location.pathname.replace(/\/+$/, '');
-  if (!pathname || pathname === '/' || pathname === '/me') {
+  if (!pathname || pathname === '/' || pathname === ABOUT_PATH) {
     return null;
   }
 
@@ -30,15 +27,6 @@ function readProjectSlugFromPath(): string | null {
 function getActiveProjectSlug(): string | null {
   const homepageSlug = getHomepageRuntime()?.getOpenProjectSlug();
   return homepageSlug || readProjectSlugFromPath();
-}
-
-function getEditableProjectContent(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('#homepage-detail-content .project-content')
-    ?? document.querySelector<HTMLElement>('.project-content');
-}
-
-function hasEditableProjectContent(): boolean {
-  return !!getEditableProjectContent();
 }
 
 async function activateProjectEditMode(preferredSlug?: string | null): Promise<void> {
@@ -52,14 +40,12 @@ async function activateProjectEditMode(preferredSlug?: string | null): Promise<v
     slug = await homepageRuntime.waitForProjectReady(slug, 2500);
   }
 
-  if (!slug || !hasEditableProjectContent()) {
+  if (!slug || !findProjectContent()) {
     return;
   }
 
-  void initProjectEditor(slug);
+  await openEditor(projectPage(slug));
 }
-
-// ========== SCRIPT LOADING ==========
 
 /** /static is served immutable, so these carry the version the server gave edit.js. */
 function loadEditModeCSS(): void {
@@ -72,8 +58,6 @@ function loadEditModeCSS(): void {
     document.head.appendChild(link);
   });
 }
-
-// ========== UI CONTROLS ==========
 
 function attachHomepageProjectControlHandlers(): void {
   const editBtn = document.querySelector<HTMLButtonElement>('[data-homepage-edit-project]');
@@ -133,9 +117,9 @@ function addNewProjectButton(): void {
   const header = document.querySelector<HTMLElement>('#main-header nav');
   if (!header || header.querySelector('.new-project-btn')) return;
 
-  const isAboutPage = window.location.pathname === '/me';
-  const buttonLabel = isAboutPage ? 'Edit' : 'New Project';
-  const buttonIcon = isAboutPage ? EDIT_ICON : NEW_PROJECT_ICON;
+  const onAboutPage = isAboutPage();
+  const buttonLabel = onAboutPage ? 'Edit' : 'New Project';
+  const buttonIcon = onAboutPage ? ICONS.edit : ICONS.newProject;
 
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -145,10 +129,10 @@ function addNewProjectButton(): void {
   btn.innerHTML = `${buttonIcon}<span class="btn-label">${buttonLabel}</span>`;
   btn.addEventListener('click', (e) => {
     e.preventDefault();
-    if (isAboutPage) {
-      void initAboutEditor();
+    if (onAboutPage) {
+      void openEditor(aboutPage());
     } else {
-      ProjectCreate.show();
+      showProjectCreateDialog();
     }
   });
 
@@ -171,7 +155,7 @@ function addShowDraftsToggle(): void {
   btn.className = 'show-drafts-toggle' + (isActive ? ' active' : '');
   btn.title = 'Drafts';
   btn.setAttribute('aria-label', isActive ? 'Hide drafts' : 'Show drafts');
-  btn.innerHTML = `${DRAFTS_ICON}<span class="btn-label">Drafts</span>`;
+  btn.innerHTML = `${ICONS.drafts}<span class="btn-label">Drafts</span>`;
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     const url = new URL(window.location.href);
@@ -193,15 +177,13 @@ function addShowDraftsToggle(): void {
   }
 }
 
-// ========== KEYBOARD SHORTCUTS ==========
-
 /**
  * Cmd/Ctrl + E keyboard shortcut to enter edit mode
  */
 function initEditModeKeyboardShortcut(): void {
   document.addEventListener('keydown', async function(event) {
     if ((event.metaKey || event.ctrlKey) && event.key === 'e') {
-      if (document.body.classList.contains('editing')) return;
+      if (isEditingActive()) return;
 
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
@@ -210,51 +192,33 @@ function initEditModeKeyboardShortcut(): void {
 
       event.preventDefault();
 
-      const pathname = window.location.pathname;
-
-      if (pathname === '/me') {
-        const url = new URL(window.location.href);
-        url.searchParams.set('edit', '');
-        window.history.replaceState(window.history.state, '', url.toString());
-
-        void initAboutEditor();
-        return;
+      if (isAboutPage()) {
+        void openEditor(aboutPage());
+      } else {
+        await activateProjectEditMode(getActiveProjectSlug());
       }
-
-      const url = new URL(window.location.href);
-      url.searchParams.set('edit', '');
-      window.history.replaceState(window.history.state, '', url.toString());
-
-      await activateProjectEditMode(getActiveProjectSlug());
     }
   });
 }
 
-async function bootProjectEditFromUrl(): Promise<void> {
-  const pathname = window.location.pathname;
-  if (pathname === '/me') {
-    return;
+function openEditorFromUrl(): void {
+  if (!new URLSearchParams(window.location.search).has('edit')) return;
+  if (isAboutPage()) {
+    void openEditor(aboutPage());
+  } else {
+    void activateProjectEditMode(readProjectSlugFromPath());
   }
-
-  const urlParams = new URLSearchParams(window.location.search);
-  if (!urlParams.has('edit')) {
-    return;
-  }
-
-  await activateProjectEditMode(readProjectSlugFromPath());
 }
-
-// ========== INITIALIZATION ==========
 
 function initializeEditMode(): void {
   restorePersistedScroll();
 
-  // Trigger sync of show_drafts from URL to sessionStorage
-  isShowDraftsActive();
+  // Also syncs the show_drafts query parameter into the tab's memory.
+  const showDrafts = isShowDraftsActive();
 
   if (window.location.pathname === '/') {
     const params = new URLSearchParams(window.location.search);
-    if (!params.has('show_drafts') && isShowDraftsActive()) {
+    if (!params.has('show_drafts') && showDrafts) {
       const url = new URL(window.location.href);
       url.searchParams.set('show_drafts', 'true');
       window.location.replace(url.toString());
@@ -269,19 +233,9 @@ function initializeEditMode(): void {
   initHeaderNavCompaction();
   attachHomepageProjectControlHandlers();
 
-  if (window.location.pathname === '/me') {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('edit')) {
-      void initAboutEditor();
-    }
-  }
-
-  void bootProjectEditFromUrl();
-
+  openEditorFromUrl();
   initEditModeKeyboardShortcut();
 }
-
-// ========== ENTRY POINT ==========
 
 export function init(): void {
   if (document.readyState === 'loading') {

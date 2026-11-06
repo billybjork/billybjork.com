@@ -1,4 +1,6 @@
+import { LINK_PATTERN, parseHeadingLine } from './inline-markdown';
 import { showLinkDialog } from './link-dialog';
+import { clamp } from './text';
 
 interface FormatInfo {
   formatStart: number;
@@ -12,12 +14,12 @@ interface LinkInfo {
   end: number;
   text: string;
   url: string;
-  textStart: number;
-  textEnd: number;
-  urlStart: number;
-  urlEnd: number;
 }
 
+const LIST_INDENT = '   ';
+const LINK_LOOKBEHIND_LIMIT = 500;
+
+/** @returns a function that sizes the textarea to its content. */
 export function setupAutoResizeTextarea(
   textarea: HTMLTextAreaElement,
   onUpdate?: (value: string) => void
@@ -27,110 +29,98 @@ export function setupAutoResizeTextarea(
     textarea.style.height = textarea.scrollHeight + 'px';
   };
 
-  textarea.addEventListener('input', () => {
+  const sync = (): void => {
     autoResize();
-    if (onUpdate) onUpdate(textarea.value);
-  });
+    onUpdate?.(textarea.value);
+  };
+  textarea.addEventListener('input', sync);
 
-  // Size immediately to avoid post-render layout shifts, then refine next frame.
+  // Sizes now to avoid a layout shift, then again once the textarea has a layout.
   autoResize();
   requestAnimationFrame(autoResize);
 
-  return autoResize;
+  return sync;
 }
 
+/** Goes through execCommand so the browser's own undo stack records the edit. */
 export function insertTextWithUndo(textarea: HTMLTextAreaElement, text: string): void {
   textarea.focus({ preventScroll: true });
-  // execCommand preserves native undo stack
   if (!document.execCommand('insertText', false, text)) {
-    // Fallback if execCommand fails
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    textarea.setRangeText(text, start, end, 'end');
+    textarea.setRangeText(text, textarea.selectionStart, textarea.selectionEnd, 'end');
   }
 }
 
-export function wrapSelection(
-  textarea: HTMLTextAreaElement,
-  before: string,
-  after: string,
-  onUpdate?: () => void
-): void {
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  const selectedText = textarea.value.substring(start, end) || 'text';
-  const replacement = before + selectedText + after;
-
+function replaceRange(textarea: HTMLTextAreaElement, start: number, end: number, text: string): void {
   textarea.focus({ preventScroll: true });
   textarea.setSelectionRange(start, end);
-  insertTextWithUndo(textarea, replacement);
-
-  // Select the inner text
-  textarea.selectionStart = start + before.length;
-  textarea.selectionEnd = start + before.length + selectedText.length;
-
-  if (onUpdate) onUpdate();
+  insertTextWithUndo(textarea, text);
 }
 
-function findFormatAroundSelection(
+/** The maximal run of `*` covering `index`. `*x*` is emphasis, `**x**` strong, `***x***` both. */
+function asteriskRun(value: string, index: number): { start: number; end: number } {
+  let start = index;
+  let end = index;
+  while (start > 0 && value[start - 1] === '*') start -= 1;
+  while (end < value.length && value[end] === '*') end += 1;
+  return { start, end };
+}
+
+function runCarriesMarker(length: number, marker: string): boolean {
+  return marker === '*' ? length % 2 === 1 : length >= 2;
+}
+
+/** The markers around or containing a selection, on its line. Formatting does not span lines. */
+export function findFormatAroundSelection(
   value: string,
   selStart: number,
   selEnd: number,
   before: string,
   after: string
 ): FormatInfo | null {
-  // Constrain search to current line only (inline formatting doesn't span lines)
   const lineStart = value.lastIndexOf('\n', selStart - 1) + 1;
-  const lineEnd = value.indexOf('\n', selEnd);
-  const effectiveLineEnd = lineEnd === -1 ? value.length : lineEnd;
+  const lineEndIndex = value.indexOf('\n', selEnd);
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+  const isAsterisk = before.startsWith('*');
 
-  // Search backwards from selection start for the opening marker
   let openPos = -1;
-
-  for (let i = selStart; i >= lineStart; i--) {
-    if (value.substring(i, i + before.length) === before) {
-      const charBefore = i > 0 ? value[i - 1] : '';
-      const isValidOpen = before !== '**' || charBefore !== '*';
-      if (isValidOpen) {
-        openPos = i;
-        break;
-      }
+  for (let i = selStart; i >= lineStart; i -= 1) {
+    if (value.slice(i, i + before.length) !== before) continue;
+    if (!isAsterisk) {
+      openPos = i;
+      break;
     }
+    const run = asteriskRun(value, i);
+    if (runCarriesMarker(run.end - run.start, before)) {
+      openPos = run.start;
+      break;
+    }
+    i = run.start;
   }
-
   if (openPos === -1) return null;
 
-  // Search forwards from selection end for the closing marker
-  let closePos = -1;
-  const searchStart = Math.max(openPos + before.length, selEnd);
-
-  for (let i = searchStart; i <= effectiveLineEnd - after.length; i++) {
-    if (value.substring(i, i + after.length) === after) {
-      const charAfter = i + after.length < value.length ? value[i + after.length] : '';
-      const isValidClose = after !== '**' || charAfter !== '*';
-      if (isValidClose) {
-        closePos = i;
-        break;
-      }
-    }
-  }
-
-  if (closePos === -1) return null;
-
-  // Verify the selection is actually inside this formatted region
   const innerStart = openPos + before.length;
-  const innerEnd = closePos;
-
-  if (selStart >= innerStart && selEnd <= innerEnd) {
-    return {
-      formatStart: openPos,
-      formatEnd: closePos + after.length,
-      innerStart,
-      innerEnd
-    };
+  let closePos = -1;
+  for (let i = Math.max(innerStart, selEnd); i <= lineEnd - after.length; i += 1) {
+    if (value.slice(i, i + after.length) !== after) continue;
+    if (!isAsterisk) {
+      closePos = i;
+      break;
+    }
+    const run = asteriskRun(value, i);
+    if (runCarriesMarker(run.end - run.start, after)) {
+      closePos = run.end - after.length;
+      break;
+    }
+    i = run.end - 1;
   }
+  if (closePos === -1 || selStart < innerStart || selEnd > closePos) return null;
 
-  return null;
+  return {
+    formatStart: openPos,
+    formatEnd: closePos + after.length,
+    innerStart,
+    innerEnd: closePos,
+  };
 }
 
 export function toggleFormat(
@@ -139,328 +129,229 @@ export function toggleFormat(
   after: string,
   onUpdate?: () => void
 ): void {
-  const { value, selectionStart, selectionEnd } = textarea;
+  const { value, selectionStart: start, selectionEnd: end } = textarea;
+  const format = findFormatAroundSelection(value, start, end, before, after);
 
-  // Check if we can find this format around/containing the selection
-  const formatInfo = findFormatAroundSelection(value, selectionStart, selectionEnd, before, after);
-
-  if (formatInfo) {
-    // Already formatted - unwrap
-    const { formatStart, formatEnd, innerStart, innerEnd } = formatInfo;
-    const innerText = value.substring(innerStart, innerEnd);
-
-    textarea.focus({ preventScroll: true });
-    textarea.setSelectionRange(formatStart, formatEnd);
-    insertTextWithUndo(textarea, innerText);
-
-    // Position cursor/selection on the unwrapped text
-    textarea.selectionStart = formatStart;
-    textarea.selectionEnd = formatStart + innerText.length;
+  if (format) {
+    const inner = value.slice(format.innerStart, format.innerEnd);
+    replaceRange(textarea, format.formatStart, format.formatEnd, inner);
+    textarea.setSelectionRange(format.formatStart, format.formatStart + inner.length);
   } else {
-    // Not formatted - wrap
-    wrapSelection(textarea, before, after, () => {});
+    const selected = value.slice(start, end) || 'text';
+    replaceRange(textarea, start, end, before + selected + after);
+    textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
   }
 
-  if (onUpdate) onUpdate();
+  onUpdate?.();
 }
 
+/** Handles Cmd/Ctrl + B, I, U, and K; true when the key was one of them. */
 export function handleFormattingShortcuts(
-  e: KeyboardEvent,
+  event: KeyboardEvent,
   textarea: HTMLTextAreaElement,
-  onUpdate?: () => void,
-  container?: HTMLElement | null
+  onUpdate: () => void,
+  anchorRoot: HTMLElement
 ): boolean {
-  if (!(e.metaKey || e.ctrlKey)) return false;
+  if (!(event.metaKey || event.ctrlKey)) return false;
 
-  switch (e.key) {
+  switch (event.key) {
     case 'b':
-      e.preventDefault();
+      event.preventDefault();
       toggleFormat(textarea, '**', '**', onUpdate);
       return true;
     case 'i':
-      e.preventDefault();
+      event.preventDefault();
       toggleFormat(textarea, '*', '*', onUpdate);
       return true;
     case 'u':
-      e.preventDefault();
+      event.preventDefault();
       toggleFormat(textarea, '<u>', '</u>', onUpdate);
       return true;
     case 'k':
-      e.preventDefault();
-      // Fire-and-forget async; onUpdate callback handles state sync
-      insertLink(textarea, container ?? null, onUpdate);
+      event.preventDefault();
+      void insertLink(textarea, anchorRoot, onUpdate);
       return true;
   }
   return false;
 }
 
+export function getLineHeadingLevel(text: string): number | null {
+  return parseHeadingLine(text)?.level ?? null;
+}
+
+/** Sets a single-line textarea to a heading of `level`, or back to plain text if already that level. */
+export function toggleLineHeading(textarea: HTMLTextAreaElement, level: number): void {
+  const { value, selectionStart, selectionEnd } = textarea;
+  const heading = parseHeadingLine(value);
+  const indent = heading?.indent ?? value.match(/^\s*/)?.[0] ?? '';
+  const hashes = '#'.repeat(level);
+
+  let nextValue: string;
+  let oldPrefixLength = indent.length;
+  if (heading) {
+    oldPrefixLength = indent.length + heading.level + 1;
+    nextValue = heading.level === level ? `${indent}${heading.body}` : `${indent}${hashes} ${heading.body}`;
+  } else {
+    nextValue = `${indent}${hashes} ${value.slice(indent.length)}`;
+  }
+  const nextPrefixLength = heading?.level === level ? indent.length : indent.length + hashes.length + 1;
+
+  replaceRange(textarea, 0, value.length, nextValue);
+
+  const delta = nextPrefixLength - oldPrefixLength;
+  textarea.setSelectionRange(
+    clamp(selectionStart + delta, 0, nextValue.length),
+    clamp(selectionEnd + delta, 0, nextValue.length)
+  );
+}
+
 export function findLinkAtCursor(textarea: HTMLTextAreaElement): LinkInfo | null {
   const { value, selectionStart } = textarea;
 
-  // Search backwards for '[' that starts a link
   let bracketStart = -1;
-  for (let i = selectionStart; i >= Math.max(0, selectionStart - 500); i--) {
+  for (let i = selectionStart; i >= Math.max(0, selectionStart - LINK_LOOKBEHIND_LIMIT); i -= 1) {
     if (value[i] === '[') {
       bracketStart = i;
       break;
     }
     if (value[i] === '\n' || value[i] === ')') break;
   }
-
   if (bracketStart === -1) return null;
 
-  // Find the full link pattern: [text](url)
-  const afterBracket = value.substring(bracketStart);
-  const linkMatch = afterBracket.match(/^\[([^\]]*)\]\(([^)]*)\)/);
+  const match = value.slice(bracketStart).match(new RegExp(`^${LINK_PATTERN}`));
+  if (!match) return null;
 
-  if (!linkMatch) return null;
+  const end = bracketStart + match[0].length;
+  if (selectionStart > end) return null;
 
-  const fullMatch = linkMatch[0];
-  const linkEnd = bracketStart + fullMatch.length;
-
-  if (selectionStart > linkEnd) return null;
-
-  return {
-    start: bracketStart,
-    end: linkEnd,
-    text: linkMatch[1] ?? '',
-    url: linkMatch[2] ?? '',
-    textStart: bracketStart + 1,
-    textEnd: bracketStart + 1 + (linkMatch[1]?.length ?? 0),
-    urlStart: bracketStart + (linkMatch[1]?.length ?? 0) + 3,
-    urlEnd: linkEnd - 1
-  };
+  return { start: bracketStart, end, text: match[1] ?? '', url: match[2] ?? '' };
 }
 
+/** Anchors, paths, and URLs with a scheme pass through; bare domains and addresses get one. */
 function normalizeLinkUrl(input: string): string {
-  const trimmed = (input || '').trim();
-  if (!trimmed) return '';
-
-  if (
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('./') ||
-    trimmed.startsWith('../')
-  ) {
-    return trimmed;
-  }
-
-  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
-    return `mailto:${trimmed}`;
-  }
-
-  if (/^(?:www\.)?[\w-]+(?:\.[\w-]+)+(?::\d+)?(?:[/?#]|$)/.test(trimmed)) {
-    return `https://${trimmed}`;
-  }
-
+  const trimmed = input.trim();
+  if (/^(#|\/|\.\/|\.\.\/)/.test(trimmed) || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) return trimmed;
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) return `mailto:${trimmed}`;
+  if (/^(?:www\.)?[\w-]+(?:\.[\w-]+)+(?::\d+)?(?:[/?#]|$)/.test(trimmed)) return `https://${trimmed}`;
   return trimmed;
 }
 
+/** Inserts a link around the selection, or edits the one under the cursor. */
 export async function insertLink(
   textarea: HTMLTextAreaElement,
-  container: HTMLElement | null,
-  onUpdate?: () => void
+  anchorRoot: HTMLElement,
+  onUpdate: () => void
 ): Promise<void> {
-  const existingLink = findLinkAtCursor(textarea);
+  const existing = findLinkAtCursor(textarea);
+  const { selectionStart, selectionEnd } = textarea;
+  const selectedText = textarea.value.slice(selectionStart, selectionEnd) || 'link text';
 
-  // Store selection info before dialog opens (in case focus changes)
-  const selectionStart = textarea.selectionStart;
-  const selectionEnd = textarea.selectionEnd;
-  const selectedText = textarea.value.substring(selectionStart, selectionEnd) || 'link text';
-
-  // Show dialog with anchor discovery from container
-  const result = await showLinkDialog({
-    existingUrl: existingLink?.url,
-    container: container ?? document.body
-  });
-
+  const result = await showLinkDialog({ existingUrl: existing?.url, container: anchorRoot });
   if (result.action === 'cancel') return;
 
-  if (result.action === 'remove' && existingLink) {
-    // Remove link, keep text
-    textarea.focus({ preventScroll: true });
-    textarea.setSelectionRange(existingLink.start, existingLink.end);
-    insertTextWithUndo(textarea, existingLink.text);
+  if (result.action === 'remove' && existing) {
+    replaceRange(textarea, existing.start, existing.end, existing.text);
   } else if (result.action === 'insert' && result.url) {
-    const normalizedUrl = normalizeLinkUrl(result.url);
-    if (!normalizedUrl) return;
-
-    if (existingLink) {
-      // Update existing link URL
-      const newLink = `[${existingLink.text}](${normalizedUrl})`;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(existingLink.start, existingLink.end);
-      insertTextWithUndo(textarea, newLink);
+    const url = normalizeLinkUrl(result.url);
+    if (!url) return;
+    if (existing) {
+      replaceRange(textarea, existing.start, existing.end, `[${existing.text}](${url})`);
     } else {
-      // Create new link
-      const linkText = `[${selectedText}](${normalizedUrl})`;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(selectionStart, selectionEnd);
-      insertTextWithUndo(textarea, linkText);
+      replaceRange(textarea, selectionStart, selectionEnd, `[${selectedText}](${url})`);
     }
   }
 
-  if (onUpdate) onUpdate();
+  onUpdate();
 }
 
-function indentLines(textarea: HTMLTextAreaElement, onUpdate?: () => void): void {
+function selectedLineRange(textarea: HTMLTextAreaElement): { start: number; end: number } {
   const { value, selectionStart, selectionEnd } = textarea;
-  const indent = '   '; // 3 spaces for list sub-items
+  const end = value.indexOf('\n', selectionEnd);
+  return {
+    start: value.lastIndexOf('\n', selectionStart - 1) + 1,
+    end: end === -1 ? value.length : end,
+  };
+}
 
-  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
-  let lineEnd = value.indexOf('\n', selectionEnd);
-  if (lineEnd === -1) lineEnd = value.length;
+function indentLines(textarea: HTMLTextAreaElement, onUpdate: () => void): void {
+  const { value, selectionStart, selectionEnd } = textarea;
+  const { start, end } = selectedLineRange(textarea);
+  const lines = value.slice(start, end);
 
-  const beforeLines = value.substring(0, lineStart);
-  const selectedLines = value.substring(lineStart, lineEnd);
-  const afterLines = value.substring(lineEnd);
-
-  const indentedLines = selectedLines.split('\n').map(line => {
-    const numberedMatch = line.match(/^(\s*)\d+\.\s(.*)$/);
-    if (numberedMatch) {
-      return indent + (numberedMatch[1] ?? '') + '- ' + (numberedMatch[2] ?? '');
-    }
-    return indent + line;
+  const indented = lines.split('\n').map((line) => {
+    const numbered = line.match(/^(\s*)\d+\.\s(.*)$/);
+    return numbered
+      ? `${LIST_INDENT}${numbered[1] ?? ''}- ${numbered[2] ?? ''}`
+      : LIST_INDENT + line;
   }).join('\n');
 
-  textarea.value = beforeLines + indentedLines + afterLines;
-
-  const addedChars = indentedLines.length - selectedLines.length;
-  textarea.selectionStart = selectionStart + indent.length;
-  textarea.selectionEnd = selectionEnd + addedChars;
-
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  if (onUpdate) onUpdate();
+  textarea.value = value.slice(0, start) + indented + value.slice(end);
+  textarea.selectionStart = selectionStart + LIST_INDENT.length;
+  textarea.selectionEnd = selectionEnd + (indented.length - lines.length);
+  onUpdate();
 }
 
-function outdentLines(textarea: HTMLTextAreaElement, onUpdate?: () => void): void {
+function outdentLines(textarea: HTMLTextAreaElement, onUpdate: () => void): void {
   const { value, selectionStart, selectionEnd } = textarea;
-
-  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
-  let lineEnd = value.indexOf('\n', selectionEnd);
-  if (lineEnd === -1) lineEnd = value.length;
-
-  const beforeLines = value.substring(0, lineStart);
-  const selectedLines = value.substring(lineStart, lineEnd);
-  const afterLines = value.substring(lineEnd);
+  const { start, end } = selectedLineRange(textarea);
 
   let firstLineRemoved = 0;
   let totalRemoved = 0;
-
-  const outdentedLines = selectedLines.split('\n').map((line, idx) => {
-    const match = line.match(/^( {1,4}|\t)/);
-    if (match) {
-      const removed = match[0].length;
-      if (idx === 0) firstLineRemoved = removed;
-      totalRemoved += removed;
-      return line.substring(removed);
-    }
-    return line;
+  const outdented = value.slice(start, end).split('\n').map((line, index) => {
+    const removed = line.match(/^( {1,4}|\t)/)?.[0].length ?? 0;
+    if (index === 0) firstLineRemoved = removed;
+    totalRemoved += removed;
+    return line.slice(removed);
   }).join('\n');
 
-  textarea.value = beforeLines + outdentedLines + afterLines;
-
-  textarea.selectionStart = Math.max(lineStart, selectionStart - firstLineRemoved);
+  textarea.value = value.slice(0, start) + outdented + value.slice(end);
+  textarea.selectionStart = Math.max(start, selectionStart - firstLineRemoved);
   textarea.selectionEnd = selectionEnd - totalRemoved;
-
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  if (onUpdate) onUpdate();
+  onUpdate();
 }
 
-function handleListEnter(
-  e: KeyboardEvent,
-  textarea: HTMLTextAreaElement,
-  onUpdate?: () => void
-): boolean {
-  const { value, selectionStart, selectionEnd } = textarea;
+/** The marker that continues a list line (`- ` or the next number), and the item's text. */
+export function parseListLine(line: string): { indent: string; nextMarker: string; content: string } | null {
+  const unordered = line.match(/^(\s*)([-*+])\s(.*)$/);
+  if (unordered) {
+    return { indent: unordered[1] ?? '', nextMarker: `${unordered[2]} `, content: unordered[3] ?? '' };
+  }
+  const ordered = line.match(/^(\s*)(\d+)\.\s(.*)$/);
+  if (ordered) {
+    return { indent: ordered[1] ?? '', nextMarker: `${Number.parseInt(ordered[2] ?? '1', 10) + 1}. `, content: ordered[3] ?? '' };
+  }
+  return null;
+}
 
+/** Continues a list on Enter, or ends it if the item is empty. */
+function handleListEnter(event: KeyboardEvent, textarea: HTMLTextAreaElement, onUpdate: () => void): boolean {
+  const { value, selectionStart, selectionEnd } = textarea;
   if (selectionStart !== selectionEnd) return false;
 
-  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
-  const lineEnd = value.indexOf('\n', selectionStart);
-  const currentLine = value.substring(lineStart, lineEnd === -1 ? value.length : lineEnd);
+  const { start, end } = selectedLineRange(textarea);
+  const list = parseListLine(value.slice(start, end));
+  if (!list) return false;
 
-  // Check for unordered list: -, *, +
-  const unorderedMatch = currentLine.match(/^(\s*)([-*+])\s(.*)$/);
-  if (unorderedMatch) {
-    const [, indent = '', marker = '-', content = ''] = unorderedMatch;
-
-    if (content.trim() === '') {
-      e.preventDefault();
-      const before = value.substring(0, lineStart);
-      const after = value.substring(lineEnd === -1 ? value.length : lineEnd);
-      textarea.value = before + after;
-      textarea.selectionStart = textarea.selectionEnd = lineStart;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      if (onUpdate) onUpdate();
-      return true;
-    }
-
-    e.preventDefault();
-    const newLine = `\n${indent}${marker} `;
-    insertTextWithUndo(textarea, newLine);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    if (onUpdate) onUpdate();
-    return true;
+  event.preventDefault();
+  if (list.content.trim() === '') {
+    textarea.value = value.slice(0, start) + value.slice(end);
+    textarea.selectionStart = textarea.selectionEnd = start;
+  } else {
+    insertTextWithUndo(textarea, `\n${list.indent}${list.nextMarker}`);
   }
-
-  // Check for ordered list: 1., 2., etc.
-  const orderedMatch = currentLine.match(/^(\s*)(\d+)\.\s(.*)$/);
-  if (orderedMatch) {
-    const [, indent = '', num = '1', content = ''] = orderedMatch;
-
-    if (content.trim() === '') {
-      e.preventDefault();
-      const before = value.substring(0, lineStart);
-      const after = value.substring(lineEnd === -1 ? value.length : lineEnd);
-      textarea.value = before + after;
-      textarea.selectionStart = textarea.selectionEnd = lineStart;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-      if (onUpdate) onUpdate();
-      return true;
-    }
-
-    e.preventDefault();
-    const nextNum = parseInt(num, 10) + 1;
-    const newLine = `\n${indent}${nextNum}. `;
-    insertTextWithUndo(textarea, newLine);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    if (onUpdate) onUpdate();
-    return true;
-  }
-
-  return false;
+  onUpdate();
+  return true;
 }
 
-export function handleListShortcuts(
-  e: KeyboardEvent,
-  textarea: HTMLTextAreaElement,
-  onUpdate?: () => void
-): boolean {
-  // Tab - indent
-  if (e.key === 'Tab' && !e.shiftKey) {
-    e.preventDefault();
-    indentLines(textarea, onUpdate);
+/** Handles Tab, Shift+Tab, and Enter in a list; true when the key was consumed. */
+export function handleListShortcuts(event: KeyboardEvent, textarea: HTMLTextAreaElement, onUpdate: () => void): boolean {
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    (event.shiftKey ? outdentLines : indentLines)(textarea, onUpdate);
     return true;
   }
-
-  // Shift+Tab - outdent
-  if (e.key === 'Tab' && e.shiftKey) {
-    e.preventDefault();
-    outdentLines(textarea, onUpdate);
-    return true;
+  if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+    return handleListEnter(event, textarea, onUpdate);
   }
-
-  // Enter - list continuation
-  if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-    if (handleListEnter(e, textarea, onUpdate)) {
-      return true;
-    }
-  }
-
   return false;
 }

@@ -12,11 +12,6 @@
     overflow: visible;
 }
 
-/* Override parent container overflow when editing */
-.project-item.active .project-details:has(.edit-mode-active) {
-    overflow: visible;
-}
-
 .homepage-detail-content:has(.edit-mode-active) {
     overflow: visible;
 }
@@ -33,13 +28,6 @@ body.editing {
     overflow-x: hidden;
 }
 
-/* Hide the edit button in project top bar when already in edit mode */
-body.editing .edit-project-btn-top {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
 /* Hide the main header nav bar when in edit mode */
 body.editing #main-header {
     display: none;
@@ -53,6 +41,67 @@ body.editing > main {
 /* Prevent background scrolling when modal is open */
 body.modal-open {
     overflow: hidden;
+}
+
+/* ========================================
+   Header Controls
+   ======================================== */
+
+#main-header .new-project-btn,
+#main-header .show-drafts-toggle {
+    padding: 6px 12px;
+    background: rgba(100, 100, 100, 0.8);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#main-header .new-project-btn *,
+#main-header .show-drafts-toggle * {
+    color: inherit;
+}
+
+#main-header .new-project-btn:hover,
+#main-header .show-drafts-toggle:hover {
+    background: rgba(120, 120, 120, 0.9);
+}
+
+#main-header .new-project-btn .btn-icon,
+#main-header .show-drafts-toggle .btn-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+#main-header nav.compact-edit-actions {
+    gap: var(--spacing-small);
+}
+
+#main-header nav.compact-edit-actions .new-project-btn .btn-label,
+#main-header nav.compact-edit-actions .show-drafts-toggle .btn-label {
+    display: none;
+}
+
+#main-header nav.compact-edit-actions .new-project-btn,
+#main-header nav.compact-edit-actions .show-drafts-toggle {
+    padding: 6px;
+    min-width: 30px;
+    justify-content: center;
+    gap: 0;
+}
+
+#main-header .show-drafts-toggle.active {
+    background: var(--highlight-color);
+    color: var(--background-color);
 }
 
 /* ========================================
@@ -113,6 +162,40 @@ body.modal-open {
 .edit-status {
     font-size: 13px;
     transition: color 0.2s ease;
+}
+
+.edit-status[data-status="pending"] { color: #eab308; }
+.edit-status[data-status="saving"] { color: #3b82f6; }
+.edit-status[data-status="saved"] { color: #22c55e; }
+.edit-status[data-status="error"] { color: #ef4444; }
+.edit-status[data-status="conflict"] { color: #f97316; }
+
+.edit-conflict-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: #7c2d12;
+    color: #fff;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+}
+
+.edit-conflict-btn {
+    padding: 6px 16px;
+    border: 1px solid rgba(255, 255, 255, .3);
+    border-radius: 6px;
+    background: transparent;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
 }
 
 .edit-toolbar-right {
@@ -677,27 +760,6 @@ body.modal-open {
 .text-line-input::placeholder {
     color: #555;
 }
-
-.block-textarea {
-    width: 100%;
-    min-height: 40px;
-    max-height: 60vh;
-    padding: 8px 0;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: #e0e0e0;
-    line-height: 1.7;
-    font-size: 16px;
-    font-family: inherit;
-    resize: none;
-    overflow-y: auto;
-}
-
-.block-textarea::placeholder {
-    color: #555;
-}
-
 /* ========================================
    Code Block
    ======================================== */
@@ -1288,15 +1350,3 @@ body.modal-open {
     background: rgba(59, 130, 246, 0.1);
 }
 
-/* ========================================
-   Edit Project Buttons (in project-links footer)
-   ======================================== */
-
-/* Stroke-based SVG icons in project-links need stroke color instead of fill */
-.project-links .edit-project-btn .icon {
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
