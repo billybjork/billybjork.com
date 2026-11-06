@@ -1,14 +1,12 @@
 import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
 import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
 import { restorePersistedScroll } from './scroll-restore';
+import { init as initProjectEditor, initAbout as initAboutEditor } from './mode';
+import ProjectCreate from './project-create';
 
 // ========== CONSTANTS ==========
 
-const EDIT_MODE_STYLE_HREFS = [
-  '/static/css/edit-mode-base.css',
-  '/static/css/edit-mode-settings.css',
-  '/static/css/edit-mode-extras.css',
-] as const;
+const EDIT_STYLESHEETS = ['edit-mode-base.css', 'edit-mode-settings.css', 'edit-mode-extras.css'];
 const NEW_PROJECT_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 const EDIT_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const DRAFTS_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
@@ -18,21 +16,6 @@ let headerCompactionResizeHandlerBound = false;
 let headerCompactionFrame: number | null = null;
 
 // ========== HELPERS ==========
-
-function buildUrlWithShowDrafts(
-  pathname: string,
-  params: Record<string, string | null | undefined> = {}
-): string {
-  const url = new URL(pathname, window.location.origin);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value === null || value === undefined) return;
-    url.searchParams.set(key, value);
-  });
-  if (isShowDraftsActive()) {
-    url.searchParams.set('show_drafts', 'true');
-  }
-  return url.toString();
-}
 
 function readProjectSlugFromPath(): string | null {
   const pathname = window.location.pathname.replace(/\/+$/, '');
@@ -51,7 +34,6 @@ function getActiveProjectSlug(): string | null {
 
 function getEditableProjectContent(): HTMLElement | null {
   return document.querySelector<HTMLElement>('#homepage-detail-content .project-content')
-    ?? document.querySelector<HTMLElement>('.project-item.active .project-content')
     ?? document.querySelector<HTMLElement>('.project-content');
 }
 
@@ -74,43 +56,20 @@ async function activateProjectEditMode(preferredSlug?: string | null): Promise<v
     return;
   }
 
-  if (!window.EditMode) {
-    await loadEditModeScripts();
-  }
-  window.EditMode?.init(slug);
+  void initProjectEditor(slug);
 }
 
 // ========== SCRIPT LOADING ==========
 
-/**
- * Load edit mode CSS immediately (for button styling)
- */
+/** /static is served immutable, so these carry the version the server gave edit.js. */
 function loadEditModeCSS(): void {
-  EDIT_MODE_STYLE_HREFS.forEach((href) => {
-    const alreadyLoaded = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'))
-      .some((link) => {
-        const currentHref = link.getAttribute('href') || '';
-        return currentHref === href || currentHref.endsWith(href);
-      });
-    if (alreadyLoaded) return;
-
+  const editScript = document.querySelector<HTMLScriptElement>('script[src*="build/edit.js"]');
+  const version = editScript ? new URL(editScript.src, window.location.href).search : '';
+  EDIT_STYLESHEETS.forEach((name) => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = href;
+    link.href = `/static/css/${name}${version}`;
     document.head.appendChild(link);
-  });
-}
-
-/**
- * Ensure edit mode modules are ready
- * In the generated runtime build, all modules are already loaded via /static/build/edit.js
- */
-function loadEditModeScripts(): Promise<void> {
-  return new Promise((resolve) => {
-    loadEditModeCSS();
-    // All edit modules are already loaded by the generated edit runtime.
-    // Just resolve immediately
-    resolve();
   });
 }
 
@@ -184,20 +143,12 @@ function addNewProjectButton(): void {
   btn.title = buttonLabel;
   btn.setAttribute('aria-label', buttonLabel);
   btn.innerHTML = `${buttonIcon}<span class="btn-label">${buttonLabel}</span>`;
-  btn.addEventListener('click', async (e) => {
+  btn.addEventListener('click', (e) => {
     e.preventDefault();
     if (isAboutPage) {
-      if (!window.EditMode) {
-        await loadEditModeScripts();
-      }
-      if (window.EditMode) {
-        window.EditMode.initAbout();
-      }
+      void initAboutEditor();
     } else {
-      if (!window.ProjectCreate) {
-        await loadEditModeScripts();
-      }
-      window.ProjectCreate?.show();
+      ProjectCreate.show();
     }
   });
 
@@ -266,12 +217,7 @@ function initEditModeKeyboardShortcut(): void {
         url.searchParams.set('edit', '');
         window.history.replaceState(window.history.state, '', url.toString());
 
-        if (!window.EditMode) {
-          await loadEditModeScripts();
-        }
-        if (window.EditMode) {
-          window.EditMode.initAbout();
-        }
+        void initAboutEditor();
         return;
       }
 
@@ -291,15 +237,8 @@ async function bootProjectEditFromUrl(): Promise<void> {
   }
 
   const urlParams = new URLSearchParams(window.location.search);
-  if (!urlParams.has('edit') && !urlParams.has('settings')) {
+  if (!urlParams.has('edit')) {
     return;
-  }
-
-  if (urlParams.has('settings')) {
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.delete('settings');
-    nextUrl.searchParams.set('edit', '');
-    window.history.replaceState(window.history.state, '', nextUrl.toString());
   }
 
   await activateProjectEditMode(readProjectSlugFromPath());
@@ -333,14 +272,7 @@ function initializeEditMode(): void {
   if (window.location.pathname === '/me') {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('edit')) {
-      setTimeout(async () => {
-        if (!window.EditMode) {
-          await loadEditModeScripts();
-        }
-        if (window.EditMode) {
-          window.EditMode.initAbout();
-        }
-      }, 100);
+      void initAboutEditor();
     }
   }
 
@@ -358,13 +290,3 @@ export function init(): void {
     initializeEditMode();
   }
 }
-
-const EditBootstrap = {
-  init,
-  loadEditModeScripts,
-  loadEditModeCSS,
-  isShowDraftsActive,
-  buildUrlWithShowDrafts,
-};
-
-export default EditBootstrap;

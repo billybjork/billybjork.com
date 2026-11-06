@@ -1,7 +1,3 @@
-/**
- * API request and response type definitions
- */
-
 export interface VideoData {
   hls?: string;
   thumbnail?: string;
@@ -35,14 +31,6 @@ export interface AboutData {
   revision?: string;
 }
 
-export interface ApiErrorResponse {
-  detail: string;
-  status?: number;
-}
-
-/**
- * Generic fetch options with proper typing
- */
 export interface FetchJSONOptions extends RequestInit {
   headers?: Record<string, string>;
 }

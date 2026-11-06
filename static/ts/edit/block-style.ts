@@ -5,6 +5,10 @@ interface MediaStyleBlock {
   align?: Alignment;
 }
 
+export type StyleMap = Record<string, string | undefined>;
+
+const ALIGNMENT_DECLARATION = /^(margin-(left|right)\s*:\s*auto|display\s*:\s*block)$/;
+
 function alignmentMargins(align: Alignment): string {
   switch (align) {
     case 'center': return 'margin-left: auto; margin-right: auto';
@@ -23,23 +27,20 @@ export function parseAlignmentFromStyle(style: string | null | undefined): Align
   return 'left';
 }
 
+/** What is left of a media style once its alignment and display declarations are gone. */
+export function sizeStyleOf(style: string | null | undefined): string {
+  return (style ?? '')
+    .split(';')
+    .map((declaration) => declaration.trim())
+    .filter((declaration) => declaration && !ALIGNMENT_DECLARATION.test(declaration))
+    .join('; ');
+}
+
 /** A media style with the size kept and the alignment rebuilt from `block.align`. */
 export function buildMediaStyleString(block: MediaStyleBlock): string {
-  const styleParts: string[] = ['display: block'];
-
-  if (block.style) {
-    const sizeStyle = block.style
-      .replace(/margin-left:\s*auto;?\s*/g, '')
-      .replace(/margin-right:\s*auto;?\s*/g, '')
-      .replace(/display:\s*block;?\s*/g, '')
-      .trim();
-    if (sizeStyle) styleParts.push(sizeStyle);
-  }
-
-  const margins = alignmentMargins(block.align ?? 'left');
-  if (margins) styleParts.push(margins);
-
-  return styleParts.join('; ');
+  return ['display: block', sizeStyleOf(block.style), alignmentMargins(block.align ?? 'left')]
+    .filter(Boolean)
+    .join('; ');
 }
 
 export function getTextAlignmentStyle(align: Alignment | undefined): string {
@@ -51,4 +52,33 @@ export function parseTextAlignmentFromStyle(style: string | null | undefined): A
   if (!style) return 'left';
   const match = style.match(/text-align:\s*(left|center|right)/);
   return (match?.[1] as Alignment) ?? 'left';
+}
+
+export function parseStyle(style: string | null | undefined): StyleMap {
+  const styles: StyleMap = {};
+  if (!style) return styles;
+
+  style.split(';').forEach((part) => {
+    const [prop, ...rest] = part.split(':');
+    if (!prop) return;
+    const value = rest.join(':').trim();
+    if (!value) return;
+    styles[prop.trim().toLowerCase()] = value;
+  });
+  return styles;
+}
+
+export function serializeStyle(styles: StyleMap): string {
+  return Object.entries(styles)
+    .filter(([, value]) => value)
+    .map(([prop, value]) => `${prop}: ${value}`)
+    .join('; ');
+}
+
+export function styleHasWidth(style: string | null | undefined): boolean {
+  return !!style && /(^|;)\s*width\s*:/.test(style);
+}
+
+export function styleHasHeight(style: string | null | undefined): boolean {
+  return !!style && /(^|;)\s*height\s*:/.test(style);
 }

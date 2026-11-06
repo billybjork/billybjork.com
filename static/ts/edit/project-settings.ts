@@ -6,14 +6,13 @@
 import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
 import { fetchJSON } from './api';
 import { showNotification } from './notify';
-import { withShowDrafts } from './show-drafts';
 import { destroyHlsInstance as destroyVideoHlsInstance } from '../core/hls';
 import { formatMinutesSeconds } from './text';
 import {
   renderPreviewStatus as renderProjectSettingsPreviewStatus,
   switchPreviewToHls as switchProjectSettingsPreviewToHls,
 } from './project-settings-video-preview';
-import { buildProjectSettingsMarkup, buildProjectVideoViewMarkup } from './project-settings-templates';
+import { buildProjectVideoViewMarkup } from './project-settings-templates';
 import { renderProjectSettingsTimelineFrames } from './project-settings-timeline';
 
 const MIN_SPRITE_DURATION = 1;
@@ -101,18 +100,14 @@ interface ProjectSettingsState {
   _thumbPollErrorLogged: boolean;
   _hlsPollErrorLogged: boolean;
   _processingPollErrorLogged: boolean;
-  videoOnlyMode: boolean;
   onVideoSaved: ((videoData: VideoData) => Promise<void> | void) | null;
 }
 
 const ProjectSettings: ProjectSettingsState & {
-  show(slug: string): Promise<void>;
   showVideoEditor(slug: string, options?: ShowVideoEditorOptions): Promise<void>;
   hide(): void;
   createModal(): void;
   setupBaseListeners(): void;
-  renderSettingsView(): void;
-  setupSettingsListeners(): void;
   showVideoView(file?: File | null): void;
   getProcessButtonText(): string;
   extractServerThumbnails(file: File, content: Element): void;
@@ -124,7 +119,6 @@ const ProjectSettings: ProjectSettingsState & {
   renderServerThumbnails(framesB64: string[]): void;
   setupVideoListeners(content: Element): void;
   updateSpriteLoopUI(): void;
-  showSettingsView(): void;
   cleanupVideoState(): void;
   handleDrag(clientX: number): void;
   updateSpriteRange(): void;
@@ -132,9 +126,6 @@ const ProjectSettings: ProjectSettingsState & {
   processVideo(): Promise<void>;
   handleProcessingError(message: string, processBtn: HTMLButtonElement | null, progressDiv: HTMLElement | null): void;
   cancelUpload(): void;
-  saveSettings(): Promise<void>;
-  saveVideoData(videoData: VideoData): Promise<void>;
-  deleteProject(): Promise<void>;
 } = {
   modal: null,
   projectSlug: null,
@@ -179,44 +170,14 @@ const ProjectSettings: ProjectSettingsState & {
   _thumbPollErrorLogged: false,
   _hlsPollErrorLogged: false,
   _processingPollErrorLogged: false,
-  videoOnlyMode: false,
   onVideoSaved: null,
-
-  /**
-   * Show settings modal for a project
-   */
-  async show(slug: string): Promise<void> {
-    this.projectSlug = slug;
-    this.videoOnlyMode = false;
-    this.onVideoSaved = null;
-
-    // Pause any playing videos in the project
-    const projectItem = document.querySelector(`#project-${slug}`);
-    if (projectItem) {
-      projectItem.querySelectorAll('video').forEach((video) => (video as HTMLVideoElement).pause());
-    }
-
-    try {
-      this.projectData = await fetchJSON<ProjectData>(`/api/project/${slug}`);
-      this.createModal();
-    } catch (error) {
-      console.error('Failed to load project:', error);
-      showNotification('Failed to load project settings', 'error');
-    }
-  },
 
   /**
    * Open directly in hero video editor view (without settings form).
    */
   async showVideoEditor(slug: string, options: ShowVideoEditorOptions = {}): Promise<void> {
     this.projectSlug = slug;
-    this.videoOnlyMode = true;
     this.onVideoSaved = options.onVideoSaved ?? null;
-
-    const projectItem = document.querySelector(`#project-${slug}`);
-    if (projectItem) {
-      projectItem.querySelectorAll('video').forEach((video) => (video as HTMLVideoElement).pause());
-    }
 
     try {
       this.projectData = options.projectData ?? await fetchJSON<ProjectData>(`/api/project/${slug}`);
@@ -243,9 +204,6 @@ const ProjectSettings: ProjectSettingsState & {
     document.body.appendChild(this.modal);
     lockBodyScroll();
 
-    if (!this.videoOnlyMode) {
-      this.renderSettingsView();
-    }
     this.setupBaseListeners();
   },
 
@@ -259,15 +217,7 @@ const ProjectSettings: ProjectSettingsState & {
     const overlay = this.modal.querySelector('.edit-settings-overlay');
     if (overlay) {
       overlay.addEventListener('click', () => {
-        if (this.currentView === 'video') {
-          if (this.videoOnlyMode) {
-            this.hide();
-          } else {
-            this.showSettingsView();
-          }
-        } else {
-          this.hide();
-        }
+        this.hide();
       });
     }
 
@@ -276,100 +226,10 @@ const ProjectSettings: ProjectSettingsState & {
       if (e.key === 'Escape' && this.modal) {
         e.preventDefault();
         e.stopPropagation();
-        if (this.currentView === 'video') {
-          if (this.videoOnlyMode) {
-            this.hide();
-          } else {
-            this.cancelUpload();
-          }
-        } else {
-          this.hide();
-        }
+        this.hide();
       }
     };
     document.addEventListener('keydown', this.escHandler, true);
-  },
-
-  /**
-   * Render the settings form view
-   */
-  renderSettingsView(): void {
-    this.currentView = 'settings';
-    const data = this.projectData;
-    if (!this.modal || !data) return;
-
-    const content = this.modal.querySelector('.edit-settings-content');
-    if (!content) return;
-
-    // Remove video class
-    content.classList.remove('edit-settings-content--video');
-
-    content.innerHTML = buildProjectSettingsMarkup(data);
-
-    this.setupSettingsListeners();
-  },
-
-  /**
-   * Setup settings-specific listeners
-   */
-  setupSettingsListeners(): void {
-    if (!this.modal) return;
-    const content = this.modal.querySelector('.edit-settings-content');
-    if (!content) return;
-
-    const closeBtn = content.querySelector('.edit-settings-close');
-    if (closeBtn) closeBtn.addEventListener('click', () => this.hide());
-
-    const cancelBtn = content.querySelector('#settings-cancel');
-    if (cancelBtn) cancelBtn.addEventListener('click', () => this.hide());
-
-    const form = content.querySelector('#settings-form');
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await this.saveSettings();
-      });
-    }
-
-    const deleteBtn = content.querySelector('#delete-project');
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', async () => {
-        if (confirm(`Are you sure you want to delete "${this.projectData?.name}"? This cannot be undone.`)) {
-          await this.deleteProject();
-        }
-      });
-    }
-
-    // Hero video upload
-    const uploadBtn = content.querySelector('#upload-hero-video');
-    const updateSpriteBtn = content.querySelector('#update-hero-sprite');
-    const fileInput = content.querySelector('#hero-video-input') as HTMLInputElement | null;
-
-    if (uploadBtn && fileInput) {
-      uploadBtn.addEventListener('click', () => fileInput.click());
-
-      fileInput.addEventListener('change', (e) => {
-        const target = e.target as HTMLInputElement;
-        const file = target.files?.[0];
-        if (file) {
-          if (!file.type.startsWith('video/')) {
-            showNotification('Please select a video file', 'error');
-            return;
-          }
-          this.showVideoView(file);
-        }
-      });
-    }
-
-    if (updateSpriteBtn) {
-      updateSpriteBtn.addEventListener('click', () => {
-        if (!this.projectData?.video?.hls) {
-          showNotification('No existing hero video found for this project.', 'error');
-          return;
-        }
-        this.showVideoView();
-      });
-    }
   },
 
   /**
@@ -1063,18 +923,6 @@ const ProjectSettings: ProjectSettingsState & {
   },
 
   /**
-   * Restore the settings form view, cleaning up video state
-   */
-  showSettingsView(): void {
-    if (this.videoOnlyMode) {
-      this.hide();
-      return;
-    }
-    this.cleanupVideoState();
-    this.renderSettingsView();
-  },
-
-  /**
    * Clean up video-related state and listeners
    */
   cleanupVideoState(): void {
@@ -1406,11 +1254,7 @@ const ProjectSettings: ProjectSettingsState & {
         if (this.projectData) {
           this.projectData.video = result.video;
         }
-        if (this.onVideoSaved) {
-          await this.onVideoSaved(result.video);
-        } else {
-          await this.saveVideoData(result.video);
-        }
+        await this.onVideoSaved?.(result.video);
 
         progressFill.style.width = '100%';
         progressText.textContent = 'Complete!';
@@ -1420,8 +1264,7 @@ const ProjectSettings: ProjectSettingsState & {
           : 'Video processed successfully!';
         showNotification(successMessage, 'success');
 
-        // Return to settings view after a brief pause
-        setTimeout(() => this.showSettingsView(), 800);
+        setTimeout(() => this.hide(), 800);
       } else {
         throw new Error(result.detail || 'Processing failed');
       }
@@ -1461,103 +1304,7 @@ const ProjectSettings: ProjectSettingsState & {
    * Cancel upload or return to settings from video view
    */
   cancelUpload(): void {
-    if (this.activeXhr) {
-      this.activeXhr.abort();
-      this.activeXhr = null;
-    }
-    this.showSettingsView();
-  },
-
-  /**
-   * Save settings
-   */
-  async saveSettings(): Promise<void> {
-    if (!this.modal) return;
-
-    const form = this.modal.querySelector('#settings-form') as HTMLFormElement | null;
-    if (!form) return;
-
-    const formData = new FormData(form);
-
-    const data = {
-      name: formData.get('name'),
-      slug: formData.get('slug'),
-      original_slug: this.projectSlug,
-      date: formData.get('date'),
-      youtube: formData.get('youtube') || null,
-      og_image: this.projectData?.og_image || null,
-      draft: formData.get('draft') === 'on',
-      pinned: formData.get('pinned') === 'on',
-      video: this.projectData?.video,
-      markdown: this.projectData?.markdown,
-      base_revision: this.projectData?.revision,
-    };
-
-    try {
-      const result = await fetchJSON<{ revision?: string }>('/api/save-project', {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      if (result.revision && this.projectData) {
-        this.projectData.revision = result.revision;
-      }
-
-      showNotification('Settings saved!', 'success');
-
-      // If slug changed, redirect
-      if (data.slug !== this.projectSlug) {
-        window.location.href = withShowDrafts(`/${data.slug}`);
-      } else {
-        this.hide();
-        window.location.reload();
-      }
-    } catch (error) {
-      console.error('Save settings error:', error);
-      showNotification('Failed to save settings', 'error');
-    }
-  },
-
-  /**
-   * Save video data only
-   */
-  async saveVideoData(videoData: VideoData): Promise<void> {
-    if (!this.projectData) return;
-
-    const data = {
-      ...this.projectData,
-      original_slug: this.projectSlug,
-      video: videoData,
-      base_revision: this.projectData.revision,
-    };
-
-    const result = await fetchJSON<{ revision?: string }>('/api/save-project', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    // Update revision for subsequent saves
-    if (result.revision) {
-      this.projectData.revision = result.revision;
-    }
-  },
-
-  /**
-   * Delete project
-   */
-  async deleteProject(): Promise<void> {
-    if (!this.projectSlug) return;
-
-    try {
-      await fetchJSON(`/api/project/${this.projectSlug}`, {
-        method: 'DELETE',
-      });
-
-      showNotification('Project deleted', 'success');
-      this.hide();
-      window.location.href = withShowDrafts('/');
-    } catch (error) {
-      console.error('Delete project error:', error);
-      showNotification('Failed to delete project', 'error');
-    }
+    this.hide();
   },
 
   /**
@@ -1574,7 +1321,6 @@ const ProjectSettings: ProjectSettingsState & {
       this.modal = null;
     }
     this.onVideoSaved = null;
-    this.videoOnlyMode = false;
     unlockBodyScroll();
   },
 };

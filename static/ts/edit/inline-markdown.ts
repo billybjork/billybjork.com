@@ -7,6 +7,8 @@ export interface InlineMatch {
 
 export const INLINE_MAX_DEPTH = 8;
 
+export const DIVIDER_LINE = /^(\*{3,}|-{3,}|_{3,})$/;
+
 function appendInlineFormatted(container: Node, text: string): void {
   container.appendChild(parseInlineTokens(text));
 }

@@ -3,7 +3,7 @@
  * Handles image and video uploads, processing, and S3 integration
  */
 
-import type { Block, ImageBlock, VideoBlock, HtmlBlock, BlockType } from '../types/blocks';
+import type { Block, ImageBlock, VideoBlock, HtmlBlock } from '../types/blocks';
 import { showNotification } from './notify';
 
 // ========== TYPES ==========
@@ -59,10 +59,7 @@ interface BlockLocation {
 // Callbacks for integration with edit mode
 interface EditModeCallbacks {
   updateBlock: (index: number, updates: Partial<Block>, options?: UpdateBlockOptions) => void;
-  insertBlock: (index: number, type: BlockType, props?: Partial<Block>) => void;
-  insertBlockAfter: (blockId: string, type: BlockType, props?: Partial<Block>) => void;
   getBlocks: () => Block[];
-  renderBlocks: () => void;
   markDirty: () => void;
   isActive: () => boolean;
 }
@@ -73,8 +70,6 @@ let callbacks: EditModeCallbacks | null = null;
 
 const MAX_IMAGE_WIDTH = 2000;
 const IMAGE_QUALITY = 0.8;
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const RESIZE_CONFIG: ResizeConfig = {
   MIN_WIDTH_PERCENT: 20,
   MAX_WIDTH_PERCENT: 100,
@@ -1035,154 +1030,16 @@ export async function handleVideoUploadForBlock(
   }
 }
 
-/**
- * Handle image upload and insert as new block after specified block
- */
-export async function handleImageUpload(file: File, afterBlockId: string | null = null): Promise<void> {
-  showNotification('Processing image...', 'info');
-
-  try {
-    const processedBlob = await processImage(file);
-    const url = await uploadFile(processedBlob, 'image');
-    insertImageBlock(url, file.name, afterBlockId);
-    showNotification('Image uploaded!', 'success');
-  } catch (error) {
-    console.error('Image upload failed:', error);
-    showNotification('Image upload failed', 'error');
-  }
-}
-
-/**
- * Handle video upload and insert as new block
- */
-export async function handleVideoUpload(
-  file: File,
-  afterBlockId: string | null = null,
-  options: VideoUploadOptions = {}
-): Promise<void> {
-  showNotification('Processing video...', 'info');
-
-  try {
-    const url = await uploadFile(file, 'video', options.onProgress);
-    insertVideoBlock(url, afterBlockId);
-    showNotification('Video processed!', 'success');
-  } catch (error) {
-    console.error('Video upload failed:', error);
-    showNotification(error instanceof Error ? error.message : 'Video processing failed', 'error');
-  }
-}
-
-// ========== BLOCK INSERTION ==========
-
-/**
- * Insert image block into editor
- */
-function insertImageBlock(url: string, alt: string = '', afterBlockId: string | null = null): void {
-  const cleanAlt = alt.replace(/\.[^/.]+$/, '');
-
-  if (afterBlockId) {
-    callbacks?.insertBlockAfter(afterBlockId, 'image', {
-      src: url,
-      alt: cleanAlt,
-    });
-  } else {
-    const index = callbacks?.getBlocks().length ?? 0;
-    callbacks?.insertBlock(index, 'image', {
-      src: url,
-      alt: cleanAlt,
-    });
-  }
-}
-
-/**
- * Insert video block into editor
- */
-function insertVideoBlock(url: string, afterBlockId: string | null = null): void {
-  if (afterBlockId) {
-    callbacks?.insertBlockAfter(afterBlockId, 'video', { src: url });
-  } else {
-    const index = callbacks?.getBlocks().length ?? 0;
-    callbacks?.insertBlock(index, 'video', { src: url });
-  }
-}
-
-// ========== REPLACE HANDLERS ==========
-
-/**
- * Replace image in existing image block by index
- */
-export async function replaceImageByIndex(blockIndex: number): Promise<void> {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (file) {
-      await handleImageUploadForBlock(file, blockIndex);
-    }
-  });
-
-  input.click();
-}
-
-/**
- * Replace video in existing video block by index
- */
-export async function replaceVideoByIndex(blockIndex: number): Promise<void> {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'video/*';
-
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (file) {
-      await handleVideoUploadForBlock(file, blockIndex);
-    }
-  });
-
-  input.click();
-}
-
 // ========== PUBLIC API ==========
 
 const EditMedia = {
-  // Constants
-  MAX_IMAGE_WIDTH,
-  IMAGE_QUALITY,
-  ALLOWED_IMAGE_TYPES,
-  ALLOWED_VIDEO_TYPES,
-  RESIZE_CONFIG,
-
-  // State getters
-  get selectedMedia() { return selectedMedia; },
-  get isResizing() { return isResizing; },
-
-  // Initialization
   init,
-
-  // Selection
   select,
   deselect,
-
-  // Upload handlers
   handleImageUploadForBlock,
   handleVideoUploadForBlock,
-  handleImageUpload,
-  handleVideoUpload,
-
-  // Replace handlers
-  replaceImageByIndex,
-  replaceVideoByIndex,
-
-  // Poster helpers
   uploadPosterForVideo,
   capturePosterFromVideo,
-
-  // Style utilities
-  parseStyle,
-  serializeStyle,
-  styleHasWidth,
 };
 
 export default EditMedia;

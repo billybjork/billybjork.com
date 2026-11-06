@@ -20,15 +20,7 @@ interface ExecuteData {
   replaceBlockIndex: number | null;
 }
 
-interface UpdateContentData {
-  index: number;
-  content: string;
-}
-
-type SlashCommandCallback = (
-  action: 'execute' | 'updateContent',
-  data: ExecuteData | UpdateContentData
-) => void;
+type SlashCommandCallback = (data: ExecuteData) => void;
 
 // ========== CONFIGURATION ==========
 
@@ -238,7 +230,7 @@ function detachListeners(): void {
 /**
  * Show the slash command menu triggered by typing "/" in textarea
  */
-export function showFromTextarea(textarea: HTMLTextAreaElement, textareaIndex: number): void {
+function showFromTextarea(textarea: HTMLTextAreaElement, textareaIndex: number): void {
   if (!menuElement) createMenu();
 
   isActiveState = true;
@@ -274,7 +266,7 @@ export function showFromButton(anchorRect: DOMRect, insertIndex: number, buttonE
 /**
  * Hide the slash command menu
  */
-export function hide(): void {
+function hide(): void {
   detachListeners();
   if (menuElement) {
     menuElement.style.display = 'none';
@@ -298,11 +290,7 @@ function executeCommand(commandId: BlockType): void {
 
   // Clean up "/" from textarea if triggered from typing
   if (triggeredFromTextarea && activeTextareaIndex !== null) {
-    const textarea = (anchorElement && anchorElement.tagName === 'TEXTAREA')
-      ? anchorElement as HTMLTextAreaElement
-      : document.querySelector<HTMLTextAreaElement>(
-          `.block-wrapper[data-block-index="${activeTextareaIndex}"] .block-textarea`
-        );
+    const textarea = anchorElement as HTMLTextAreaElement | null;
 
     if (textarea) {
       const cursorPos = textarea.selectionStart;
@@ -320,27 +308,11 @@ function executeCommand(commandId: BlockType): void {
         const newText = (text.substring(0, slashIndex) + text.substring(cursorPos)).replace(/\n+$/, '');
         textarea.value = newText;
 
-        const isLineInput = textarea.classList.contains('text-line-input');
-        if (isLineInput) {
-          const blockWrapper = textarea.closest('.block-wrapper');
-          if (blockWrapper) {
-            const lineInputs = blockWrapper.querySelectorAll<HTMLInputElement>('.text-line-input');
-            blockBecameEmpty = Array.from(lineInputs).every(input => !input.value.trim());
-          } else {
-            blockBecameEmpty = !newText.trim();
-          }
+        const blockWrapper = textarea.closest('.block-wrapper');
+        const lineInputs = blockWrapper?.querySelectorAll<HTMLInputElement>('.text-line-input') ?? [];
+        blockBecameEmpty = Array.from(lineInputs).every(input => !input.value.trim());
 
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        } else {
-          blockBecameEmpty = !newText.trim();
-          // Notify callback to update block content
-          if (onExecuteCallback) {
-            onExecuteCallback('updateContent', {
-              index: activeTextareaIndex,
-              content: newText
-            });
-          }
-        }
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
       }
     }
   }
@@ -352,13 +324,13 @@ function executeCommand(commandId: BlockType): void {
     if (wasFromTextarea) {
       // If the source block is now empty, replace it with the new block.
       // Otherwise insert the new block after it.
-      onExecuteCallback('execute', {
+      onExecuteCallback({
         commandId,
         insertIndex: blockBecameEmpty ? sourceIndex : sourceIndex + 1,
         replaceBlockIndex: blockBecameEmpty ? sourceIndex : null
       });
     } else {
-      onExecuteCallback('execute', {
+      onExecuteCallback({
         commandId,
         insertIndex: sourceIndex,
         replaceBlockIndex: null
@@ -490,34 +462,13 @@ export function isActive(): boolean {
   return isActiveState;
 }
 
-/**
- * Get the active textarea index
- */
-export function getActiveIndex(): number | null {
-  return activeTextareaIndex;
-}
-
-// Export object for window.EditSlash compatibility
 const EditSlash = {
-  // Initialization
   init,
   cleanup,
-
-  // Show/Hide
-  showFromTextarea,
   showFromButton,
-  hide,
-
-  // Event handlers
   handleKeydown,
   handleTextareaInput,
-
-  // State accessors
   isActive,
-  getActiveIndex,
-
-  // Config
-  COMMANDS
 };
 
 export default EditSlash;

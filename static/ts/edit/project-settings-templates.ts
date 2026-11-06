@@ -1,91 +1,9 @@
-import { escapeHtml, escapeHtmlAttr } from './text';
-
-interface VideoDataTemplate {
-  hls?: string;
-}
-
-interface ProjectDataTemplate {
-  name: string;
-  slug: string;
-  date: string;
-  youtube?: string | null;
-  draft?: boolean;
-  pinned?: boolean;
-  video?: VideoDataTemplate;
-}
+import { escapeHtml } from './text';
 
 interface VideoViewMarkupOptions {
   isUploadFlow: boolean;
   file: File | null;
   processButtonText: string;
-}
-
-export function buildProjectSettingsMarkup(data: ProjectDataTemplate): string {
-  return `
-      <div class="edit-settings-header">
-        <h2>Project Settings</h2>
-        <button class="edit-settings-close">&times;</button>
-      </div>
-      <form class="edit-settings-form" id="settings-form">
-        <div class="edit-form-group">
-          <label for="settings-name">Project Name</label>
-          <input type="text" id="settings-name" name="name" value="${escapeHtmlAttr(data.name || '')}" required>
-        </div>
-        <div class="edit-form-group">
-          <label for="settings-slug">URL Slug</label>
-          <input type="text" id="settings-slug" name="slug" value="${escapeHtmlAttr(data.slug || '')}" required pattern="[a-z0-9\\-]+">
-        </div>
-        <div class="edit-form-group">
-          <label for="settings-date">Date</label>
-          <input type="date" id="settings-date" name="date" value="${data.date || ''}" required>
-        </div>
-        <div class="edit-form-group">
-          <label for="settings-youtube">YouTube Link</label>
-          <input type="url" id="settings-youtube" name="youtube" value="${escapeHtmlAttr(data.youtube || '')}" placeholder="https://youtube.com/watch?v=...">
-        </div>
-        <div class="edit-form-row">
-          <div class="edit-form-group edit-form-checkbox">
-            <label>
-              <input type="checkbox" id="settings-draft" name="draft" ${data.draft ? 'checked' : ''}>
-              Draft
-            </label>
-          </div>
-          <div class="edit-form-group edit-form-checkbox">
-            <label>
-              <input type="checkbox" id="settings-pinned" name="pinned" ${data.pinned ? 'checked' : ''}>
-              Pinned
-            </label>
-          </div>
-        </div>
-
-        <div class="edit-form-section">
-          <h3>Hero Video</h3>
-          <div class="edit-form-group">
-            <label>Current Video</label>
-            ${
-              data.video?.hls
-                ? `<div class="edit-video-info">
-                    <span>HLS: ${data.video.hls.split('/').pop()}</span>
-                    <div class="edit-video-actions">
-                      <button type="button" class="edit-btn-small" id="update-hero-sprite">Update Sprite</button>
-                      <button type="button" class="edit-btn-small" id="upload-hero-video">Replace</button>
-                    </div>
-                   </div>`
-                : `<button type="button" class="edit-btn edit-btn-secondary" id="upload-hero-video">Upload Hero Video</button>`
-            }
-            <input type="file" id="hero-video-input" accept="video/*" style="display: none;">
-          </div>
-        </div>
-
-        <div class="edit-settings-actions">
-          <button type="button" class="edit-btn edit-btn-danger" id="delete-project">Delete Project</button>
-          <div class="edit-settings-actions-right">
-            <button type="button" class="edit-btn edit-btn-secondary" id="settings-cancel">Cancel</button>
-            <button type="submit" class="edit-btn edit-btn-primary">Save Settings</button>
-          </div>
-        </div>
-      </form>
-    `;
 }
 
 export function buildProjectVideoViewMarkup({

@@ -21,10 +21,9 @@ import { showNotification } from './notify';
 import { withShowDrafts } from './show-drafts';
 import { getHomepageRuntime } from '../core/runtime-registry';
 import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
-import { escapeHtmlAttr } from './text';
-import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
+import { escapeHtml } from './text';
+import { createBlock, blocksToMarkdown, parseIntoBlocks } from './blocks';
 import {
-  applyBlockUpdates as applyBlockFieldUpdates,
   createBlockWithProps as createBlockWithPropsFromFactory,
   updateBlockFieldsInContext as computeUpdatedBlockFieldsInContext,
   updateBlockInContext as computeUpdatedBlockInContext,
@@ -42,7 +41,7 @@ import EditUndo from './undo';
 import { persistScrollForNavigation } from './scroll-restore';
 import { ScrollAnchorManager } from './scroll-anchors';
 import { slugify, uniqueSlug } from './slugify';
-import { INLINE_MAX_DEPTH, findNextInlineMatch, renderInlineMarkdown, sanitizeUrl } from './inline-markdown';
+import { DIVIDER_LINE, INLINE_MAX_DEPTH, findNextInlineMatch, renderInlineMarkdown, sanitizeUrl } from './inline-markdown';
 import ProjectSettings from './project-settings';
 
 // ========== ICONS ==========
@@ -184,12 +183,6 @@ function getActiveProjectContentContainer(): HTMLElement | null {
     ?? document.querySelector<HTMLElement>('.project-content');
 }
 
-function getActiveProjectRoot(contentContainer?: HTMLElement | null): HTMLElement | null {
-  return contentContainer?.closest<HTMLElement>('.project-item')
-    ?? getHomepageDetailScene()
-    ?? document.querySelector<HTMLElement>('.project-item.active')
-    ?? null;
-}
 
 function updateToolbarLayoutMetrics(): void {
   if (!toolbar) return;
@@ -270,9 +263,7 @@ function setupEditor(data: ProjectData | AboutData): void {
   const contentContainer = editMode === 'about'
     ? document.querySelector<HTMLElement>('.about-content')
     : getActiveProjectContentContainer();
-  const projectItem = editMode === 'project'
-    ? getActiveProjectRoot(contentContainer)
-    : null;
+  const projectItem = editMode === 'project' ? getHomepageDetailScene() : null;
 
   if (!contentContainer) {
     console.error('Content container not found');
@@ -302,7 +293,7 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   // Parse markdown into blocks
   const markdown = 'markdown' in data ? data.markdown : '';
-  blocks = EditBlocks.parseIntoBlocks(markdown || '');
+  blocks = parseIntoBlocks(markdown || '');
   cleanupCandidateUrls.clear();
   const initialScrollAnchor = scrollAnchors.captureContainerScrollAnchor(contentContainer);
   const initialContentBlockAnchor = scrollAnchors.captureContentBlockAnchor(contentContainer);
@@ -329,10 +320,7 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Initialize media handling
   EditMedia.init({
     updateBlock,
-    insertBlock,
-    insertBlockAfter,
     getBlocks: () => blocks,
-    renderBlocks,
     markDirty,
     isActive: () => isActive,
   });
@@ -340,8 +328,6 @@ function setupEditor(data: ProjectData | AboutData): void {
   // Initialize undo system
   EditUndo.init({
     getBlocks: () => blocks,
-    setBlocks: (newBlocks) => { blocks = newBlocks; },
-    renderBlocks,
     restoreBlocks: restoreBlocksFromHistory,
     markDirty,
   });
@@ -358,10 +344,7 @@ function setupEditor(data: ProjectData | AboutData): void {
     const project = data as ProjectData;
     setupEditableProjectHeader(projectItem, project);
 
-    const details = projectItem.querySelector<HTMLElement>('.project-details');
-    const videoContainer = details?.querySelector<HTMLElement>('.video-container')
-      ?? projectItem.querySelector<HTMLElement>('.video-container');
-    const insertionPoint = videoContainer ?? contentContainer;
+    const insertionPoint = projectItem.querySelector<HTMLElement>('.video-container') ?? contentContainer;
 
     inlineProjectMetadataControls = createInlineProjectMetadataControls(project);
     heroMediaControls = createHeroThumbnailControls(project);
@@ -378,9 +361,7 @@ function setupEditor(data: ProjectData | AboutData): void {
 
   // Render blocks
   renderBlocks();
-  const stabilityRoot = editMode === 'project'
-    ? (getActiveProjectRoot(contentContainer) ?? contentContainer)
-    : contentContainer;
+  const stabilityRoot = projectItem ?? contentContainer;
   if (initialContentBlockAnchor) {
     scrollAnchors.restoreModeSwitchBlockAnchor({
       anchor: initialContentBlockAnchor,
@@ -446,18 +427,6 @@ function syncProjectSlug(nextSlugValue: unknown): void {
   if (previousSlug === nextSlug) return;
 
   projectSlug = nextSlug;
-
-  const projectItem = getActiveProjectRoot(document.querySelector<HTMLElement>('#homepage-detail-content .project-content'));
-  if (projectItem) {
-    projectItem.dataset.slug = nextSlug;
-    if (previousSlug && projectItem.id === `project-${previousSlug}`) {
-      projectItem.id = `project-${nextSlug}`;
-    }
-    const details = projectItem.querySelector<HTMLElement>('.project-details');
-    if (details && previousSlug && details.id === `details-${previousSlug}`) {
-      details.id = `details-${nextSlug}`;
-    }
-  }
 
   const slugInput = inlineProjectMetadataControls?.querySelector<HTMLInputElement>('#inline-settings-slug');
   if (slugInput) {
@@ -564,7 +533,7 @@ function showConflictBanner(): void {
 /**
  * Cleanup and exit edit mode
  */
-export function cleanup(): void {
+function cleanup(): void {
   isActive = false;
 
   // Clear auto-save timers
@@ -676,7 +645,7 @@ function createFixedToolbar(data: ProjectData | AboutData): HTMLElement {
     : '';
   bar.innerHTML = `
     <div class="edit-toolbar-left">
-      <span class="edit-project-name">Editing: ${escapeHtmlAttr(title)}</span>
+      <span class="edit-project-name">Editing: ${escapeHtml(title)}</span>
       <span class="edit-status" aria-live="polite"></span>
     </div>
     <div class="edit-toolbar-right">
@@ -1489,7 +1458,7 @@ function restoreBlocksFromHistory(nextBlocks: Block[]): void {
 /**
  * Render all blocks to the container
  */
-export function renderBlocks(): void {
+function renderBlocks(): void {
   if (!container) return;
 
   EditMedia.deselect();
@@ -2385,7 +2354,7 @@ function renderLinePreview(lineText: string, headingSlugState: Set<string>): Lin
     return { node: empty, type: 'empty' };
   }
 
-  if (/^(\*{3,}|-{3,}|_{3,})$/.test(trimmed)) {
+  if (DIVIDER_LINE.test(trimmed)) {
     const hr = document.createElement('hr');
     hr.className = 'text-line-divider';
     return { node: hr, type: 'divider' };
@@ -3192,7 +3161,7 @@ function handleDrop(e: DragEvent, _index: number): void {
 /**
  * Insert a new block at the specified index
  */
-export function insertBlock(index: number, type: BlockType, props: Partial<Block> = {}): void {
+function insertBlock(index: number, type: BlockType, props: Partial<Block> = {}): void {
   const newBlock = createBlockWithProps(type, props);
   const insertIndex = Math.max(0, Math.min(index, blocks.length));
   const nextBlocks = blocks.slice();
@@ -3203,7 +3172,6 @@ export function insertBlock(index: number, type: BlockType, props: Partial<Block
     setTimeout(() => {
       const textarea = container?.querySelector<HTMLTextAreaElement>(
         `[data-block-index="${insertIndex}"] .text-line-input, ` +
-        `[data-block-index="${insertIndex}"] .block-textarea, ` +
         `[data-block-index="${insertIndex}"] .callout-textarea`
       );
       if (textarea) textarea.focus({ preventScroll: true });
@@ -3212,19 +3180,9 @@ export function insertBlock(index: number, type: BlockType, props: Partial<Block
 }
 
 /**
- * Insert block after the specified block ID
- */
-export function insertBlockAfter(blockId: string, type: BlockType, props: Partial<Block> = {}): void {
-  const index = blocks.findIndex(b => b.id === blockId);
-  if (index !== -1) {
-    insertBlock(index + 1, type, props);
-  }
-}
-
-/**
  * Delete a block
  */
-export function deleteBlock(index: number): void {
+function deleteBlock(index: number): void {
   const removedBlock = blocks[index];
   if (removedBlock) {
     trackPosterCleanupCandidatesFromBlock(cleanupCandidateUrls, removedBlock);
@@ -3247,20 +3205,11 @@ interface SlashExecuteData {
   replaceBlockIndex: number | null;
 }
 
-interface SlashUpdateData {
-  index: number;
-  content: string;
-}
-
 /**
  * Handle slash command execution
  */
-function handleSlashCommand(
-  action: 'execute' | 'updateContent',
-  data: SlashExecuteData | SlashUpdateData
-): void {
-  if (action === 'execute') {
-    const execData = data as SlashExecuteData;
+function handleSlashCommand(execData: SlashExecuteData): void {
+  {
     if (execData.replaceBlockIndex !== null) {
       const focusIndex = execData.replaceBlockIndex;
       trackPosterCleanupCandidatesFromBlock(cleanupCandidateUrls, blocks[focusIndex]);
@@ -3269,7 +3218,6 @@ function handleSlashCommand(
         setTimeout(() => {
           const textarea = container?.querySelector<HTMLTextAreaElement>(
             `[data-block-index="${focusIndex}"] .text-line-input, ` +
-            `[data-block-index="${focusIndex}"] .block-textarea, ` +
             `[data-block-index="${focusIndex}"] .callout-textarea`
           );
           if (textarea) textarea.focus({ preventScroll: true });
@@ -3278,13 +3226,6 @@ function handleSlashCommand(
     } else {
       insertBlock(execData.insertIndex, execData.commandId);
     }
-  } else if (action === 'updateContent') {
-    const updateData = data as SlashUpdateData;
-    updateTopLevelBlock(
-      updateData.index,
-      (block) => ('content' in block ? { ...block, content: updateData.content } as Block : block),
-      { render: false, markDirty: false },
-    );
   }
 }
 
@@ -3376,18 +3317,11 @@ function tryNativeInputHistory(action: 'undo' | 'redo'): boolean {
 /**
  * Mark content as dirty (unsaved changes) and schedule auto-save
  */
-export function markDirty(): void {
+function markDirty(): void {
   isDirty = true;
   EditUndo.saveState();
   dispatchSaveAction({ type: 'edit' });
   scheduleAutoSave();
-}
-
-/**
- * Get the edit container element (for anchor discovery in link dialogs)
- */
-export function getEditContainer(): HTMLElement | null {
-  return container;
 }
 
 async function flushCleanupCandidates(): Promise<void> {
@@ -3531,7 +3465,7 @@ async function handleDeleteProject(): Promise<void> {
 /**
  * Update a block's data
  */
-export function updateBlock(
+function updateBlock(
   index: number,
   updates: Partial<Block>,
   options: UpdateBlockOptions = {}
@@ -3547,9 +3481,9 @@ function getEditableProjectData(): ProjectData | null {
 }
 
 function setupEditableProjectHeader(projectItem: HTMLElement, project: ProjectData): void {
-  const header = projectItem.querySelector<HTMLElement>('.project-header, .homepage-detail-header');
-  const nameEl = projectItem.querySelector<HTMLElement>('.project-name, .homepage-detail-title');
-  const dateEl = projectItem.querySelector<HTMLElement>('.project-date, .homepage-detail-date');
+  const header = projectItem.querySelector<HTMLElement>('.homepage-detail-header');
+  const nameEl = projectItem.querySelector<HTMLElement>('.homepage-detail-title');
+  const dateEl = projectItem.querySelector<HTMLElement>('.homepage-detail-date');
   if (!header || !nameEl || !dateEl) return;
 
   header.classList.add('edit-project-header-active');
@@ -3558,7 +3492,7 @@ function setupEditableProjectHeader(projectItem: HTMLElement, project: ProjectDa
     <input
       type="date"
       class="edit-project-header-date-input"
-      value="${escapeHtmlAttr(project.date || '')}"
+      value="${escapeHtml(project.date || '')}"
       aria-label="Project date"
     >
   `;
@@ -3566,7 +3500,7 @@ function setupEditableProjectHeader(projectItem: HTMLElement, project: ProjectDa
     <input
       type="text"
       class="edit-project-header-name-input"
-      value="${escapeHtmlAttr(project.name || '')}"
+      value="${escapeHtml(project.name || '')}"
       aria-label="Project name"
       required
     >
@@ -3613,7 +3547,7 @@ function createInlineProjectMetadataControls(project: ProjectData): HTMLElement 
         <input
           type="text"
           id="inline-settings-slug"
-          value="${escapeHtmlAttr(project.slug || '')}"
+          value="${escapeHtml(project.slug || '')}"
           pattern="[a-z0-9_\\-]+"
           required
         >
@@ -3623,7 +3557,7 @@ function createInlineProjectMetadataControls(project: ProjectData): HTMLElement 
         <input
           type="url"
           id="inline-settings-youtube"
-          value="${escapeHtmlAttr(project.youtube || '')}"
+          value="${escapeHtml(project.youtube || '')}"
           placeholder="https://youtube.com/watch?v=..."
         >
       </div>
@@ -3747,12 +3681,12 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
           <span class="edit-hero-panel-label">OG Image (Social Share)</span>
         </div>
         <div class="edit-hero-thumbnail-content">
-          <img class="edit-hero-thumbnail-preview" src="${escapeHtmlAttr(currentOgOverride)}"
+          <img class="edit-hero-thumbnail-preview" src="${escapeHtml(currentOgOverride)}"
               alt="OG image preview" style="${currentOgOverride ? '' : 'display:none'}">
           <div class="edit-hero-thumbnail-actions">
             <input type="url" class="edit-hero-thumbnail-input"
                 placeholder="Optional OG override URL..."
-                value="${escapeHtmlAttr(currentOgOverride)}">
+                value="${escapeHtml(currentOgOverride)}">
             <p class="edit-hero-thumbnail-note">
               Leave blank to use hero poster first, then sprite sheet as fallback.
             </p>
@@ -3882,8 +3816,7 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
   });
 
   captureBtn.addEventListener('click', async () => {
-    const projectItem = controls.closest('.project-item') ?? getHomepageDetailScene();
-    const video = projectItem?.querySelector('.video-container video') as HTMLVideoElement | null;
+    const video = getHomepageDetailScene()?.querySelector('.video-container video') as HTMLVideoElement | null;
 
     if (!video) {
       showNotification('No video element found', 'error');
@@ -3918,33 +3851,3 @@ function createHeroThumbnailControls(data: ProjectData): HTMLElement {
 
   return controls;
 }
-
-// ========== PUBLIC API ==========
-
-const EditMode = {
-  // Initialization
-  init,
-  initAbout,
-  cleanup,
-
-  // State
-  get blocks() { return blocks; },
-  get isActive() { return isActive; },
-  get isDirty() { return isDirty; },
-  get projectSlug() { return projectSlug; },
-  get editMode() { return editMode; },
-
-  // Block operations
-  insertBlock,
-  insertBlockAfter,
-  deleteBlock,
-  updateBlock,
-  renderBlocks,
-  markDirty,
-
-  // Save/Cancel
-  save: handleSave,
-  cancel: handleCancel,
-};
-
-export default EditMode;

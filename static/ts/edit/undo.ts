@@ -8,14 +8,11 @@ import { showNotification } from './notify';
 
 interface UndoState {
   blocks: Block[];
-  timestamp: number;
 }
 
 interface UndoCallbacks {
   getBlocks: () => Block[];
-  setBlocks: (blocks: Block[]) => void;
-  renderBlocks: () => void;
-  restoreBlocks?: (blocks: Block[]) => void;
+  restoreBlocks: (blocks: Block[]) => void;
   markDirty: () => void;
 }
 
@@ -48,19 +45,6 @@ export function init(cb: UndoCallbacks): void {
 }
 
 /**
- * Clear the undo system
- */
-export function reset(): void {
-  history = [];
-  currentIndex = -1;
-  isUndoing = false;
-  if (debounceTimer !== null) {
-    clearTimeout(debounceTimer);
-    debounceTimer = null;
-  }
-}
-
-/**
  * Capture current editor state
  */
 function captureState(): UndoState {
@@ -69,7 +53,6 @@ function captureState(): UndoState {
   }
   return {
     blocks: structuredClone(callbacks.getBlocks()),
-    timestamp: Date.now(),
   };
 }
 
@@ -132,12 +115,7 @@ function restoreState(state: UndoState | undefined): void {
 
   isUndoing = true;
   const nextBlocks = structuredClone(state.blocks);
-  if (callbacks.restoreBlocks) {
-    callbacks.restoreBlocks(nextBlocks);
-  } else {
-    callbacks.setBlocks(nextBlocks);
-    callbacks.renderBlocks();
-  }
+  callbacks.restoreBlocks(nextBlocks);
   callbacks.markDirty();
   isUndoing = false;
 }
@@ -174,50 +152,11 @@ export function redo(): void {
   showNotification('Redo', 'info', 1000);
 }
 
-/**
- * Clear history
- */
-export function clear(): void {
-  history = [];
-  currentIndex = -1;
-  if (debounceTimer !== null) {
-    clearTimeout(debounceTimer);
-    debounceTimer = null;
-  }
-}
-
-/**
- * Check if undo is available
- */
-export function canUndo(): boolean {
-  return currentIndex > 0;
-}
-
-/**
- * Check if redo is available
- */
-export function canRedo(): boolean {
-  return currentIndex < history.length - 1;
-}
-
-// Export object for window.EditUndo compatibility
 const EditUndo = {
-  // State (read-only getters)
-  get history() { return history; },
-  get currentIndex() { return currentIndex; },
-  get maxHistory() { return maxHistory; },
-  get isUndoing() { return isUndoing; },
-  DEBOUNCE_MS,
-
-  // Methods
   init,
-  reset,
   saveState,
   undo,
   redo,
-  clear,
-  canUndo,
-  canRedo,
 };
 
 export default EditUndo;

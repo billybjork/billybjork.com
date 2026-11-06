@@ -12,7 +12,6 @@ First paragraph with **bold** text.
 
 <!-- row -->
 Left column
-
 <!-- col -->
 Right column
 <!-- /row -->
