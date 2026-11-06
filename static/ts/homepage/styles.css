@@ -12,7 +12,6 @@ body.homepage-nav-hidden #main-header {
 }
 
 main.homepage-shared-element {
-    padding-top: clamp(5rem, 8vw, 6rem);
     padding-bottom: clamp(4rem, 6vw, 6rem);
 }
 
