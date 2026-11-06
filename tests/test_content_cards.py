@@ -41,7 +41,6 @@ class ProjectCardTests(unittest.TestCase):
 
         self.assertTrue(card.has_sprite_animation)
         self.assertEqual((card.frames, card.columns, card.rows), (60, 5, 12))
-        self.assertIsNone(card.frame_width)
         self.assertIsNone(card.sprite_aspect_ratio)
 
     def test_no_sprite_means_no_animation(self) -> None:

@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from datetime import date, datetime
+from datetime import datetime, time
 from email.utils import format_datetime
 
 from fastapi import APIRouter
@@ -12,19 +12,6 @@ router = APIRouter()
 SITE_TITLE = "Billy Bjork"
 SITE_LINK = "https://billybjork.com"
 SITE_DESCRIPTION = "Projects by Billy Bjork"
-
-
-def _to_rfc822(d) -> str:
-    if isinstance(d, str):
-        try:
-            d = datetime.strptime(d, "%Y-%m-%d")
-        except ValueError:
-            return ""
-    if isinstance(d, date) and not isinstance(d, datetime):
-        d = datetime(d.year, d.month, d.day)
-    if isinstance(d, datetime):
-        return format_datetime(d)
-    return ""
 
 
 @router.get("/feed.xml", include_in_schema=False)
@@ -47,9 +34,10 @@ async def rss_feed():
         ET.SubElement(item, "link").text = link
         ET.SubElement(item, "description").text = project.meta_description
 
-        pub_date = _to_rfc822(project.creation_date)
-        if pub_date:
-            ET.SubElement(item, "pubDate").text = pub_date
+        if project.created_on:
+            ET.SubElement(item, "pubDate").text = format_datetime(
+                datetime.combine(project.created_on, time.min)
+            )
 
         guid = ET.SubElement(item, "guid", isPermaLink="true")
         guid.text = link

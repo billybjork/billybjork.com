@@ -12,14 +12,16 @@ Imports point down this list; `tests/test_architecture.py` enforces it.
 | `routers/` | HTTP: `pages` (public site), `media` (`/media/*`), `feed`, `auth`, `admin` (content APIs), `admin_media` (upload and video APIs), `valentine` |
 | `experiments/point_cloud/` | The self-contained `/test` prototype: route, templates, static files, tools |
 | `edit_auth.py`, `client_address.py`, `analytics.py`, `templating.py` | Who may edit, who is asking, page-view stats, Jinja setup |
-| `cms/` | Content on disk: `projects`, `about`, `site_settings`, `documents` (frontmatter files), `markdown` (rendering), `sync` (to and from object storage), `assets` (registry and orphan cleanup) |
-| `media/` | `image`, `video` (ffmpeg), `hero_sessions` (the hero video workflow's state), `uploads` (dedupe), `keys` (bucket layout) |
-| `object_storage.py`, `config.py` | The bucket and public URLs; settings |
+| `middleware/` | Cache and security headers, proxy scheme |
+| `media/` | `image`, `video` (ffmpeg), `hero_sessions` (the hero video workflow), `uploads` (dedupe) |
+| `cms/` | Content on disk: `projects`, `about`, `site_settings`, `documents` (frontmatter files), `markdown` (rendering), `sync` (to and from object storage), `assets` (registry and orphan cleanup), `paths` |
+| `object_storage.py`, `config.py`, `media/keys.py`, `media/sprite_format.py` | The bucket and public URLs; settings; the bucket's layout and sprite format, shared by `cms` and `media` |
+| `tools/` | One-off scripts |
 | `static/ts/` | Frontend, one esbuild bundle per entry (`esbuild.config.mjs`): `homepage/`, `project/`, `edit/`, shared `core/` |
 
 ## Setup
 
-Requires Python 3.12+, Node 20+, `uv`, `just`, and ffmpeg (ImageMagick optional: sprite generation falls back to ffmpeg).
+Requires Python 3.12+, Node 20+, `uv`, `just`, and ffmpeg.
 
 ```bash
 just setup
@@ -42,7 +44,7 @@ Without object storage, set `CONTENT_STARTUP_SYNC_POLICY=off` for a first boot: 
 - `OBJECT_STORAGE_PUBLIC_BASE_URL` (or `CLOUDFRONT_DOMAIN`) is the host written into saved content URLs. `OBJECT_STORAGE_LEGACY_PUBLIC_BASE_URLS` lists older hosts rewritten to it at read time. For a bucket that isn't public, point the base at the app's own `/media` route.
 - `STATIC_VERSION` is the `?v=` cache-buster for `/static/*`, served as immutable. File mtimes are used when unset.
 
-To move public asset hosts: copy objects preserving keys, set the new base and list the old one as legacy, then optionally `uv run python tools/rewrite_asset_base_urls.py --apply`.
+To move public asset hosts: copy objects preserving keys, set the new base and list the old one as legacy, then optionally `uv run python tools/rewrite_asset_base_urls.py --apply` followed by `uv run python -m cms.sync seed`, since the script changes only local files.
 
 ## Routes
 

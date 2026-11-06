@@ -30,8 +30,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def app_lifespan(app: FastAPI):
     settings: AppSettings = app.state.settings
-    set_content_paths(settings.content_paths)
-    analytics.set_db_path(settings.analytics_db_path)
     analytics.init_db()
 
     try:
@@ -64,6 +62,9 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     if settings is None:
         load_dotenv()
         settings = AppSettings.from_env()
+
+    set_content_paths(settings.content_paths)
+    analytics.set_db_path(settings.analytics_db_path)
 
     app = FastAPI(lifespan=app_lifespan)
     app.state.settings = settings

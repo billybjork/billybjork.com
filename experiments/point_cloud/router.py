@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from client_address import peer_is_loopback
 from cms.projects import ProjectInfo, load_project
-from templating import build_templates
+from templating import build_templates, versioned_url
 
 _HERE = Path(__file__).parent
 _PROJECTS_FILE = _HERE / "projects.json"
@@ -17,8 +17,7 @@ _SPRITES_DIR = _HERE / "static" / "rgbd-sprites"
 
 
 def _point_cloud_static(path: str) -> str:
-    """/static is served immutable, so a URL has to change when its file does."""
-    return f"/static/test/{path}?v={int((_HERE / 'static' / path).stat().st_mtime)}"
+    return versioned_url(f"/static/test/{path}", _HERE / "static" / path)
 
 
 _templates = build_templates(_HERE / "templates")

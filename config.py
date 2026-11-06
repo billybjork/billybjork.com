@@ -6,6 +6,12 @@ from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parent
 DEFAULT_ANALYTICS_DB = SRC_DIR / "data" / "analytics.db"
+CONTENT_SYNC_POLICIES = {"off", "always", "guarded"}
+
+
+def _env(name: str) -> str | None:
+    """A variable's value; blank, as `cp .env.example .env` leaves them, counts as unset."""
+    return (os.environ.get(name) or "").strip() or None
 
 
 @dataclass(frozen=True)
@@ -39,15 +45,13 @@ class AuthSettings:
 
     @classmethod
     def from_env(cls) -> "AuthSettings":
-        edit_token = os.environ.get("EDIT_TOKEN")
-        bypass = os.environ.get("LOCALHOST_EDIT_BYPASS")
+        edit_token = _env("EDIT_TOKEN")
+        bypass = _env("LOCALHOST_EDIT_BYPASS")
         return cls(
             edit_token=edit_token,
-            cookie_secret=os.environ.get("COOKIE_SECRET", edit_token or ""),
+            cookie_secret=_env("COOKIE_SECRET") or edit_token or "",
             localhost_bypass_enabled=(
-                not edit_token
-                if bypass is None
-                else bypass.strip().lower() in {"1", "true", "yes", "on"}
+                not edit_token if bypass is None else bypass.lower() in {"1", "true", "yes", "on"}
             ),
         )
 
@@ -61,9 +65,7 @@ class AppSettings:
 
     @classmethod
     def from_env(cls) -> "AppSettings":
-        return cls(
-            auth=AuthSettings.from_env(),
-            startup_content_sync_policy=os.environ.get(
-                "CONTENT_STARTUP_SYNC_POLICY", "always"
-            ).strip().lower(),
-        )
+        policy = (_env("CONTENT_STARTUP_SYNC_POLICY") or "always").lower()
+        if policy not in CONTENT_SYNC_POLICIES:
+            raise ValueError(f"Unknown CONTENT_STARTUP_SYNC_POLICY: {policy!r}")
+        return cls(auth=AuthSettings.from_env(), startup_content_sync_policy=policy)

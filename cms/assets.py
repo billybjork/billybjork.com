@@ -2,12 +2,11 @@
 import hashlib
 import json
 import logging
-import re
 from typing import Callable
 
 from cms import sync
 from cms.paths import get_content_paths
-from media.keys import hero_root
+from media.keys import hero_root, hero_version
 from object_storage import delete_object, extract_public_asset_urls, list_keys, object_keys
 
 logger = logging.getLogger(__name__)
@@ -99,17 +98,19 @@ def delete_hero_videos(project_slug: str) -> list[str]:
 
 
 def cleanup_old_hero_versions(project_slug: str, current_hls_url: str | None) -> list[str]:
-    """Delete every HLS version under the project except the one current_hls_url points at.
+    """Delete hero versions other than the one current_hls_url uses.
 
-    Files directly under the root predate versioned paths; they go only when no
-    version is current.
+    Older projects keep their HLS unversioned, directly under the root. Those
+    files go only when the current URL isn't under this project's root at all.
     """
-    root = hero_root(project_slug)
-    current = re.search(rf"/{re.escape(root)}/(\d+)/", current_hls_url or "")
-    current_version = current.group(1) if current else None
+    root = f"{hero_root(project_slug)}/"
+    current_is_managed = f"/{root}" in (current_hls_url or "")
+    current_version = hero_version(project_slug, current_hls_url or "")
 
     def is_stale(key: str) -> bool:
-        version = re.match(rf"{re.escape(root)}/(\d+)/", key)
-        return version.group(1) != current_version if version else current_version is None
+        version = hero_version(project_slug, key)
+        if version:
+            return version != current_version
+        return not current_is_managed
 
-    return _delete_keys_under(f"{root}/", is_stale)
+    return _delete_keys_under(root, is_stale)

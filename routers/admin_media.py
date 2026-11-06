@@ -4,7 +4,6 @@ import io
 import logging
 import os
 import tempfile
-from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,27 +11,23 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from cms.projects import load_project, validate_slug
 from edit_auth import require_edit_mode
 from media.hero_sessions import (
-    discard_temp_video,
+    HeroVideoError,
+    finish_hero_video,
     hls_sessions,
     open_temp_video,
     start_hls_encoding,
     temp_videos,
 )
 from media.image import process_image
-from media.keys import new_content_image_key, new_misc_image_key
+from media.keys import new_content_image_key
 from media.sprite_format import DEFAULT_SPRITE_DURATION_SECONDS
 from media.uploads import store_webp
-from media.video import (
-    compress_and_upload_content_video,
-    generate_sprite_and_poster,
-    generate_thumbnail,
-)
+from media.video import compress_and_upload_content_video, generate_thumbnail
 from object_storage import is_managed_public_url
 
 logger = logging.getLogger(__name__)
 
 _UPLOAD_CHUNK_BYTES = 1024 * 1024
-_HLS_WAIT_SECONDS = 300
 _MAX_POSTER_FRAME_TIME = 6 * 60 * 60
 _POSTER_SIZE = 1600
 
@@ -47,8 +42,12 @@ def _require_valid_slug(slug) -> None:
 async def _save_upload_to_temp_file(upload) -> str:
     """Stream to disk so large videos never sit in memory. The caller owns the file."""
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-        while chunk := await upload.read(_UPLOAD_CHUNK_BYTES):
-            temp_file.write(chunk)
+        try:
+            while chunk := await upload.read(_UPLOAD_CHUNK_BYTES):
+                temp_file.write(chunk)
+        except Exception:
+            _remove_file(temp_file.name)
+            raise
         return temp_file.name
 
 
@@ -62,23 +61,14 @@ async def upload_media(request: Request):
     """Process and store an image, deduplicated by content."""
     form = await request.form()
     file = form.get("file")
-    media_type = form.get("type", "image")
-    scope = form.get("scope", "project")
 
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
-    if media_type == "video":
-        raise HTTPException(status_code=400, detail="Use /api/process-content-video for video uploads")
-    if media_type != "image":
-        raise HTTPException(status_code=400, detail="Invalid media type")
-    if scope not in {"project", "misc"}:
-        raise HTTPException(status_code=400, detail="Invalid media scope")
 
     data = await file.read()
-    new_key = new_misc_image_key if scope == "misc" else new_content_image_key
 
     def process_and_store() -> tuple[str, bool]:
-        return store_webp(process_image(io.BytesIO(data)), new_key)
+        return store_webp(process_image(io.BytesIO(data)), new_content_image_key)
 
     try:
         url, deduplicated = await asyncio.to_thread(process_and_store)
@@ -92,19 +82,16 @@ async def upload_media(request: Request):
 
 @router.post("/video-thumbnails")
 async def video_thumbnails(request: Request):
-    """Open an uploaded hero video: first frames now, the rest in the background.
-
-    With a project_slug, HLS encoding starts immediately too; old files stay
-    until save, so cancelling mid-upload loses nothing.
-    """
+    """Open an uploaded hero video: first frames now, the rest and the HLS encode in the background."""
     form = await request.form()
     file = form.get("file")
     project_slug = form.get("project_slug")
 
     if not file:
         raise HTTPException(status_code=400, detail="File is required")
-    if project_slug:
-        _require_valid_slug(project_slug)
+    if not project_slug:
+        raise HTTPException(status_code=400, detail="project_slug is required")
+    _require_valid_slug(project_slug)
 
     try:
         temp_path = await _save_upload_to_temp_file(file)
@@ -119,10 +106,13 @@ async def video_thumbnails(request: Request):
         logger.exception("Video thumbnail extraction failed")
         raise HTTPException(status_code=500, detail=f"Thumbnail extraction failed: {e}")
 
-    response = {"success": True, "frames": frames, "duration": duration, "temp_id": temp_id}
-    if project_slug:
-        response["hls_session_id"] = start_hls_encoding(temp_path, project_slug)
-    return response
+    return {
+        "success": True,
+        "frames": frames,
+        "duration": duration,
+        "temp_id": temp_id,
+        "hls_session_id": start_hls_encoding(temp_path, project_slug),
+    }
 
 
 @router.post("/video-thumbnails-existing")
@@ -178,32 +168,11 @@ async def get_hls_progress(session_id: str):
     return response
 
 
-async def _wait_for_hls(session_id: str) -> str | None:
-    """The finished encode's URL; None if the session is gone."""
-    for _ in range(_HLS_WAIT_SECONDS):
-        session = hls_sessions.get(session_id)
-        if not session:
-            return None
-        if session.status == "complete":
-            return session.hls_url
-        if session.status == "error":
-            raise HTTPException(
-                status_code=500,
-                detail=f"HLS encoding failed: {session.error or 'Unknown error'}",
-            )
-        await asyncio.sleep(1)
-    raise HTTPException(status_code=500, detail="HLS encoding timed out")
-
-
 @router.post("/generate-sprite-sheet")
 async def generate_sprite_sheet_endpoint(request: Request):
-    """Finish the hero workflow once the sprite range is chosen, waiting for a running encode."""
     form = await request.form()
     temp_id = form.get("temp_id")
-    hls_session_id = form.get("hls_session_id")
     project_slug = form.get("project_slug")
-    sprite_start = float(form.get("sprite_start", 0))
-    sprite_duration = float(form.get("sprite_duration", DEFAULT_SPRITE_DURATION_SECONDS))
 
     if not temp_id:
         raise HTTPException(status_code=400, detail="temp_id is required")
@@ -211,48 +180,20 @@ async def generate_sprite_sheet_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="project_slug is required")
     _require_valid_slug(project_slug)
 
-    temp_video = temp_videos.get(temp_id)
-    if not temp_video:
-        raise HTTPException(status_code=400, detail="Invalid or expired temp_id")
-    if not temp_video.is_remote and not os.path.exists(temp_video.source):
-        raise HTTPException(status_code=400, detail="Temp file not found")
-
     try:
-        result = await asyncio.to_thread(
-            generate_sprite_and_poster,
-            temp_video.source,
+        video = await finish_hero_video(
+            temp_id,
+            form.get("hls_session_id"),
             project_slug,
-            sprite_start,
-            sprite_duration,
+            float(form.get("sprite_start", 0)),
+            float(form.get("sprite_duration", DEFAULT_SPRITE_DURATION_SECONDS)),
         )
-
-        hls_url = await _wait_for_hls(hls_session_id) if hls_session_id else None
-        if not hls_url:
-            project = await asyncio.to_thread(load_project, project_slug)
-            hls_url = project.video.hls if project else None
-        if not hls_url:
-            raise HTTPException(status_code=500, detail="HLS URL unavailable after sprite generation")
-
-        video: dict[str, Any] = {
-            "hls": hls_url,
-            "thumbnail": result["thumbnail"],
-            "spriteSheet": result["spriteSheet"],
-            **result["spriteMeta"],
-        }
-        if temp_video.video_width:
-            video["video_width"] = temp_video.video_width
-        if temp_video.video_height:
-            video["video_height"] = temp_video.video_height
-        return {"success": True, "video": video}
-    except HTTPException:
-        raise
+    except HeroVideoError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:
         logger.exception("Sprite sheet generation failed")
         raise HTTPException(status_code=500, detail=f"Sprite sheet generation failed: {e}")
-    finally:
-        discard_temp_video(temp_id)
-        if hls_session_id:
-            hls_sessions.pop(hls_session_id)
+    return {"success": True, "video": video}
 
 
 @router.post("/process-content-video")

@@ -11,15 +11,19 @@ LAYERS = [
     {"main"},
     {"experiments", "routers", "middleware"},
     {"edit_auth", "analytics", "templating", "client_address"},
-    {"cms", "media"},
-    {"object_storage", "config"},
+    {"media"},
+    {"cms"},
+    {"media.keys", "media.sprite_format", "object_storage", "config"},
 ]
 
 
 def _layer_of(module: str) -> int | None:
-    for index, names in enumerate(LAYERS):
-        if module.split(".")[0] in names:
-            return index
+    """Most specific name wins, so media.keys sits below cms while the rest of media sits above it."""
+    while module:
+        for index, names in enumerate(LAYERS):
+            if module in names:
+                return index
+        module = module.rpartition(".")[0]
     return None
 
 

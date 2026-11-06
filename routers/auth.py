@@ -1,4 +1,5 @@
 """Login and logout for remote edit mode."""
+import hmac
 import logging
 
 from fastapi import APIRouter, HTTPException, Request
@@ -98,7 +99,7 @@ async def login(request: Request):
     form = await request.form()
     token = form.get("token", "")
 
-    if token != auth.edit_token:
+    if not hmac.compare_digest(str(token), auth.edit_token):
         return RedirectResponse("/edit/login?error=1", status_code=303)
 
     response = RedirectResponse("/", status_code=303)

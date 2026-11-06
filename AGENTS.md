@@ -4,7 +4,7 @@ Railway hosts it; a push to `main` deploys production.
 
 ## Start here
 
-1. `README.md` §"Agent Orientation" maps the code and local setup;
+1. `README.md` §"Code map" and §"Setup" map the code and local setup;
    `.env.example` documents every environment variable.
 2. `docs/infrastructure.md` owns hosting, DNS, email, and media: which vendor
    runs each piece and where it is configured. Read it before touching

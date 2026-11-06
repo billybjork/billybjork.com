@@ -18,7 +18,6 @@ from cms.projects import (
     validate_slug,
 )
 from edit_auth import require_edit_mode
-from media.keys import hero_root
 from object_storage import extract_public_asset_urls, object_keys
 
 logger = logging.getLogger(__name__)
@@ -139,10 +138,7 @@ def _apply_project_save(data: dict[str, Any]):
     cleanup_orphans(object_keys(removed - new_refs))
 
     # A rename leaves the hero video files under the original slug's prefix.
-    hls = video.hls
-    if renamed and f"/{hero_root(original_slug)}/" not in (hls or ""):
-        hls = None
-    cleanup_old_hero_versions(original_slug, hls)
+    cleanup_old_hero_versions(original_slug, video.hls)
 
     return {"success": True, "slug": slug, "revision": load_project(slug).revision}
 
@@ -162,10 +158,10 @@ async def save_project_endpoint(request: Request):
 
 @router.post("/create-project")
 async def create_project(request: Request):
-    data = await request.json()
+    data = await _json_object(request)
     slug = data.get("slug")
 
-    if not slug:
+    if not slug or not isinstance(slug, str):
         raise HTTPException(status_code=400, detail="Slug is required")
     if not validate_slug(slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
@@ -175,7 +171,7 @@ async def create_project(request: Request):
     frontmatter = _project_frontmatter(
         {"date": datetime.now().strftime("%Y-%m-%d"), **data}, slug, ProjectVideo()
     )
-    await asyncio.to_thread(save_project, slug, frontmatter, data.get("markdown", ""))
+    await asyncio.to_thread(save_project, slug, frontmatter, _markdown_field(data))
     return {"success": True, "slug": slug}
 
 

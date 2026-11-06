@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -21,9 +20,8 @@ router = APIRouter()
 
 
 def _is_partial_request(request: Request) -> bool:
-    """The homepage fetches project details as HTML fragments."""
-    partial = request.query_params.get("_partial", "").strip().lower()
-    return partial in {"1", "true", "yes", "on"} or (
+    """The homepage fetches project details as fragments with `_partial`; /test uses the header."""
+    return request.query_params.get("_partial") == "1" or (
         request.headers.get("X-Requested-With") == "XMLHttpRequest"
     )
 
@@ -40,7 +38,6 @@ def _page_context(request: Request) -> dict:
     return {
         "site": site,
         "is_dev_mode": is_edit_mode(request),
-        "current_year": datetime.now().year,
         "og_image_link": site.about_photo_link,
     }
 

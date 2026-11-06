@@ -31,20 +31,20 @@ OBJECT_STORAGE_CANONICAL_MARKER_KEY = f"{OBJECT_STORAGE_CONTENT_PREFIX}.object-s
 OBJECT_STORAGE_ARCHIVE_PREFIX = "content-archive/"
 
 
+def _upload(local_path: Path, object_key: str) -> None:
+    with open(local_path, "rb") as f:
+        get_object_storage_client().upload_fileobj(
+            f,
+            get_bucket_name(),
+            object_key,
+            ExtraArgs={"ContentType": _content_type(local_path)},
+        )
+
+
 def sync_to_object_storage(local_path: Path) -> bool:
     """Best-effort: a failed upload is logged, and the local write stands."""
     try:
-        object_key = local_to_object_storage_key(local_path)
-
-        client = get_object_storage_client()
-        with open(local_path, "rb") as f:
-            client.upload_fileobj(
-                f,
-                get_bucket_name(),
-                object_key,
-                ExtraArgs={"ContentType": _content_type(local_path)},
-            )
-        logger.info("Synced to object storage: %s", object_key)
+        _upload(local_path, _object_key(local_path))
         return True
     except Exception:
         logger.exception("Failed to sync %s to object storage", local_path)
@@ -52,35 +52,14 @@ def sync_to_object_storage(local_path: Path) -> bool:
 
 
 def delete_from_object_storage(local_path: Path) -> bool:
-    """Delete a content file from object storage (e.g. after project deletion)."""
-    try:
-        object_key = local_to_object_storage_key(local_path)
-
-        client = get_object_storage_client()
-        client.delete_object(Bucket=get_bucket_name(), Key=object_key)
-        logger.info("Deleted from object storage: %s", object_key)
-        return True
-    except Exception:
-        logger.exception("Failed to delete %s from object storage", local_path)
-        return False
+    return delete_object(_object_key(local_path))
 
 
 def archive_to_object_storage(local_path: Path) -> bool:
-    """Archive a content file before deletion (safety net)."""
     try:
         relative = local_path.relative_to(get_content_paths().content_dir)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        object_key = f"{OBJECT_STORAGE_ARCHIVE_PREFIX}{relative.stem}_{timestamp}{relative.suffix}"
-
-        client = get_object_storage_client()
-        with open(local_path, "rb") as f:
-            client.upload_fileobj(
-                f,
-                get_bucket_name(),
-                object_key,
-                ExtraArgs={"ContentType": _content_type(local_path)},
-            )
-        logger.info("Archived to object storage: %s", object_key)
+        _upload(local_path, f"{OBJECT_STORAGE_ARCHIVE_PREFIX}{relative.stem}_{timestamp}{relative.suffix}")
         return True
     except Exception:
         logger.exception("Failed to archive %s to object storage", local_path)
@@ -88,13 +67,10 @@ def archive_to_object_storage(local_path: Path) -> bool:
 
 
 def run_startup_sync(policy: str) -> None:
-    """CONTENT_STARTUP_SYNC_POLICY: off, always, or guarded (only once the canonical marker exists)."""
+    """off, always, or guarded (only once the canonical marker exists)."""
     if policy == "off":
         logger.info("Startup: content sync from object storage disabled")
         return
-    if policy not in {"always", "guarded"}:
-        raise ValueError(f"Unknown CONTENT_STARTUP_SYNC_POLICY: {policy!r}")
-
     count = sync_from_object_storage(require_marker=policy == "guarded")
     if count:
         logger.info("Startup: synced %d content file(s) from object storage", count)
@@ -153,13 +129,11 @@ def has_canonical_marker() -> bool:
         return False
 
 
-def write_canonical_marker(*, source: str) -> None:
-    """Write/update canonical marker indicating object storage is runtime source of truth."""
+def _write_canonical_marker() -> None:
     client = get_object_storage_client()
     payload = {
         "canonical": "object_storage",
         "content_prefix": OBJECT_STORAGE_CONTENT_PREFIX,
-        "source": source,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     client.put_object(
@@ -168,32 +142,21 @@ def write_canonical_marker(*, source: str) -> None:
         Body=json.dumps(payload, indent=2).encode("utf-8"),
         ContentType="application/json; charset=utf-8",
     )
-    logger.info("Wrote object-storage canonical marker: %s", OBJECT_STORAGE_CANONICAL_MARKER_KEY)
 
 
-def local_to_object_storage_key(local_path: Path) -> str:
-    """Translate a local content path to its object-storage key."""
+def _object_key(local_path: Path) -> str:
     relative = local_path.relative_to(get_content_paths().content_dir)
     return f"{OBJECT_STORAGE_CONTENT_PREFIX}{relative.as_posix()}"
 
 
 def seed_object_storage_from_local(*, delete_extra: bool = False) -> tuple[int, int]:
-    """Upload all local content files and write a canonical marker.
-
-    Returns:
-        tuple(uploaded_count, deleted_count)
-    """
-    uploaded = 0
+    """Upload all local content and write the canonical marker. Returns (uploaded, deleted)."""
+    local_files = _iter_local_content_files()
+    local_keys = {_object_key(path) for path in local_files}
+    uploaded = sum(sync_to_object_storage(path) for path in local_files)
     deleted = 0
-    local_keys: set[str] = set()
 
-    for local_path in _iter_local_content_files():
-        object_key = local_to_object_storage_key(local_path)
-        if sync_to_object_storage(local_path):
-            uploaded += 1
-            local_keys.add(object_key)
-
-    write_canonical_marker(source="seed")
+    _write_canonical_marker()
     local_keys.add(OBJECT_STORAGE_CANONICAL_MARKER_KEY)
 
     if delete_extra:
@@ -207,7 +170,6 @@ def seed_object_storage_from_local(*, delete_extra: bool = False) -> tuple[int, 
 
 
 def _iter_local_content_files() -> list[Path]:
-    """List syncable local content files."""
     content_dir = get_content_paths().content_dir
     if not content_dir.exists():
         return []
@@ -278,9 +240,9 @@ def _main() -> int:
         help="Delete object-storage content/ keys that do not exist locally.",
     )
 
-    status = sub.add_parser(
+    sub.add_parser(
         "status",
-        help="Show local/object-storage sync status and canonical marker state.",
+        help="Show the local file count and whether the canonical marker exists.",
     )
 
     args = parser.parse_args()
@@ -297,18 +259,14 @@ def _main() -> int:
         )
         return 0
 
-    if args.command == "status":
-        local_count = len(_iter_local_content_files())
-        marker = has_canonical_marker()
-        print(f"Local content files: {local_count}")
-        print(
-            f"Object-storage canonical marker ({OBJECT_STORAGE_CANONICAL_MARKER_KEY}): "
-            f"{'present' if marker else 'missing'}"
-        )
-        return 0
-
-    parser.print_help()
-    return 1
+    local_count = len(_iter_local_content_files())
+    marker = has_canonical_marker()
+    print(f"Local content files: {local_count}")
+    print(
+        f"Object-storage canonical marker ({OBJECT_STORAGE_CANONICAL_MARKER_KEY}): "
+        f"{'present' if marker else 'missing'}"
+    )
+    return 0
 
 
 if __name__ == "__main__":

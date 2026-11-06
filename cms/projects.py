@@ -4,13 +4,13 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
-from functools import cached_property, lru_cache
+from functools import cached_property
 
 from cms.documents import delete_document, read_document, write_document
 from cms.markdown import html_excerpt, markdown_to_html
 from cms.paths import get_content_paths
 from media.sprite_format import DEFAULT_SPRITE_COLUMNS, DEFAULT_SPRITE_FRAMES, sprite_rows
-from object_storage import extract_public_asset_urls, public_asset_url, rewrite_managed_public_url
+from object_storage import extract_public_asset_urls, rewrite_managed_public_url
 
 _SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -40,12 +40,7 @@ def _positive_int(value) -> int | None:
 
 def _asset_url(value) -> str | None:
     """A stored asset reference as an absolute URL on the current host."""
-    text = _non_empty_string(value)
-    if not text:
-        return None
-    if text.startswith(("http://", "https://")):
-        return rewrite_managed_public_url(text)
-    return public_asset_url(text.lstrip("/"))
+    return rewrite_managed_public_url(_non_empty_string(value))
 
 
 def _ratio(width: int | None, height: int | None) -> float | None:
@@ -105,23 +100,13 @@ class ProjectVideo:
         return _ratio(self.video_width, self.video_height)
 
 
-def format_date(value) -> str:
+def _as_date(value) -> date | None:
     if isinstance(value, str):
         try:
-            value = datetime.strptime(value, "%Y-%m-%d").date()
+            return datetime.strptime(value, "%Y-%m-%d").date()
         except ValueError:
-            return value
-    if isinstance(value, date):
-        return value.strftime("%B, %Y")
-    return str(value) if value else ""
-
-
-@lru_cache(maxsize=512)
-def _parse_iso_date(value: str) -> date:
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return date.min
+            return None
+    return value if isinstance(value, date) else None
 
 
 @dataclass(frozen=True)
@@ -131,14 +116,11 @@ class ProjectCard:
     slug: str
     name: str
     formatted_date: str
-    video_link: str | None = None
     thumbnail_link: str | None = None
     sprite_sheet_link: str | None = None
     frames: int | None = None
     columns: int | None = None
     rows: int | None = None
-    frame_width: int | None = None
-    frame_height: int | None = None
     sprite_aspect_ratio: float | None = None
     hero_aspect_ratio: float | None = None
 
@@ -170,8 +152,14 @@ class ProjectInfo:
         return html_excerpt(self.html_content)
 
     @property
+    def created_on(self) -> date | None:
+        return _as_date(self.creation_date)
+
+    @property
     def formatted_date(self) -> str:
-        return format_date(self.creation_date)
+        if self.created_on:
+            return self.created_on.strftime("%B, %Y")
+        return str(self.creation_date) if self.creation_date else ""
 
     @property
     def og_image_link(self) -> str | None:
@@ -209,14 +197,11 @@ class ProjectInfo:
                 "frames": frames,
                 "columns": columns,
                 "rows": video.rows or sprite_rows(frames, columns),
-                "frame_width": video.frame_width,
-                "frame_height": video.frame_height,
             }
         return ProjectCard(
             slug=self.slug,
             name=self.name,
             formatted_date=self.formatted_date,
-            video_link=video.hls,
             thumbnail_link=video.thumbnail,
             sprite_aspect_ratio=sprite_aspect_ratio,
             hero_aspect_ratio=video.aspect_ratio or sprite_aspect_ratio,
@@ -269,13 +254,10 @@ def load_all_projects(include_drafts: bool = False) -> list[ProjectInfo]:
         if project and (include_drafts or not project.is_draft)
     ]
 
-    def sort_key(project: ProjectInfo):
-        created = project.creation_date
-        if isinstance(created, str):
-            created = _parse_iso_date(created)
-        return (not project.pinned, -(created or date.min).toordinal())
-
-    return sorted(projects, key=sort_key)
+    return sorted(
+        projects,
+        key=lambda project: (not project.pinned, -(project.created_on or date.min).toordinal()),
+    )
 
 
 def save_project(slug: str, frontmatter: dict, markdown_content: str) -> None:

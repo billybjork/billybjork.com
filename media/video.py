@@ -52,8 +52,6 @@ def sprite_frame_size(source_width: int, source_height: int) -> tuple[int, int]:
     Homepage thumbnails take the video's shape, so sprites must too; a 16:9 crop
     of a portrait video would be cropped again to fit its thumbnail.
     """
-    if source_width <= 0 or source_height <= 0:
-        return SPRITE_FRAME_LONG_EDGE, _round_even(SPRITE_FRAME_LONG_EDGE * 9 / 16)
     if source_width >= source_height:
         return SPRITE_FRAME_LONG_EDGE, _round_even(SPRITE_FRAME_LONG_EDGE * source_height / source_width)
     return _round_even(SPRITE_FRAME_LONG_EDGE * source_width / source_height), SPRITE_FRAME_LONG_EDGE
@@ -86,14 +84,12 @@ def _pick_stable_variant_dimensions(
 
     for raw_height in range(start, end + 1):
         height = _floor_even(raw_height)
-        if height < 2 or height in seen_heights:
+        if height in seen_heights:
             continue
         seen_heights.add(height)
 
         width = _round_even(height * source_ratio)
         width = min(width, _floor_even(safe_source_width))
-        if width < 2:
-            continue
 
         aspect_drift = abs((width / height) - source_ratio)
         height_delta = abs(height - capped_target_height)
@@ -102,24 +98,15 @@ def _pick_stable_variant_dimensions(
         if best is None or score < best[0]:
             best = (score, width, height)
 
-    if best:
-        return best[1], best[2]
-
-    fallback_height = _floor_even(capped_target_height)
-    fallback_width = _round_even(fallback_height * source_ratio)
-    fallback_width = min(fallback_width, _floor_even(safe_source_width))
-    return max(2, fallback_width), max(2, fallback_height)
+    return best[1], best[2]
 
 
 def _build_hls_resolutions(source_width: int, source_height: int) -> list[tuple[int, int, int]]:
-    """
-    Build an HLS ladder with dimensions that stay close to the source DAR.
-    """
     resolutions: list[tuple[int, int, int]] = []
     seen_dimensions: set[tuple[int, int]] = set()
 
     for target_height, bitrate in HLS_HEIGHT_BITRATE_LADDER:
-        # Match previous behavior: only include higher tiers when source can support them.
+        # Tiers from 720p up never upscale; smaller ones always exist as a floor.
         if target_height >= 720 and source_height < target_height:
             continue
 
@@ -131,11 +118,7 @@ def _build_hls_resolutions(source_width: int, source_height: int) -> list[tuple[
         seen_dimensions.add(dimensions)
         resolutions.append((width, height, bitrate))
 
-    if resolutions:
-        return resolutions
-
-    # Extremely small/odd sources: ensure at least one valid rendition.
-    return [(_floor_even(source_width), _floor_even(source_height), 800)]
+    return resolutions
 
 
 def _has_audio_stream(video_path: str) -> bool:
@@ -321,12 +304,9 @@ def _generate_sprite_sheet(
     columns = DEFAULT_SPRITE_COLUMNS
     fps = SPRITE_FPS
     total_frames = int(duration * fps)
-    rows = sprite_rows(total_frames, columns)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         frames_pattern = os.path.join(temp_dir, 'frame_%04d.jpg')
-
-        video_filter = f'fps={fps},scale={frame_width}:{frame_height}:flags=lanczos,setsar=1'
 
         # Input seeking (before -i) is frame-accurate when re-encoding; output
         # seeking after the fps filter can land a second or more off the range.
@@ -339,7 +319,7 @@ def _generate_sprite_sheet(
             '-ss', str(seek_time),
             '-i', video_path,
             '-t', str(duration),
-            '-vf', video_filter,
+            '-vf', f'fps={fps},scale={frame_width}:{frame_height}:flags=lanczos,setsar=1',
             '-q:v', '5',
             frames_pattern
         ]
@@ -354,33 +334,20 @@ def _generate_sprite_sheet(
         if actual_frames == 0:
             raise ValueError("No frames extracted")
 
-        montage_cmd = [
-            'montage',
-            *[str(f) for f in frames[:actual_frames]],
-            '-tile', f'{columns}x',
-            '-geometry', f'{frame_width}x{frame_height}+0+0',
-            '-quality', '80',
-            output_path
+        rows = sprite_rows(actual_frames, columns)
+        tile_cmd = [
+            'ffmpeg',
+            '-y',
+            '-framerate', str(fps),
+            '-i', frames_pattern,
+            '-vf', f'tile={columns}x{rows}',
+            '-frames:v', '1',
+            '-q:v', '5',
+            output_path,
         ]
-
-        result = subprocess.run(montage_cmd, capture_output=True, text=True)
+        result = subprocess.run(tile_cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            # ImageMagick is optional; ffmpeg's tile filter is the fallback.
-            ffmpeg_tile_cmd = [
-                'ffmpeg',
-                '-y',
-                '-ss', str(seek_time),
-                '-i', video_path,
-                '-t', str(duration),
-                '-vf', f'{video_filter},tile={columns}x{sprite_rows(actual_frames, columns)}',
-                '-frames:v', '1',
-                '-q:v', '5',
-                output_path
-            ]
-
-            result = subprocess.run(ffmpeg_tile_cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                raise ValueError(f"Sprite sheet creation failed: {result.stderr}")
+            raise ValueError(f"Sprite sheet creation failed: {result.stderr}")
 
     return {
         'frames': actual_frames,

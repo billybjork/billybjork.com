@@ -89,6 +89,30 @@ class ProjectSaveTests(unittest.TestCase):
             self.assertNotIn("videos/sample-project/111/master.m3u8", app.storage.objects)
             self.assertIn("videos/sample-project/222/master.m3u8", app.storage.objects)
 
+    def test_save_keeps_a_current_unversioned_hero_and_its_files(self) -> None:
+        with managed_test_app() as app:
+            app.login()
+            app.storage.put("videos/sample-project/master.m3u8")
+            app.storage.put("videos/sample-project/seg_0_000.ts")
+            app.storage.put("videos/sample-project/111/master.m3u8")
+
+            app.client.post(
+                "/api/save-project",
+                json=_save_payload(
+                    video={"hls": f"{PUBLIC_BASE_URL}/videos/sample-project/master.m3u8"}
+                ),
+            )
+
+            self.assertIn("videos/sample-project/master.m3u8", app.storage.objects)
+            self.assertIn("videos/sample-project/seg_0_000.ts", app.storage.objects)
+            self.assertNotIn("videos/sample-project/111/master.m3u8", app.storage.objects)
+
+    def test_create_rejects_malformed_bodies(self) -> None:
+        with managed_test_app() as app:
+            app.login()
+            self.assertEqual(app.client.post("/api/create-project", json=[1]).status_code, 400)
+            self.assertEqual(app.client.post("/api/create-project", json={"slug": 5}).status_code, 400)
+
     def test_delete_archives_the_file_and_removes_hero_videos(self) -> None:
         with managed_test_app() as app:
             app.login()

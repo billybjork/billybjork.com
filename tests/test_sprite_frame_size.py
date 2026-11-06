@@ -14,9 +14,6 @@ class SpriteFrameSizeTests(unittest.TestCase):
         self.assertEqual(width % 2, 0)
         self.assertAlmostEqual(width / height, 1216 / 2160, delta=0.01)
 
-    def test_unknown_dimensions_fall_back_to_16_by_9(self) -> None:
-        self.assertEqual(sprite_frame_size(0, 0), (320, 180))
-
 
 if __name__ == "__main__":
     unittest.main()

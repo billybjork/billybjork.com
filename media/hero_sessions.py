@@ -16,11 +16,17 @@ from typing import Generic, TypeVar
 
 from cms.assets import cleanup_old_hero_versions
 from cms.projects import load_project
-from media.video import encode_and_upload_hls, extract_thumbnail_frames, get_video_info
+from media.video import (
+    encode_and_upload_hls,
+    extract_thumbnail_frames,
+    generate_sprite_and_poster,
+    get_video_info,
+)
 
 logger = logging.getLogger(__name__)
 
 _CLEANUP_INTERVAL_SECONDS = 900
+_HLS_WAIT_SECONDS = 300
 _SESSION_LIFETIME = timedelta(hours=1)
 _TIMELINE_INITIAL_FRAME_COUNT = 6
 _TIMELINE_TOTAL_FRAME_COUNT = 20
@@ -32,9 +38,9 @@ _TIMELINE_FRAME_HEIGHT = 54
 class TempVideo:
     source: str
     frames: list[str]
+    video_width: int
+    video_height: int
     frames_complete: bool = False
-    video_width: int | None = None
-    video_height: int | None = None
     timestamp: datetime = field(default_factory=datetime.now)
 
     @property
@@ -57,7 +63,7 @@ T = TypeVar("T")
 
 
 class _SessionStore(Generic[T]):
-    """Thread-safe sessions, read as copies because background threads update them."""
+    """Thread-safe sessions. Updates replace the stored item, so a read stays a consistent snapshot."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -118,8 +124,8 @@ def open_temp_video(source: str) -> tuple[str, list[str], float]:
         TempVideo(
             source=source,
             frames=first_frames,
-            video_width=info["width"] or None,
-            video_height=info["height"] or None,
+            video_width=info["width"],
+            video_height=info["height"],
         )
     )
     threading.Thread(
@@ -135,10 +141,12 @@ def discard_temp_video(temp_id: str) -> None:
 
 
 def _remove_local_source(temp_video: TempVideo) -> None:
-    if temp_video.is_remote or not os.path.exists(temp_video.source):
+    if temp_video.is_remote:
         return
     try:
         os.unlink(temp_video.source)
+    except FileNotFoundError:
+        pass
     except OSError:
         logger.warning("Failed to delete temp file: %s", temp_video.source, exc_info=True)
 
@@ -166,6 +174,68 @@ def start_hls_encoding(source: str, slug: str) -> str:
 
     threading.Thread(target=encode, daemon=True).start()
     return session_id
+
+
+class HeroVideoError(Exception):
+    def __init__(self, message: str, status_code: int = 500) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+async def _wait_for_hls(session_id: str) -> str | None:
+    """The finished encode's URL; None if the session is gone."""
+    for _ in range(_HLS_WAIT_SECONDS):
+        session = hls_sessions.get(session_id)
+        if not session:
+            return None
+        if session.status == "complete":
+            return session.hls_url
+        if session.status == "error":
+            raise HeroVideoError(f"HLS encoding failed: {session.error or 'Unknown error'}")
+        await asyncio.sleep(1)
+    raise HeroVideoError("HLS encoding timed out")
+
+
+async def finish_hero_video(
+    temp_id: str,
+    hls_session_id: str | None,
+    slug: str,
+    sprite_start: float,
+    sprite_duration: float,
+) -> dict:
+    """Once the sprite range is chosen: wait out the encode, then produce the sprite and poster.
+
+    Returns the project's new `video` metadata. The sessions end either way.
+    """
+    temp_video = temp_videos.get(temp_id)
+    if not temp_video:
+        raise HeroVideoError("Invalid or expired temp_id", 400)
+    if not temp_video.is_remote and not os.path.exists(temp_video.source):
+        raise HeroVideoError("Temp file not found", 400)
+
+    try:
+        hls_url = await _wait_for_hls(hls_session_id) if hls_session_id else None
+        if not hls_url:
+            project = await asyncio.to_thread(load_project, slug)
+            hls_url = project.video.hls if project else None
+        if not hls_url:
+            raise HeroVideoError("HLS URL unavailable for sprite generation")
+
+        assets = await asyncio.to_thread(
+            generate_sprite_and_poster, temp_video.source, slug, sprite_start, sprite_duration
+        )
+        return {
+            "hls": hls_url,
+            "thumbnail": assets["thumbnail"],
+            "spriteSheet": assets["spriteSheet"],
+            **assets["spriteMeta"],
+            "video_width": temp_video.video_width,
+            "video_height": temp_video.video_height,
+        }
+    finally:
+        discard_temp_video(temp_id)
+        if hls_session_id:
+            hls_sessions.pop(hls_session_id)
 
 
 def _cleanup_expired() -> None:

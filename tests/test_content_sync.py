@@ -1,4 +1,9 @@
+import os
 import unittest
+from unittest.mock import patch
+
+from cms.sync import run_startup_sync
+from config import AppSettings
 
 from tests.support import managed_test_app
 
@@ -10,8 +15,6 @@ class StartupSyncTests(unittest.TestCase):
             app.storage.put("content/.object-storage-canonical.json", b"{}")
             app.storage.put("content/../evil.md", b"x")
 
-            from cms.sync import run_startup_sync
-
             run_startup_sync("always")
 
             self.assertTrue((app.projects_dir / "pulled.md").exists())
@@ -20,8 +23,6 @@ class StartupSyncTests(unittest.TestCase):
 
     def test_guarded_waits_for_the_canonical_marker(self) -> None:
         with managed_test_app() as app:
-            from cms.sync import run_startup_sync
-
             app.storage.put("content/projects/pulled.md", b"body")
             run_startup_sync("guarded")
             self.assertFalse((app.projects_dir / "pulled.md").exists())
@@ -30,11 +31,10 @@ class StartupSyncTests(unittest.TestCase):
             run_startup_sync("guarded")
             self.assertTrue((app.projects_dir / "pulled.md").exists())
 
-    def test_unknown_policy_is_an_error(self) -> None:
-        from cms.sync import run_startup_sync
-
-        with self.assertRaises(ValueError):
-            run_startup_sync("legacy")
+    def test_unknown_policy_stops_startup(self) -> None:
+        with patch.dict(os.environ, {"CONTENT_STARTUP_SYNC_POLICY": "legacy"}):
+            with self.assertRaises(ValueError):
+                AppSettings.from_env()
 
 
 if __name__ == "__main__":
