@@ -69,17 +69,20 @@ export function projectPage(slug: string): PageAdapter {
   let savedSlug = slug;
   let project: ProjectData;
   let slugInput: HTMLInputElement | null = null;
+  let slugSent = slug;
 
   const followRename = (nextSlugValue: string | undefined): void => {
     const nextSlug = nextSlugValue?.trim();
     if (!nextSlug) return;
 
     const previousSlug = savedSlug;
-    project.slug = nextSlug;
-    if (previousSlug === nextSlug) return;
-
     savedSlug = nextSlug;
-    if (slugInput) slugInput.value = nextSlug;
+    // The server may have normalized what it was sent, but the field may also have moved on since.
+    if (project.slug === slugSent) {
+      project.slug = nextSlug;
+      if (slugInput) slugInput.value = nextSlug;
+    }
+    if (previousSlug === nextSlug) return;
 
     const runtime = getHomepageRuntime();
     if (runtime) {
@@ -107,6 +110,7 @@ export function projectPage(slug: string): PageAdapter {
     toolbarTitle: () => project.name,
 
     saveBody({ markdown, stamp, cleanupCandidates }) {
+      slugSent = project.slug;
       return {
         slug: String(project.slug || savedSlug).trim(),
         original_slug: savedSlug,

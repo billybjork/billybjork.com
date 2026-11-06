@@ -45,14 +45,18 @@ interface SaveDeps {
   exit(): void;
 }
 
+type SaveOutcome = 'saved' | 'conflict' | 'failed' | 'aborted';
+
 export function createSaveController({ page, store, revision: initialRevision, onStatus, exit }: SaveDeps): SaveController {
   let dirty = false;
+  let editCount = 0;
   let status: SaveStatus = 'unchanged';
   let revision = initialRevision;
+  let stopped = false;
   let autoSaveTimer: ReturnType<typeof setTimeout> | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let fadeTimer: ReturnType<typeof setTimeout> | undefined;
-  let inFlight: AbortController | null = null;
+  let inFlight: { finished: Promise<SaveOutcome>; controller: AbortController } | null = null;
 
   const dispatch = (action: SaveAction): void => {
     status = nextStatus(status, action);
@@ -63,12 +67,14 @@ export function createSaveController({ page, store, revision: initialRevision, o
     }
   };
 
-  /** The one save request. Resolves 'conflict' on a stale revision and throws on any other failure. */
-  const save = async ({ force = false, signal }: { force?: boolean; signal?: AbortSignal }): Promise<'saved' | 'conflict'> => {
+  /** The one save request. Only what it sent counts as saved: an edit made meanwhile stays dirty. */
+  const save = async ({ force, signal }: { force: boolean; signal: AbortSignal }): Promise<'saved' | 'conflict'> => {
+    const editsSent = editCount;
+    const candidatesSent = store.cleanupCandidates();
     const body = page.saveBody({
       markdown: blocksToMarkdown(store.blocks),
       stamp: force ? { force: true } : { base_revision: revision },
-      cleanupCandidates: store.cleanupCandidates(),
+      cleanupCandidates: candidatesSent,
     });
     const response = await fetch(page.saveRoute, {
       method: 'POST',
@@ -82,42 +88,64 @@ export function createSaveController({ page, store, revision: initialRevision, o
 
     const result = await response.json() as SaveResult;
     if (result.revision) revision = result.revision;
-    store.clearCleanupCandidates();
+    store.forgetCleanupCandidates(candidatesSent);
     page.onSaved(result);
-    dirty = false;
+    if (editCount === editsSent) dirty = false;
     return 'saved';
   };
 
-  const clearPendingSaves = (): void => {
+  const clearSaveTimers = (): void => {
     clearTimeout(autoSaveTimer);
     clearTimeout(retryTimer);
-    inFlight?.abort();
   };
 
-  const attemptSave = async (force: boolean): Promise<'saved' | 'conflict' | 'failed' | 'superseded'> => {
-    clearPendingSaves();
-    inFlight = new AbortController();
+  const sendSave = (force: boolean): Promise<SaveOutcome> => {
+    const controller = new AbortController();
     dispatch('save_start');
 
-    try {
-      const outcome = await save({ force, signal: inFlight.signal });
-      if (outcome === 'conflict') {
-        dispatch('conflict');
-        showConflictBanner();
-        return 'conflict';
+    const finished = (async (): Promise<SaveOutcome> => {
+      try {
+        const outcome = await save({ force, signal: controller.signal });
+        if (outcome === 'conflict') {
+          dispatch('conflict');
+          showConflictBanner();
+        } else if (!dirty) {
+          dispatch('save_ok');
+        }
+        return outcome;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') return 'aborted';
+        console.error('Save failed:', error);
+        dispatch('save_error');
+        return 'failed';
       }
-      dispatch('save_ok');
-      return 'saved';
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') return 'superseded';
-      console.error('Save failed:', error);
-      dispatch('save_error');
-      return 'failed';
+    })();
+
+    inFlight = { finished, controller };
+    void finished.finally(() => {
+      if (inFlight?.finished === finished) inFlight = null;
+    });
+    return finished;
+  };
+
+  /**
+   * Saves run one at a time. A save in flight may already have reached the server, so aborting it
+   * and resending its base revision could conflict with itself; the next one waits and builds on it.
+   */
+  const attemptSave = async (force: boolean): Promise<SaveOutcome> => {
+    clearSaveTimers();
+
+    while (inFlight) {
+      const previous = await inFlight.finished;
+      if (stopped) return 'aborted';
+      if (!force && previous === 'conflict') return 'conflict';
+      if (!force && previous === 'saved' && !dirty) return 'saved';
     }
+    return sendSave(force);
   };
 
   const autoSave = async (): Promise<void> => {
-    if (!dirty || status === 'saving' || status === 'conflict') return;
+    if (!dirty || status === 'conflict') return;
     if (await attemptSave(false) === 'failed') {
       retryTimer = setTimeout(() => {
         if (status === 'error' && dirty) void autoSave();
@@ -153,9 +181,9 @@ export function createSaveController({ page, store, revision: initialRevision, o
 
     markDirty() {
       dirty = true;
+      editCount += 1;
       dispatch('edit');
-      clearTimeout(autoSaveTimer);
-      clearTimeout(retryTimer);
+      clearSaveTimers();
       autoSaveTimer = setTimeout(() => void autoSave(), AUTO_SAVE_DELAY_MS);
     },
 
@@ -164,13 +192,18 @@ export function createSaveController({ page, store, revision: initialRevision, o
         exit();
         return;
       }
-      const outcome = await attemptSave(false);
+      let outcome = await attemptSave(false);
+      while (outcome === 'saved' && dirty) {
+        outcome = await attemptSave(false);
+      }
       if (outcome === 'saved') exit();
       if (outcome === 'failed') showNotification('Failed to save', 'error');
     },
 
     stop() {
-      clearPendingSaves();
+      stopped = true;
+      clearSaveTimers();
+      inFlight?.controller.abort();
       clearTimeout(fadeTimer);
     },
   };

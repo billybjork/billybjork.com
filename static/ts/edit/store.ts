@@ -25,7 +25,7 @@ export interface BlockStore {
 
   addCleanupCandidate(url: string | null | undefined): void;
   cleanupCandidates(): string[];
-  clearCleanupCandidates(): void;
+  forgetCleanupCandidates(urls: string[]): void;
 }
 
 interface StoreDeps {
@@ -179,6 +179,6 @@ export function createBlockStore(initial: Block[], deps: StoreDeps): BlockStore 
 
     addCleanupCandidate,
     cleanupCandidates: () => Array.from(candidates),
-    clearCleanupCandidates: () => candidates.clear(),
+    forgetCleanupCandidates: (urls) => urls.forEach((url) => candidates.delete(url)),
   };
 }
