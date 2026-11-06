@@ -60,7 +60,7 @@ export function renderHtmlBlock(ctx: EditorContext, block: HtmlBlock, context: B
     }
 
     previewContainer.innerHTML = '';
-    iframe = createSandboxedIframe(html, { allowFullscreen: true });
+    iframe = createSandboxedIframe(html);
     const previewIframe = iframe;
     previewIframe.dataset.autoHeight = styleHasHeight(block.style) ? 'false' : 'true';
     applySandboxInlineStyle(previewIframe, block.style, block.align);

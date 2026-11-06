@@ -1,3 +1,4 @@
+import { projectSlugFromPath } from '../core/project-path';
 import { isEditingActive } from '../core/edit-state';
 import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
 import { ICONS } from './icons';
@@ -12,16 +13,8 @@ const EDIT_STYLESHEETS = ['edit-mode-base.css', 'edit-mode-project.css', 'edit-m
 const HOMEPAGE_RUNTIME_WAIT_MS = 1500;
 const PROJECT_READY_WAIT_MS = 2500;
 
-function readProjectSlugFromPath(): string | null {
-  const pathname = window.location.pathname.replace(/\/+$/, '');
-  if (!pathname || pathname === ABOUT_PATH) return null;
-
-  const slug = decodeURIComponent(pathname.slice(1)).trim();
-  return slug && !slug.includes('/') ? slug : null;
-}
-
 async function editProject(fallbackSlug: string | null = null): Promise<void> {
-  let slug = getHomepageRuntime()?.getOpenProjectSlug() || readProjectSlugFromPath() || fallbackSlug;
+  let slug = getHomepageRuntime()?.getOpenProjectSlug() || projectSlugFromPath(window.location.pathname) || fallbackSlug;
 
   const runtime = getHomepageRuntime() ?? await waitForHomepageRuntime(HOMEPAGE_RUNTIME_WAIT_MS);
   if (runtime && slug) {

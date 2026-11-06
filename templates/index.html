@@ -28,8 +28,8 @@
                 {% if project.sprite_aspect_ratio %}data-sprite-aspect-ratio="{{ project.sprite_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.hero_aspect_ratio %}data-hero-aspect-ratio="{{ project.hero_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
-                {% if project.thumbnail_aspect_ratio %}
-                style="--homepage-thumb-aspect: {{ project.thumbnail_aspect_ratio | round(8) }};"
+                {% if project.hero_aspect_ratio %}
+                style="--homepage-thumb-aspect: {{ project.hero_aspect_ratio | round(8) }};"
                 {% endif %}>
                 <header class="homepage-card-heading" data-open-project="{{ project.slug }}">
                     {% if project.formatted_date %}<time class="homepage-card-date">{{ project.formatted_date }}</time>{% endif %}

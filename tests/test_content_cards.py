@@ -20,7 +20,7 @@ class ProjectCardTests(unittest.TestCase):
             ),
         ).to_card()
 
-        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 1216 / 2160)
+        self.assertAlmostEqual(card.hero_aspect_ratio or 0, 1216 / 2160)
         self.assertAlmostEqual(card.sprite_aspect_ratio or 0, 320 / 180)
 
     def test_thumbnail_falls_back_to_the_sprite_shape_without_video_dimensions(self) -> None:
@@ -31,7 +31,7 @@ class ProjectCardTests(unittest.TestCase):
             ),
         ).to_card()
 
-        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 320 / 240)
+        self.assertAlmostEqual(card.hero_aspect_ratio or 0, 320 / 240)
 
     def test_sprite_url_alone_gets_default_layout_without_inventing_frame_size(self) -> None:
         card = ProjectInfo(

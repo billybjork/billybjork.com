@@ -146,9 +146,6 @@ class ProjectCard:
     def has_sprite_animation(self) -> bool:
         return bool(self.sprite_sheet_link)
 
-    @property
-    def thumbnail_aspect_ratio(self) -> float | None:
-        return self.hero_aspect_ratio or self.sprite_aspect_ratio
 
 
 @dataclass(frozen=True)
