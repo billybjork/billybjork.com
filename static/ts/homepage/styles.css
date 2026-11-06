@@ -1,9 +1,3 @@
-/* Root homepage shared-element transition styles. */
-
-body {
-    background: var(--background-color);
-}
-
 #main-header {
     transition: opacity 220ms ease, transform 220ms ease, visibility 0ms linear 0ms;
     will-change: opacity, transform;
@@ -78,8 +72,8 @@ main.homepage-shared-element {
 .homepage-card-heading,
 .homepage-thumb-frame {
     /* Native shape at full list width; tall (portrait) media narrows to fit the viewport. */
-    width: min(100%, calc(80vh * var(--homepage-thumb-aspect, 16 / 9)));
-    width: min(100%, calc(80svh * var(--homepage-thumb-aspect, 16 / 9)));
+    width: min(100%, calc(80vh * var(--homepage-thumb-aspect, var(--media-aspect-fallback))));
+    width: min(100%, calc(80svh * var(--homepage-thumb-aspect, var(--media-aspect-fallback))));
     margin-inline: auto;
 }
 
@@ -105,7 +99,7 @@ main.homepage-shared-element {
 }
 
 .homepage-thumb-frame {
-    aspect-ratio: var(--homepage-thumb-aspect, 16 / 9);
+    aspect-ratio: var(--homepage-thumb-aspect, var(--media-aspect-fallback));
     border-radius: 0;
     overflow: hidden;
     display: block;
@@ -178,7 +172,7 @@ img.homepage-detail-fallback-media {
 .homepage-detail-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(34, 31, 31, 0.96);
+    background: rgba(var(--background-rgb), 0.96);
 }
 
 .homepage-detail-scroll {
@@ -257,23 +251,19 @@ img.homepage-detail-fallback-media {
 }
 
 .homepage-hero-frame {
-    --homepage-hero-inline-padding: clamp(0.75rem, 2vw, 1.5rem);
-    --homepage-hero-max-height: calc(100vh - (var(--homepage-hero-inline-padding) * 2));
-    --homepage-hero-max-height: calc(100svh - (var(--homepage-hero-inline-padding) * 2));
-    width: 100%;
     width: min(
         100%,
-        calc(var(--homepage-hero-max-height) * var(--homepage-hero-aspect, 16 / 9))
+        calc(var(--media-max-height) * var(--homepage-hero-aspect, var(--media-aspect-fallback)))
     );
-    max-width: calc(100vw - (var(--homepage-hero-inline-padding) * 2));
-    max-height: var(--homepage-hero-max-height);
+    max-width: calc(100vw - (var(--media-inline-padding) * 2));
+    max-height: var(--media-max-height);
     margin: 0 auto;
     border-radius: 0;
     overflow: hidden;
     background:
         var(--homepage-fallback-poster, none) center / cover no-repeat,
         #0f0f0f;
-    aspect-ratio: var(--homepage-hero-aspect, 16 / 9);
+    aspect-ratio: var(--homepage-hero-aspect, var(--media-aspect-fallback));
     position: relative;
 }
 
@@ -307,8 +297,6 @@ img.homepage-hero-bridge {
     object-fit: cover;
 }
 
-.homepage-hero-media > img,
-.homepage-hero-media > video,
 .homepage-hero-media > .video-container,
 .homepage-hero-media > .video-container > video {
     width: 100%;
@@ -356,9 +344,7 @@ img.homepage-hero-bridge {
 }
 
 .homepage-transition-visual,
-.homepage-transition-media-layer,
-.homepage-transition-layer > img,
-.homepage-transition-layer > video {
+.homepage-transition-media-layer {
     width: 100%;
     height: 100%;
     display: block;

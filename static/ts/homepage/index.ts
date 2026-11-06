@@ -1,3 +1,4 @@
+import '../project/styles.css';
 import './styles.css';
 import { registerHomepageRuntime } from '../core/runtime-registry';
 import { initProjectInteractions } from '../project/interactions';

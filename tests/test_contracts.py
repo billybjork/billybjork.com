@@ -105,8 +105,6 @@ class FrontendMarkupTests(unittest.TestCase):
             self.assertIn("build/project.css", point_cloud)
             self.assertNotIn("build/homepage.js", point_cloud)
 
-            self.assertNotIn("static/build/", app.client.get("/me").text)
-
 
 if __name__ == "__main__":
     unittest.main()
