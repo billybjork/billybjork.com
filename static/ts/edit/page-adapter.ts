@@ -1,10 +1,10 @@
 import { getHomepageRuntime } from '../core/runtime-registry';
+import { withShowDrafts } from '../core/show-drafts';
 import type { AboutData, ProjectData, SaveResult } from '../types/api';
 import { API, fetchJSON } from './api';
 import { showNotification } from './notify';
 import { findActiveContent, findProjectContent } from './page-content';
 import { createProjectTopControls, makeHeaderEditable } from './project-controls';
-import { withShowDrafts } from './show-drafts';
 import type { BlockStore } from './store';
 
 export interface LoadedContent {

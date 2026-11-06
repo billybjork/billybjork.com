@@ -1,3 +1,4 @@
+import { withShowDrafts } from '../core/show-drafts';
 import { cleanupProjectDetail, hydrateProjectDetail, prepareHeroVideo } from '../project/detail-runtime';
 import type { ProjectCard } from './card';
 import { coverHeroUntilReady } from './flight';
@@ -85,13 +86,7 @@ export class DetailLoader {
       return cached;
     }
 
-    const url = new URL(`/${slug}`, window.location.origin);
-    url.searchParams.set('_partial', '1');
-    if (new URL(window.location.href).searchParams.get('show_drafts') === 'true') {
-      url.searchParams.set('show_drafts', 'true');
-    }
-
-    const response = await fetch(url.toString(), { signal });
+    const response = await fetch(withShowDrafts(`/${slug}?_partial=1`), { signal });
     if (!response.ok) {
       throw new Error(`Failed to fetch project detail (${response.status})`);
     }

@@ -174,6 +174,26 @@ describe('the header controls', () => {
     expect(sessionStorage.getItem('bb_show_drafts')).toBe('true');
   });
 
+  it('remembers a show_drafts parameter it finds in the URL', async () => {
+    window.history.replaceState(null, '', 'http://localhost/?show_drafts=true');
+    document.body.innerHTML = '<header id="main-header"><nav></nav></header>';
+    await boot();
+
+    expect(sessionStorage.getItem('bb_show_drafts')).toBe('true');
+    expect(harness.navigations).toEqual([]);
+  });
+
+  it('turns the drafts view off again', async () => {
+    window.history.replaceState(null, '', 'http://localhost/?show_drafts=true');
+    document.body.innerHTML = '<header id="main-header"><nav></nav></header>';
+    await boot();
+
+    document.querySelector<HTMLButtonElement>('.show-drafts-toggle')!.click();
+
+    expect(harness.navigations).toEqual(['http://localhost/']);
+    expect(sessionStorage.getItem('bb_show_drafts')).toBeNull();
+  });
+
   it('sends the homepage back to its drafts view when the tab remembers it', async () => {
     window.history.replaceState(null, '', 'http://localhost/');
     document.body.innerHTML = '<header id="main-header"><nav></nav></header>';

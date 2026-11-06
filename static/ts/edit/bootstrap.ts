@@ -1,5 +1,6 @@
 import { projectSlugFromPath } from '../core/project-path';
 import { isEditingActive } from '../core/edit-state';
+import { isShowDraftsActive, rememberShowDrafts, withoutShowDrafts, withShowDrafts } from '../core/show-drafts';
 import { getHomepageRuntime } from '../core/runtime-registry';
 import { ICONS } from './icons';
 import { aboutPage, projectPage } from './page-adapter';
@@ -7,7 +8,6 @@ import { isAboutPage } from './page-content';
 import { showProjectCreateDialog } from './project-create';
 import { restorePersistedScroll } from './scroll';
 import { openEditor } from './session';
-import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
 
 /** Only the homepage template mounts projects, so a page without its runtime has none to edit. */
 async function editProject(): Promise<void> {
@@ -88,14 +88,8 @@ function addHeaderButtons(): void {
       active ? 'Hide drafts' : 'Show drafts',
       ICONS.drafts,
       () => {
-        const url = new URL(window.location.href);
-        if (active) {
-          url.searchParams.delete('show_drafts');
-        } else {
-          url.searchParams.set('show_drafts', 'true');
-        }
-        setShowDraftsRemembered(!active);
-        window.location.href = url.toString();
+        rememberShowDrafts(!active);
+        window.location.href = active ? withoutShowDrafts(window.location.href) : withShowDrafts(window.location.href);
       },
     );
     nav.prepend(drafts);
@@ -118,12 +112,10 @@ function listenForEditShortcut(): void {
 export function init(): void {
   restorePersistedScroll();
 
-  // Reading it also remembers a show_drafts query parameter for the tab.
   const showDrafts = isShowDraftsActive();
-  if (window.location.pathname === '/' && showDrafts && !new URLSearchParams(window.location.search).has('show_drafts')) {
-    const url = new URL(window.location.href);
-    url.searchParams.set('show_drafts', 'true');
-    window.location.replace(url.toString());
+  rememberShowDrafts(showDrafts);
+  if (window.location.pathname === '/' && showDrafts && !window.location.search.includes('show_drafts')) {
+    window.location.replace(withShowDrafts(window.location.href));
     return;
   }
 

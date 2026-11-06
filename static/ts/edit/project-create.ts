@@ -1,8 +1,8 @@
 import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
+import { withShowDrafts } from '../core/show-drafts';
 import { API, postJSON } from './api';
 import { onEscape } from './modal';
 import { showNotification } from './notify';
-import { withShowDrafts } from './show-drafts';
 import { isValidSlug, SLUG_INPUT_PATTERN, slugFromName } from './slug';
 
 export function showProjectCreateDialog(): void {
