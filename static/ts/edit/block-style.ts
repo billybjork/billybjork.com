@@ -27,7 +27,6 @@ export function parseAlignmentFromStyle(style: string | null | undefined): Align
   return 'left';
 }
 
-/** What is left of a media style once its alignment and display declarations are gone. */
 export function sizeStyleOf(style: string | null | undefined): string {
   return (style ?? '')
     .split(';')
@@ -36,7 +35,6 @@ export function sizeStyleOf(style: string | null | undefined): string {
     .join('; ');
 }
 
-/** A media style with the size kept and the alignment rebuilt from `block.align`. */
 export function buildMediaStyleString(block: MediaStyleBlock): string {
   return ['display: block', sizeStyleOf(block.style), alignmentMargins(block.align ?? 'left')]
     .filter(Boolean)

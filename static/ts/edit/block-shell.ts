@@ -165,7 +165,6 @@ export function renderBlocks(ctx: EditorContext): void {
   }
 }
 
-/** Replaces one block's content without touching its neighbours; false if its wrapper is missing. */
 export function rerenderBlockInPlace(ctx: EditorContext, block: Block, index: number): boolean {
   const wrapper = ctx.blocksRoot.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${index}"]`);
   const content = wrapper?.querySelector<HTMLElement>(':scope > .block-content');
@@ -190,7 +189,6 @@ export function rerenderBlockInPlace(ctx: EditorContext, block: Block, index: nu
   return true;
 }
 
-/** Puts the caret in a newly inserted text or callout block. */
 function focusNewBlock(ctx: EditorContext, index: number): void {
   const wrapper = ctx.blocksRoot.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${index}"]`);
   const firstLine = wrapper?.querySelector<HTMLElement>('.text-block-line');

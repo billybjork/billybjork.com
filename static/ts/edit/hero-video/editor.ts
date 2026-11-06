@@ -32,7 +32,6 @@ const HLS_FAILED_MESSAGE_MS = 2000;
 const SAVED_MESSAGE_MS = 800;
 const GENERATING_MESSAGE = 'Generating sprite sheet & thumbnail...';
 
-/** Maps the server's 0-100 encoding progress onto part of the shared bar. */
 interface HlsWatch {
   barStart: number;
   barSpan: number;
@@ -218,7 +217,6 @@ class HeroVideoEditor {
     return `Thumbnail extraction failed: ${(error as Error).message}`;
   }
 
-  /** Previews the local file at once; a codec the browser cannot play waits for HLS instead. */
   private playUploadLocally(file: File): void {
     this.objectUrl = URL.createObjectURL(file);
     const { video } = this;

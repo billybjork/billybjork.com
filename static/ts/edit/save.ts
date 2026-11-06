@@ -32,7 +32,6 @@ function nextStatus(status: SaveStatus, action: SaveAction): SaveStatus {
 interface SaveController {
   isDirty(): boolean;
   markDirty(): void;
-  /** The Save button: saves if needed, then leaves through `exit`. */
   saveAndExit(): Promise<void>;
   /** Ends timers and any request in flight, so nothing saves after the user has left. */
   stop(): void;

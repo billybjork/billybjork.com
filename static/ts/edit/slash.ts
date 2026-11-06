@@ -16,7 +16,6 @@ export interface SlashSelection {
   replaceBlockIndex: number | null;
 }
 
-/** Where the menu was opened from. */
 type MenuTrigger =
   | { kind: 'textarea'; textarea: HTMLTextAreaElement; blockIndex: number; commit: () => void }
   | { kind: 'button'; anchor: HTMLElement; insertIndex: number };
@@ -24,7 +23,6 @@ type MenuTrigger =
 export interface SlashMenu {
   showFromButton(button: HTMLElement, insertIndex: number): void;
   handleTextareaInput(textarea: HTMLTextAreaElement, blockIndex: number, commit: () => void): void;
-  /** True when the open menu consumed the key. */
   handleKeydown(event: KeyboardEvent): boolean;
 }
 
@@ -143,7 +141,6 @@ export function createSlashMenu(onSelect: (selection: SlashSelection) => void, s
     });
   };
 
-  /** Removes the typed `/query` from the textarea; true if that left the whole block empty. */
   const removeTypedCommand = ({ textarea, commit }: Extract<MenuTrigger, { kind: 'textarea' }>): boolean => {
     const cursor = textarea.selectionStart;
     const text = textarea.value;

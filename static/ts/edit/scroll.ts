@@ -41,7 +41,6 @@ function runOverFrames(passes: number, pass: () => void, isCurrent: () => boolea
   requestAnimationFrame(run);
 }
 
-/** The first of `elements` still at least partly below the top of the viewport. */
 function firstVisible(elements: HTMLElement[]): HTMLElement | null {
   return elements.find((element) => element.getBoundingClientRect().bottom >= 0)
     ?? elements[elements.length - 1]
@@ -86,7 +85,6 @@ export function createScrollAnchors() {
   };
 
   return {
-    /** Holds the block at the top of the viewport still across a re-render of `blocksRoot`. */
     aroundRender(blocksRoot: HTMLElement, render: () => void): void {
       const wrappers = Array.from(blocksRoot.querySelectorAll<HTMLElement>('.block-wrapper[data-block-id]'));
       const element = firstVisible(wrappers);
@@ -108,7 +106,6 @@ export function createScrollAnchors() {
       });
     },
 
-    /** Captures the reader's place in the rendered page, for after the editor replaces it. */
     captureModeSwitch(content: HTMLElement): (blocksRoot: HTMLElement, stabilityRoot: ParentNode) => void {
       const offsetWithinContent = -content.getBoundingClientRect().top;
       const rendered = Array.from(content.querySelectorAll<HTMLElement>('.content-block'));
@@ -154,7 +151,6 @@ function captureBlockPosition(content: HTMLElement): { anchorIndex: number | nul
     : { anchorIndex: null, anchorTop: null };
 }
 
-/** Remembers the reader's place across the reload that leaves the editor. */
 export function persistScrollForNavigation(): void {
   const content = findActiveContent();
   const position = content ? captureBlockPosition(content) : { anchorIndex: null, anchorTop: null };

@@ -23,7 +23,6 @@ interface ToolbarActions {
   redo(): void;
   discard(): void;
   save(): void;
-  /** Present only on pages whose content can be deleted. */
   deleteContent?: () => void;
 }
 

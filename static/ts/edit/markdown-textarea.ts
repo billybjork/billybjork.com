@@ -19,7 +19,6 @@ interface LinkInfo {
 const LIST_INDENT = '   ';
 const LINK_LOOKBEHIND_LIMIT = 500;
 
-/** @returns a function that sizes the textarea to its content. */
 export function setupAutoResizeTextarea(
   textarea: HTMLTextAreaElement,
   onUpdate?: (value: string) => void
@@ -145,7 +144,6 @@ export function toggleFormat(
   onUpdate?.();
 }
 
-/** Handles Cmd/Ctrl + B, I, U, and K; true when the key was one of them. */
 export function handleFormattingShortcuts(
   event: KeyboardEvent,
   textarea: HTMLTextAreaElement,
@@ -179,7 +177,6 @@ export function getLineHeadingLevel(text: string): number | null {
   return parseHeadingLine(text)?.level ?? null;
 }
 
-/** Sets a single-line textarea to a heading of `level`, or back to plain text if already that level. */
 export function toggleLineHeading(textarea: HTMLTextAreaElement, level: number): void {
   const { value, selectionStart, selectionEnd } = textarea;
   const heading = parseHeadingLine(value);
@@ -227,7 +224,6 @@ export function findLinkAtCursor(textarea: HTMLTextAreaElement): LinkInfo | null
   return { start: bracketStart, end, text: match[1] ?? '', url: match[2] ?? '' };
 }
 
-/** Anchors, paths, and URLs with a scheme pass through; bare domains and addresses get one. */
 function normalizeLinkUrl(input: string): string {
   const trimmed = input.trim();
   if (/^(#|\/|\.\/|\.\.\/)/.test(trimmed) || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) return trimmed;
@@ -236,7 +232,6 @@ function normalizeLinkUrl(input: string): string {
   return trimmed;
 }
 
-/** Inserts a link around the selection, or edits the one under the cursor. */
 export async function insertLink(
   textarea: HTMLTextAreaElement,
   anchorRoot: HTMLElement,
@@ -323,7 +318,6 @@ export function parseListLine(line: string): { indent: string; nextMarker: strin
   return null;
 }
 
-/** Continues a list on Enter, or ends it if the item is empty. */
 function handleListEnter(event: KeyboardEvent, textarea: HTMLTextAreaElement, onUpdate: () => void): boolean {
   const { value, selectionStart, selectionEnd } = textarea;
   if (selectionStart !== selectionEnd) return false;
@@ -343,7 +337,6 @@ function handleListEnter(event: KeyboardEvent, textarea: HTMLTextAreaElement, on
   return true;
 }
 
-/** Handles Tab, Shift+Tab, and Enter in a list; true when the key was consumed. */
 export function handleListShortcuts(event: KeyboardEvent, textarea: HTMLTextAreaElement, onUpdate: () => void): boolean {
   if (event.key === 'Tab') {
     event.preventDefault();

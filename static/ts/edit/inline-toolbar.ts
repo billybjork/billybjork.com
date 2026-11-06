@@ -42,9 +42,7 @@ interface InlineToolbarTarget {
 
 export interface InlineToolbar {
   setTarget(target: InlineToolbarTarget | null): void;
-  /** Clears the target only if it is this textarea, which is the one that just lost focus. */
   releaseTarget(textarea: HTMLTextAreaElement | null): void;
-  /** Clears the target if it lives inside `container`, which is about to be rebuilt. */
   releaseTargetWithin(container: HTMLElement): void;
   scheduleUpdate(): void;
 }

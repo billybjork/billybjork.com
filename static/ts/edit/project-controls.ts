@@ -15,7 +15,6 @@ interface ProjectControlsDeps {
   setToolbarTitle(title: string): void;
 }
 
-/** Turns the detail header's title and date into inputs. */
 export function makeHeaderEditable(scene: HTMLElement, { project, markDirty, setToolbarTitle }: ProjectControlsDeps): void {
   const header = scene.querySelector<HTMLElement>('.homepage-detail-header');
   const nameEl = scene.querySelector<HTMLElement>('.homepage-detail-title');
@@ -273,7 +272,6 @@ function createHeroControls(scene: HTMLElement, deps: ProjectControlsDeps): HTML
   return controls;
 }
 
-/** The panel above the hero: slug, YouTube, draft, pinned, hero video, OG image. */
 export function createProjectTopControls(scene: HTMLElement, deps: ProjectControlsDeps): HTMLElement {
   const wrapper = document.createElement('section');
   wrapper.className = 'edit-inline-top-controls';

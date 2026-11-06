@@ -51,7 +51,6 @@ export class SpriteRange {
     this.render();
   }
 
-  /** Wires the timeline to the player; everything ends with `signal`. */
   attach(signal: AbortSignal): void {
     this.video.addEventListener('timeupdate', () => this.handleTimeUpdate(), { signal });
     this.track?.addEventListener('click', (event) => this.handleTrackClick(event as MouseEvent), { signal });

@@ -263,7 +263,6 @@ function headingText(body: string): string {
   return holder.textContent?.trim() ?? '';
 }
 
-/** The heading ids taken by the lines before `upTo`, for numbering the next duplicate. */
 export function headingSlugsBefore(lines: string[], upTo: number): Set<string> {
   const taken = new Set<string>();
   for (const line of lines.slice(0, upTo)) {

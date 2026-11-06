@@ -37,7 +37,6 @@ export interface PageAdapter {
   toolbarTitle(): string;
   saveBody(input: SaveBodyInput): Record<string, unknown>;
   onSaved(result: SaveResult): void;
-  /** Adds the page's own editing controls around the blocks. */
   mountChrome(deps: PageChromeDeps): void;
   /** Absent where the content cannot be deleted. `leave` navigates out of the editor. */
   deleteContent?: (leave: (navigate: () => void) => void) => Promise<void>;

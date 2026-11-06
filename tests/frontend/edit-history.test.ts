@@ -113,6 +113,9 @@ describe('undo and redo', () => {
 
     expect(lineInputs()[0]?.value).toBe('Second');
     expect(notifications()).toContain('Nothing to redo');
+
+    toolbarButton('undo').click();
+    expect(lineInputs()[0]?.value).toBe('Original');
   });
 
   it('says so when there is nothing to undo', async () => {

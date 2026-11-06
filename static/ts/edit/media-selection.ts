@@ -78,7 +78,6 @@ function findBlockContext(store: BlockStore, blockId: string): BlockContext | nu
   return null;
 }
 
-/** Selection, resize handles, pasted images, and uploads into a block. */
 export function createMediaController(store: BlockStore, signal: AbortSignal): MediaController {
   let selected: { element: HTMLElement; block: SelectableBlock; context: BlockContext | null } | null = null;
   let handles: HTMLDivElement[] = [];

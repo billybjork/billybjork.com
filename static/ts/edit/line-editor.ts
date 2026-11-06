@@ -29,7 +29,6 @@ type CaretPointDocument = Document & {
 
 const lineActivators = new WeakMap<HTMLElement, (row: HTMLElement, selection: LineSelection) => void>();
 
-/** Puts the caret in a rendered line, whichever line editor owns it. */
 export function activateLine(row: HTMLElement, selection: LineSelection = null): void {
   const editor = row.closest<HTMLElement>('.text-block-lines');
   if (editor) lineActivators.get(editor)?.(row, selection);
@@ -168,7 +167,6 @@ export function createLineEditor(ctx: EditorContext, block: TextBlock, context: 
     }
   };
 
-  /** Writes a line's textarea back to the block; a newline in it becomes new lines. */
   const commitLine = (lineIndex: number, textarea: HTMLTextAreaElement, row: HTMLElement): void => {
     // A browser's native `input` may have already committed this edit and rebuilt the rows.
     if (!textarea.isConnected) return;
@@ -368,7 +366,6 @@ export function createLineEditor(ctx: EditorContext, block: TextBlock, context: 
     syncLineHeight(row);
   };
 
-  // A click in the gap between lines activates the nearest one.
   lineContainer.addEventListener('click', (event) => {
     if (event.target !== lineContainer) return;
 

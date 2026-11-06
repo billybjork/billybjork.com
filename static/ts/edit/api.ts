@@ -44,7 +44,6 @@ export function postJSON<T>(url: string, body: unknown): Promise<T> {
   return fetchJSON<T>(url, { method: 'POST', body: JSON.stringify(body) });
 }
 
-/** POSTs a form; the failure message is the server's `detail`, or `fallback`. */
 export async function postForm<T>(url: string, formData: FormData, fallback: string): Promise<T> {
   const response = await fetch(url, { method: 'POST', body: formData });
   if (!response.ok) {
@@ -61,7 +60,6 @@ interface UploadProgress {
 interface UploadHandlers {
   /** Fires with sizes when the browser knows them, and with null when it does not. */
   onProgress?: (progress: UploadProgress | null) => void;
-  /** The body is on the server; the response is still to come. */
   onSent?: () => void;
 }
 
