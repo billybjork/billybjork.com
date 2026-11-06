@@ -4,7 +4,6 @@ console.log("Valentine.js loaded");
 
 // Segment image filenames
 const segments = [
-    // Original segments (minus IMG_7427)
     "IMG_0285_segment.png",
     "IMG_4789_segment.png",
     "IMG_5062_segment.png",
@@ -12,7 +11,6 @@ const segments = [
     "IMG_6511_segment.png",
     "IMG_7381_segment.png",
     "Nick&George-334_segment.png",
-    // New segments
     "DSCF2973_segment.png",
     "IMG_3595_segment.png",
     "IMG_4015_segment.png",

@@ -15,7 +15,14 @@ _HERE = Path(__file__).parent
 _PROJECTS_FILE = _HERE / "projects.json"
 _SPRITES_DIR = _HERE / "static" / "rgbd-sprites"
 
+
+def _point_cloud_static(path: str) -> str:
+    """/static is served immutable, so a URL has to change when its file does."""
+    return f"/static/test/{path}?v={int((_HERE / 'static' / path).stat().st_mtime)}"
+
+
 _templates = build_templates(_HERE / "templates")
+_templates.env.globals["point_cloud_static"] = _point_cloud_static
 
 router = APIRouter()
 

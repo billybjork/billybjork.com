@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="{{ static_url(request, 'build/project.css') }}">
 <script src="{{ static_url(request, 'build/project.js') }}" defer></script>
-<link rel="stylesheet" href="/static/test/test-page.css">
+<link rel="stylesheet" href="{{ point_cloud_static('test-page.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -74,9 +74,9 @@
 
 {% block additional_scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="/static/test/test-page-shaders.js"></script>
-<script src="/static/test/test-page-config.js"></script>
-<script src="/static/test/test-page-thumbnail-renderer.js"></script>
-<script src="/static/test/test-page-transition-manager.js"></script>
-<script src="/static/test/test-page.js"></script>
+<script src="{{ point_cloud_static('test-page-shaders.js') }}"></script>
+<script src="{{ point_cloud_static('test-page-config.js') }}"></script>
+<script src="{{ point_cloud_static('test-page-thumbnail-renderer.js') }}"></script>
+<script src="{{ point_cloud_static('test-page-transition-manager.js') }}"></script>
+<script src="{{ point_cloud_static('test-page.js') }}"></script>
 {% endblock %}

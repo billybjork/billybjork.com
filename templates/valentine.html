@@ -13,11 +13,11 @@
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="{{ request.url_for('static', path='valentine/valentine-preview.jpg') }}">
-    <link rel="icon" type="image/x-icon" href="/static/assets/favicon.ico">
+    <link rel="icon" type="image/x-icon" href="{{ static_url(request, 'assets/favicon.ico') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Pacifico&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/valentine/valentine.css">
+    <link rel="stylesheet" href="{{ static_url(request, 'valentine/valentine.css') }}">
 </head>
 <body>
     <div class="floating-hearts-bg" id="floatingHearts"></div>
@@ -44,6 +44,6 @@
         </section>
     </div>
 
-    <script src="/static/valentine/valentine.js"></script>
+    <script src="{{ static_url(request, 'valentine/valentine.js') }}"></script>
 </body>
 </html>

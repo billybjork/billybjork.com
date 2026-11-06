@@ -94,7 +94,7 @@ class FrontendMarkupTests(unittest.TestCase):
             app.login()
             self.assert_contract(app.client.get("/").text, self.contract["homepageForEditors"])
 
-    def test_each_page_loads_only_its_own_bundle(self) -> None:
+    def test_each_page_loads_its_own_versioned_assets(self) -> None:
         with managed_test_app() as app:
             homepage = app.client.get("/").text
             self.assertIn("build/homepage.js", homepage)
@@ -104,6 +104,10 @@ class FrontendMarkupTests(unittest.TestCase):
             self.assertIn("build/project.js", point_cloud)
             self.assertIn("build/project.css", point_cloud)
             self.assertNotIn("build/homepage.js", point_cloud)
+            self.assertRegex(point_cloud, r"/static/test/test-page\.js\?v=\d+")
+
+            valentine = app.client.get("/will-you-be-my-valentine").text
+            self.assertRegex(valentine, r"/static/valentine/valentine\.js\?v=\d+")
 
 
 if __name__ == "__main__":
