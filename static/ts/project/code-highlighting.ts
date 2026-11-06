@@ -1,4 +1,4 @@
-const PRISM_BASE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0';
+const PRISM_BASE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.30.0';
 
 let prismLoading: Promise<void> | null = null;
 

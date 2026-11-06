@@ -24,7 +24,8 @@ check: lockfile
     uv run python -m unittest discover -s tests -p 'test_*.py'
 
 # Fail if `npm ci` on Railway's npm (10, from nodejs_20 in nixpacks.toml)
-# would reject package-lock.json. Regenerate with `npx npm@10 install`.
+# would reject package-lock.json. Regenerate with `npx npm@11 install`; npm 10
+# crashes resolving this tree.
 lockfile:
     d=$(mktemp -d) && trap 'rm -rf "$d"' EXIT && cp package.json package-lock.json "$d" && cd "$d" && npx --yes npm@10 ci --ignore-scripts --no-audit --no-fund --loglevel=error >/dev/null && echo "lockfile ok (npm 10)"
 
