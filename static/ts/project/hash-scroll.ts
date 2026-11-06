@@ -18,6 +18,6 @@ export function resolveHashTarget(hash: string): HTMLElement | null {
   return null;
 }
 
-export function scrollToHashTarget(behavior: ScrollBehavior = 'auto'): void {
-  resolveHashTarget(window.location.hash)?.scrollIntoView({ behavior, block: 'start' });
+export function scrollToHashTarget(): void {
+  resolveHashTarget(window.location.hash)?.scrollIntoView({ behavior: 'auto', block: 'start' });
 }

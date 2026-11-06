@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '../core/reduced-motion';
 import { buildMorphKeyframes, coverBox, type Box } from './morph';
 import type { SpriteThumbnail } from './sprite-runtime';
 
@@ -20,10 +21,6 @@ interface FlightPath {
   targetRect: DOMRect;
   sourceHeading: MeasuredHeading | null;
   targetHeading: MeasuredHeading | null;
-}
-
-export function prefersReducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function waitForAnimation(animation: Animation): Promise<void> {

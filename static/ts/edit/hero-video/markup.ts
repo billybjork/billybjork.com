@@ -6,7 +6,6 @@ export function buildHeroVideoMarkup(file: File | null, processButtonText: strin
   const fileInfoText = file
     ? `${escapeHtml(file.name)} (${formatMegabytes(file.size)} MB)`
     : 'Using current hero HLS stream';
-  const initialProgressText = isUploadFlow ? 'Uploading...' : 'Loading current video...';
 
   return `
       <div class="edit-hero-dialog-header">
@@ -24,10 +23,10 @@ export function buildHeroVideoMarkup(file: File | null, processButtonText: strin
           <div class="edit-hero-timeline-dim-left"></div>
           <div class="edit-hero-timeline-dim-right"></div>
           <div class="edit-hero-sprite-range">
-            <div class="edit-hero-sprite-handle edit-hero-sprite-handle--start" data-handle="start">
+            <div class="edit-hero-sprite-handle edit-hero-sprite-handle--start">
               <div class="edit-hero-sprite-handle-grip"></div>
             </div>
-            <div class="edit-hero-sprite-handle edit-hero-sprite-handle--end" data-handle="end">
+            <div class="edit-hero-sprite-handle edit-hero-sprite-handle--end">
               <div class="edit-hero-sprite-handle-grip"></div>
             </div>
           </div>
@@ -38,14 +37,14 @@ export function buildHeroVideoMarkup(file: File | null, processButtonText: strin
       <p class="edit-hero-thumbnail-note">Hero poster is always frame 0. Sprite range only affects the sprite sheet.</p>
       <div class="edit-hero-time-display">
         <span class="edit-hero-current-time">0:00</span>
-        <span class="edit-hero-sprite-info">Sprite: 0:00 - 0:03 (3.0s)</span>
+        <span class="edit-hero-sprite-info"></span>
         <span class="edit-hero-total-time">0:00</span>
       </div>
       <div class="edit-hero-progress" style="display: none;">
         <div class="edit-hero-progress-bar">
           <div class="edit-hero-progress-fill"></div>
         </div>
-        <div class="edit-hero-progress-text">${initialProgressText}</div>
+        <div class="edit-hero-progress-text"></div>
       </div>
       <div class="edit-hero-actions">
         <button type="button" class="edit-btn edit-btn-secondary" id="hero-video-cancel">Cancel</button>

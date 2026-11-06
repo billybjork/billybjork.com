@@ -89,7 +89,7 @@ export function cleanupProjectDetail(root: HTMLElement): void {
 /** Lands on the URL's hash target, or at the top of the scroll container without one. */
 export function syncDetailScroll(scrollContainer: HTMLElement): void {
   if (window.location.hash) {
-    scrollToHashTarget('auto');
+    scrollToHashTarget();
   } else {
     scrollContainer.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }

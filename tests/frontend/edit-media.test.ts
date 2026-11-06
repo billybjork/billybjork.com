@@ -86,6 +86,8 @@ describe('image blocks', () => {
 
     expect(blockWrappers()[0]!.querySelector<HTMLImageElement>('.block-image')?.src).toBe('https://cdn.example/new.webp');
     expect(notifications()).toContain('Image uploaded!');
+    const upload = harness.calls.find((call) => call.url === '/api/upload-media')?.body as FormData;
+    expect(Array.from(upload.keys())).toEqual(['file']);
     expect(String(await savedMarkdown()).startsWith('![my photo](https://cdn.example/new.webp)')).toBe(true);
   });
 

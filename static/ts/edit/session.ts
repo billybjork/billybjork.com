@@ -1,4 +1,3 @@
-import { API } from './api';
 import { parseIntoBlocks } from './blocks';
 import { renderBlocks, runSlashSelection } from './block-shell';
 import type { EditorContext } from './context';
@@ -25,21 +24,6 @@ function setEditQuery(editing: boolean): void {
   window.history.replaceState(window.history.state, '', url.toString());
 }
 
-async function flushCleanupCandidates(urls: string[]): Promise<void> {
-  if (urls.length === 0) return;
-  try {
-    const response = await fetch(API.cleanupAssets, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls }),
-      keepalive: true,
-    });
-    if (!response.ok) console.warn('Asset cleanup request failed:', response.status);
-  } catch (error) {
-    console.warn('Asset cleanup request failed:', error);
-  }
-}
-
 function startSession(page: PageAdapter, content: HTMLElement, loaded: LoadedContent): void {
   const sessionListeners = new AbortController();
   const { signal } = sessionListeners;
@@ -60,7 +44,6 @@ function startSession(page: PageAdapter, content: HTMLElement, loaded: LoadedCon
   const store = createBlockStore(parseIntoBlocks(loaded.markdown), {
     onEdit: markDirty,
     render: () => scrollAnchors.aroundRender(blocksRoot, () => renderBlocks(ctx)),
-    tracksAssets: page.tracksAssets,
   });
 
   const ctx: EditorContext = {
@@ -88,7 +71,7 @@ function startSession(page: PageAdapter, content: HTMLElement, loaded: LoadedCon
   const discard = async (): Promise<void> => {
     if (save.isDirty() && !confirm('You have unsaved changes. Discard them?')) return;
     save.stop();
-    await flushCleanupCandidates(store.cleanupCandidates());
+    await page.discardAssets?.(store.cleanupCandidates());
     reloadOutOfEditor();
   };
 

@@ -1,4 +1,3 @@
-import { isEditingActive } from '../core/edit-state';
 import { findActiveContent } from './page-content';
 import { clamp } from './clamp';
 
@@ -11,23 +10,9 @@ const STORED_RESTORE_PASSES = 4;
 const LATE_RESTORE_DELAY_MS = 180;
 const LATE_RESTORE_PASSES = 2;
 
-
-
 function scrollInstantlyTo(top: number): void {
-  const html = document.documentElement;
-  const previous = html.style.scrollBehavior;
-  html.style.scrollBehavior = 'auto';
-
-  const maxScrollTop = Math.max(0, html.scrollHeight - window.innerHeight);
-  window.scrollTo({ top: clamp(top, 0, maxScrollTop), left: 0, behavior: 'auto' });
-
-  requestAnimationFrame(() => {
-    if (previous) {
-      html.style.scrollBehavior = previous;
-    } else {
-      html.style.removeProperty('scroll-behavior');
-    }
-  });
+  const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  window.scrollTo({ top: clamp(top, 0, maxScrollTop), left: 0, behavior: 'instant' });
 }
 
 function runOverFrames(passes: number, pass: () => void, isCurrent: () => boolean = () => true): void {
@@ -141,10 +126,7 @@ interface StoredScrollState {
 }
 
 function captureBlockPosition(content: HTMLElement): { anchorIndex: number | null; anchorTop: number | null } {
-  const editing = isEditingActive();
-  const blocks = Array.from(content.querySelectorAll<HTMLElement>(
-    editing ? '.block-wrapper[data-block-index]' : '.content-block'
-  ));
+  const blocks = Array.from(content.querySelectorAll<HTMLElement>('.block-wrapper[data-block-index]'));
   const anchor = firstVisible(blocks);
   return anchor
     ? { anchorIndex: blocks.indexOf(anchor), anchorTop: anchor.getBoundingClientRect().top }

@@ -250,6 +250,7 @@ export class FakeXhr {
   status = 0;
   responseText = '';
   aborted = false;
+  body: FormData | null = null;
   private readonly listeners = new Map<string, Array<(event: unknown) => void>>();
   private readonly uploadListeners = new Map<string, Array<(event: unknown) => void>>();
   readonly upload = {
@@ -266,7 +267,9 @@ export class FakeXhr {
     this.url = url;
   }
 
-  send(): void {}
+  send(body: FormData): void {
+    this.body = body;
+  }
 
   abort(): void {
     this.aborted = true;

@@ -1,9 +1,10 @@
 import { isEditingActive } from '../core/edit-state';
+import { prefersReducedMotion } from '../core/reduced-motion';
 import type { HomepageRuntimeApi } from '../core/runtime-registry';
 import { syncDetailScroll } from '../project/detail-runtime';
 import { readProjectCards, type ProjectCard } from './card';
 import { DetailLoader } from './detail-loader';
-import { measureFlight, prefersReducedMotion, TransitionFlight } from './flight';
+import { measureFlight, TransitionFlight } from './flight';
 import { currentProjectSlug, pushProjectUrl, replaceProjectUrl } from './history';
 import { HomepageSpriteRuntime } from './sprite-runtime';
 

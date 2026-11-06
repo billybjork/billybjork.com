@@ -213,6 +213,7 @@ describe('uploading a new video', () => {
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Process Hero Video');
     expect(dialog()?.querySelector('.edit-hero-file-info')?.textContent).toContain('hero.mov');
     expect(xhr.url).toBe('/api/video-thumbnails');
+    expect(xhr.body?.get('project_slug')).toBe(PROJECT.slug);
 
     xhr.progress(1048576, 4194304);
     expect(dialog()?.querySelector('.edit-hero-progress-text')?.textContent).toBe('Uploading: 1.0 / 4.0 MB');
@@ -243,7 +244,6 @@ describe('uploading a new video', () => {
     progress = { status: 'complete', hls_url: 'https://cdn.example/h/master.m3u8' };
     await settle(1000);
     expect(attachHlsPlayback).toHaveBeenCalledWith(expect.objectContaining({ sourceUrl: 'https://cdn.example/h/master.m3u8' }));
-    expect(dialog()?.querySelector('video')?.dataset.previewSource).toBe('hls');
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:local');
     expect(dialog()?.querySelector('.edit-hero-progress-text')?.textContent).toBe('HLS ready! Select sprite range and confirm.');
 

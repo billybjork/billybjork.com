@@ -35,6 +35,7 @@ const ROW_START_PATTERN = /^\s*<!--\s*row\s*-->\s*/;
 const ROW_END_PATTERN = /\s*<!--\s*\/row\s*-->\s*$/;
 const COL_SPLIT = /\n*\s*<!--\s*col\s*-->\s*\n*/;
 const HTML_BLOCK_PATTERN = /^<!--\s*html(?:\s+style="([^"]*)")?\s*-->\s*([\s\S]*?)\s*<!--\s*\/html\s*-->$/;
+const MARKDOWN_IMAGE = /^!\[(.*?)\]\((.*?)\)$/;
 const TRAILING_CAPTION_PATTERN = /\n*<p\s+class=(["'])media-caption\1>([\s\S]*?)<\/p>\s*$/i;
 
 function generateBlockId(): string {
@@ -89,14 +90,13 @@ function parseCodeBlock(trimmed: string): CodeBlock {
 }
 
 function parseImageBlock(trimmed: string): ImageBlock {
-  if (!trimmed.startsWith('<img')) {
-    const match = trimmed.match(/!\[(.*?)\]\((.*?)\)/);
-    return createBlock('image', { src: match?.[2] ?? '', alt: match?.[1] ?? '' });
-  }
-  const style = trimmed.match(/style="([^"]*)"/)?.[1] ?? null;
+  const markdown = trimmed.match(MARKDOWN_IMAGE);
+  if (markdown) return createBlock('image', { src: markdown[2] ?? '', alt: markdown[1] ?? '' });
+
+  const style = parseAttribute(trimmed, 'style');
   return createBlock('image', {
-    src: trimmed.match(/src="([^"]*)"/)?.[1] ?? '',
-    alt: trimmed.match(/alt="([^"]*)"/)?.[1] ?? '',
+    src: parseAttribute(trimmed, 'src') ?? '',
+    alt: parseAttribute(trimmed, 'alt') ?? '',
     style,
     align: parseAlignmentFromStyle(style),
   });
@@ -127,7 +127,7 @@ function parseBody(trimmed: string): Block {
   const htmlMatch = trimmed.match(HTML_BLOCK_PATTERN);
   if (htmlMatch) return parseHtmlBlock(htmlMatch);
   if (trimmed.startsWith('```')) return parseCodeBlock(trimmed);
-  if (trimmed.startsWith('<img') || /^!\[.*?\]\(.*?\)$/.test(trimmed)) return parseImageBlock(trimmed);
+  if (trimmed.startsWith('<img') || MARKDOWN_IMAGE.test(trimmed)) return parseImageBlock(trimmed);
   if (trimmed.startsWith('<video')) return parseVideoBlock(trimmed);
   if (trimmed.startsWith('<div class="callout"')) return parseCalloutBlock(trimmed);
   if (DIVIDER_LINE.test(trimmed)) return createBlock('divider');

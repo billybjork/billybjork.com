@@ -1,7 +1,5 @@
 declare namespace Prism {
   function highlightAllUnder(element: Element): void;
-  function highlightAll(): void;
-  function highlight(code: string, grammar: unknown, language: string): string;
 }
 
 declare const Prism: typeof Prism | undefined;
@@ -33,10 +31,6 @@ declare class Hls {
   destroy(): void;
   levels: HlsLevel[];
   startLevel: number;
-  loadLevel: number;
-  currentLevel: number;
-  nextLevel: number;
-  autoLevelEnabled: boolean;
   static isSupported(): boolean;
   static Events: typeof Hls.Events;
   static ErrorTypes: typeof Hls.ErrorTypes;
@@ -55,7 +49,6 @@ interface HlsLevel {
 
 interface HTMLVideoElement {
   hlsInstance?: Hls | null;
-  videoLayoutCleanup?: (() => void) | null;
 }
 
 interface Window {

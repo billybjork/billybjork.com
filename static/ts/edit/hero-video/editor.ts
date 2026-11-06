@@ -170,7 +170,6 @@ class HeroVideoEditor {
     let result: VideoThumbnailsResult;
     try {
       result = await upload.result;
-      if (!result.success) throw new Error(result.detail || 'Thumbnail extraction failed');
     } catch (error) {
       if (this.closed) return;
       showNotification(this.uploadFailureMessage(error), 'error');
@@ -209,20 +208,14 @@ class HeroVideoEditor {
   }
 
   private uploadFailureMessage(error: unknown): string {
-    if (error instanceof UploadError) {
-      return error.kind === 'network'
-        ? 'Network error during thumbnail extraction'
-        : error.detail || 'Thumbnail extraction failed';
-    }
-    return `Thumbnail extraction failed: ${(error as Error).message}`;
+    return error instanceof UploadError && error.kind === 'network'
+      ? 'Network error during thumbnail extraction'
+      : (error as UploadError).detail || 'Thumbnail extraction failed';
   }
 
   private playUploadLocally(file: File): void {
     this.objectUrl = URL.createObjectURL(file);
     const { video } = this;
-    video.classList.remove('hls-video-preview');
-    video.dataset.previewSource = 'blob';
-
     const isBlobSource = (): boolean => (video.currentSrc || video.src || '').startsWith('blob:');
     video.addEventListener('error', () => {
       if (!isBlobSource() || this.blobPreviewFailed) return;
@@ -251,7 +244,6 @@ class HeroVideoEditor {
       const formData = new FormData();
       formData.append('project_slug', this.options.slug);
       const result = await postForm<VideoThumbnailsResult>(API.videoThumbnailsExisting, formData, 'Failed to load existing video');
-      if (!result.success) throw new Error(result.detail || 'Failed to load existing video');
       if (this.closed) return;
 
       this.hlsComplete = true;
@@ -360,7 +352,6 @@ class HeroVideoEditor {
       await attachHlsPlayback({ videoElement: video, sourceUrl: hlsUrl });
     } catch (error) {
       console.warn('HLS preview could not start; keeping the current preview source.', error);
-      video.dataset.previewSource = 'blob';
       if (this.blobPreviewFailed && !this.hlsPreviewErrorShown) {
         this.hlsPreviewErrorShown = true;
         this.setPreviewStatus('Preview unavailable: HLS preview could not be initialized.', 'error');
@@ -376,8 +367,6 @@ class HeroVideoEditor {
       video.play().catch((error: unknown) => console.warn('Preview playback did not resume:', error));
     }
     this.hlsPreviewUrl = hlsUrl;
-    video.classList.add('hls-video-preview');
-    video.dataset.previewSource = 'hls';
     this.setPreviewStatus();
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl);
@@ -426,7 +415,6 @@ class HeroVideoEditor {
     try {
       const result = await postForm<SpriteSheetResult>(API.generateSpriteSheet, formData, 'Sprite sheet generation failed');
       this.stopHlsWatch?.();
-      if (!result.success || !result.video) throw new Error(result.detail || 'Processing failed');
 
       this.setProgress(95, 'Saving...');
       this.options.onVideoSaved(result.video);

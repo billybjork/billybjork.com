@@ -189,8 +189,7 @@ export function createLineEditor(ctx: EditorContext, block: TextBlock, context: 
   const splitLine = (textarea: HTMLTextAreaElement, lineIndex: number): void => {
     const before = textarea.value.slice(0, textarea.selectionStart);
     const after = textarea.value.slice(textarea.selectionStart);
-    const list = parseListLine(before);
-    const continuation = list ? `${list.indent}${list.nextMarker}` : null;
+    const continuation = parseListLine(before)?.continuation;
 
     lines[lineIndex] = before;
     lines.splice(lineIndex + 1, 0, continuation ? continuation + after.replace(/^\s+/, '') : after);
