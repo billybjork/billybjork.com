@@ -14,9 +14,8 @@ type SceneState = 'closed' | 'opening' | 'open' | 'closing';
 type HistoryMode = 'none' | 'push' | 'replace';
 
 interface ReadyWaiter {
-  requestedSlug: string | null;
+  slug: string;
   resolve: (slug: string | null) => void;
-  timeoutId: number;
 }
 
 function requireElement(id: string): HTMLElement {
@@ -49,6 +48,7 @@ export class HomepageController implements HomepageRuntimeApi {
   private readonly readyWaiters = new Set<ReadyWaiter>();
   private sprites: HomepageSpriteRuntime | null = null;
   private openSlug: string | null = null;
+  private openingSlug: string | null = null;
   private lastFocusedBeforeOpen: Element | null = null;
   private state: SceneState = 'closed';
   private transition = new AbortController();
@@ -82,51 +82,18 @@ export class HomepageController implements HomepageRuntimeApi {
   }
 
   getOpenProjectSlug(): string | null {
-    return this.openSlug;
+    return this.openSlug ?? this.openingSlug;
   }
 
-  waitForProjectReady(slug: string | null = this.openSlug, timeoutMs: number = 2000): Promise<string | null> {
-    if (this.isReadySlug(slug)) {
-      return Promise.resolve(this.openSlug);
+  waitForProjectReady(slug: string): Promise<string | null> {
+    if (this.state === 'closed' || this.state === 'open') {
+      return Promise.resolve(this.isReadySlug(slug) ? slug : null);
     }
-
-    return new Promise((resolve) => {
-      const waiter: ReadyWaiter = {
-        requestedSlug: slug,
-        resolve: (resolvedSlug) => {
-          clearTimeout(waiter.timeoutId);
-          this.readyWaiters.delete(waiter);
-          resolve(resolvedSlug);
-        },
-        timeoutId: window.setTimeout(() => waiter.resolve(null), timeoutMs),
-      };
-      this.readyWaiters.add(waiter);
-    });
+    return new Promise((resolve) => this.readyWaiters.add({ slug, resolve }));
   }
 
-  renameProjectSlug(previousSlug: string, nextSlug: string): void {
-    if (!previousSlug || !nextSlug || previousSlug === nextSlug) {
-      return;
-    }
-
-    const card = this.cardsBySlug.get(previousSlug);
-    if (card) {
-      this.cardsBySlug.delete(previousSlug);
-      card.slug = nextSlug;
-      card.cardEl.dataset.slug = nextSlug;
-      card.cardEl.querySelectorAll('[data-open-project]').forEach((trigger) => {
-        trigger.setAttribute('data-open-project', nextSlug);
-      });
-      this.cardsBySlug.set(nextSlug, card);
-    }
-    this.detail.renameCached(previousSlug, nextSlug);
-
-    if (this.openSlug === previousSlug) {
-      this.openSlug = nextSlug;
-      this.detail.setEditTarget(nextSlug);
-      replaceProjectUrl(nextSlug, { preserveHash: true });
-      this.settleReadyWaiters();
-    }
+  renameProjectSlug(nextSlug: string): void {
+    replaceProjectUrl(nextSlug);
   }
 
   private onClick(event: MouseEvent): void {
@@ -180,6 +147,7 @@ export class HomepageController implements HomepageRuntimeApi {
       this.lastFocusedBeforeOpen = document.activeElement;
     }
 
+    this.openingSlug = slug;
     const signal = this.beginTransition('opening');
     const frameIndex = card.thumbnail.getCurrentFrameIndex();
 
@@ -206,6 +174,7 @@ export class HomepageController implements HomepageRuntimeApi {
 
       this.setTargetHidden(false);
       this.openSlug = slug;
+      this.openingSlug = null;
       this.state = 'open';
       this.settleReadyWaiters();
       this.detail.revealHero(card, frameIndex, signal);
@@ -266,6 +235,7 @@ export class HomepageController implements HomepageRuntimeApi {
       card.thumbnail.refresh();
     });
     this.openSlug = null;
+    this.openingSlug = null;
     this.state = 'closed';
     this.settleReadyWaiters();
   }
@@ -328,21 +298,13 @@ export class HomepageController implements HomepageRuntimeApi {
     this.detailHeading.classList.toggle('homepage-target-hidden', hidden);
   }
 
-  private isReadySlug(slug: string | null): boolean {
-    return this.state === 'open'
-      && this.openSlug !== null
-      && (!slug || slug === this.openSlug)
-      && this.detail.hasMountedContent();
+  private isReadySlug(slug: string): boolean {
+    return this.state === 'open' && slug === this.openSlug && this.detail.hasMountedContent();
   }
 
-  /** Answers the waiters this change satisfies; once closed, nothing else can satisfy them. */
+  /** Called whenever the scene comes to rest, open or closed: every waiter gets its answer. */
   private settleReadyWaiters(): void {
-    this.readyWaiters.forEach((waiter) => {
-      if (this.isReadySlug(waiter.requestedSlug)) {
-        waiter.resolve(this.openSlug);
-      } else if (this.state === 'closed') {
-        waiter.resolve(null);
-      }
-    });
+    this.readyWaiters.forEach((waiter) => waiter.resolve(this.isReadySlug(waiter.slug) ? waiter.slug : null));
+    this.readyWaiters.clear();
   }
 }

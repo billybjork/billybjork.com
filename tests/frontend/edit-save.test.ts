@@ -564,7 +564,7 @@ describe('renaming the slug', () => {
     await settle(AUTO_SAVE_MS);
 
     expect(harness.lastSave()).toMatchObject({ slug: 'new-slug', original_slug: PROJECT.slug });
-    expect(window.location.pathname).toBe('/new-slug');
+    expect(window.__bbHomepageRuntime?.renameProjectSlug).toHaveBeenCalledWith('new-slug');
 
     typeInLine('More');
     await settle(AUTO_SAVE_MS);

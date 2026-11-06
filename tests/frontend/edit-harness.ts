@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
 
+import { registerHomepageRuntime, type HomepageRuntimeApi } from '../../static/ts/core/runtime-registry';
+
 export interface RecordedCall {
   url: string;
   method: string;
@@ -121,6 +123,7 @@ export function installHarness(): EditorHarness {
       handlers.set(route, handler);
     },
     teardown() {
+      delete window.__bbHomepageRuntime;
       removeListeners();
       vi.useRealTimers();
     },
@@ -137,7 +140,7 @@ export function mountProjectPage(slug: string = PROJECT.slug): void {
         <div class="homepage-detail-date">Jan 2024</div>
       </div>
       <div class="homepage-detail-actions edit-buttons">
-        <button type="button" data-homepage-edit-project data-project-slug="${slug}">Edit</button>
+        <button type="button" data-homepage-edit-project>Edit</button>
       </div>
       <div class="video-container"><video></video></div>
       <section id="homepage-detail-content"><div class="project-content"><p>Rendered</p></div></section>
@@ -153,8 +156,20 @@ export function mountAboutPage(): void {
   `;
 }
 
+/** Stands in for homepage.js, which on a real page has registered before edit.js runs. */
+export function registerRuntime(openSlug: string | null): HomepageRuntimeApi {
+  const runtime = {
+    getOpenProjectSlug: vi.fn(() => openSlug),
+    waitForProjectReady: vi.fn(async (slug: string): Promise<string | null> => slug),
+    renameProjectSlug: vi.fn(),
+  };
+  registerHomepageRuntime(runtime);
+  return runtime;
+}
+
 export async function openProjectEditor(harness: EditorHarness, markdown: string, overrides: Record<string, unknown> = {}): Promise<void> {
   mountProjectPage();
+  registerRuntime(PROJECT.slug);
   harness.respond(`/api/project/${PROJECT.slug}`, () => jsonResponse({ ...PROJECT, markdown, ...overrides }));
   harness.respond('/api/save-project', (call) => jsonResponse({
     success: true,

@@ -1,12 +1,9 @@
-export const ABOUT_PATH = '/me';
-
 export function isAboutPage(): boolean {
-  return window.location.pathname === ABOUT_PATH;
+  return window.location.pathname === '/me';
 }
 
 export function findProjectContent(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('#homepage-detail-content .project-content')
-    ?? document.querySelector<HTMLElement>('.project-content');
+  return document.querySelector<HTMLElement>('#homepage-detail-content .project-content');
 }
 
 /** The element whose content the editor replaces: the about page, or the open project. */

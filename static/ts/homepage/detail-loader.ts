@@ -31,7 +31,6 @@ export class DetailLoader {
     }
     this.el.detailDate.textContent = card.formattedDate;
     this.el.detailTitle.textContent = card.title;
-    this.setEditTarget(card.slug);
 
     const html = await this.fetchHtml(card.slug, signal);
     if (signal.aborted) return;
@@ -74,27 +73,10 @@ export class DetailLoader {
     this.el.detailTitle.textContent = '';
     this.el.detailHeroFrame.style.removeProperty('--homepage-fallback-poster');
     this.el.detailHeroFrame.style.removeProperty('--homepage-hero-aspect');
-    this.setEditTarget(null);
   }
 
   hasMountedContent(): boolean {
     return this.el.detailContent.querySelector('.project-content') !== null;
-  }
-
-  renameCached(previousSlug: string, nextSlug: string): void {
-    const cached = this.htmlCache.get(previousSlug);
-    if (cached) {
-      this.htmlCache.delete(previousSlug);
-      this.htmlCache.set(nextSlug, cached);
-    }
-  }
-
-  /** Edit mode reads which project to open from the edit button. */
-  setEditTarget(slug: string | null): void {
-    const editButton = this.el.detailScene.querySelector<HTMLElement>('[data-homepage-edit-project]');
-    if (editButton) {
-      editButton.dataset.projectSlug = slug ?? '';
-    }
   }
 
   private async fetchHtml(slug: string, signal: AbortSignal): Promise<string> {

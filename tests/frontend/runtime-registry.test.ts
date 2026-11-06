@@ -11,41 +11,22 @@ const runtime = {
   renameProjectSlug: () => {},
 };
 
-afterEach(async () => {
-  (await loadBundleCopy()).registerHomepageRuntime(null);
-  vi.useRealTimers();
+afterEach(() => {
+  delete window.__bbHomepageRuntime;
 });
 
 describe('homepage runtime across bundles', () => {
-  it('wakes a waiter in another bundle as soon as the runtime registers', async () => {
-    const homepageBundle = await loadBundleCopy();
-    const editBundle = await loadBundleCopy();
-    expect(editBundle.waitForHomepageRuntime).not.toBe(homepageBundle.waitForHomepageRuntime);
-
-    vi.useFakeTimers();
-    const waiting = editBundle.waitForHomepageRuntime(1500);
-    homepageBundle.registerHomepageRuntime(runtime);
-
-    await expect(waiting).resolves.toBe(runtime);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it('finds a runtime another bundle registered earlier', async () => {
+  it('reaches another bundle, which holds its own copy of the module', async () => {
     const homepageBundle = await loadBundleCopy();
     homepageBundle.registerHomepageRuntime(runtime);
 
     const editBundle = await loadBundleCopy();
+    expect(editBundle.getHomepageRuntime).not.toBe(homepageBundle.getHomepageRuntime);
     expect(editBundle.getHomepageRuntime()).toBe(runtime);
-    await expect(editBundle.waitForHomepageRuntime()).resolves.toBe(runtime);
   });
 
-  it('gives up with null at the timeout when no homepage ever registers', async () => {
+  it('is absent on a page without the homepage bundle', async () => {
     const editBundle = await loadBundleCopy();
-    vi.useFakeTimers();
-
-    const waiting = editBundle.waitForHomepageRuntime(1500);
-    vi.advanceTimersByTime(1500);
-
-    await expect(waiting).resolves.toBeNull();
+    expect(editBundle.getHomepageRuntime()).toBeNull();
   });
 });

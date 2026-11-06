@@ -42,8 +42,8 @@ export interface PageAdapter {
   deleteContent?: (leave: (navigate: () => void) => void) => Promise<void>;
 }
 
-function findDetailScene(): HTMLElement | null {
-  return document.querySelector<HTMLElement>('#homepage-detail-scene');
+function detailScene(): HTMLElement {
+  return document.querySelector<HTMLElement>('#homepage-detail-scene') as HTMLElement;
 }
 
 export function aboutPage(): PageAdapter {
@@ -75,25 +75,14 @@ export function projectPage(slug: string): PageAdapter {
     const nextSlug = nextSlugValue?.trim();
     if (!nextSlug) return;
 
-    const previousSlug = savedSlug;
+    const renamed = savedSlug !== nextSlug;
     savedSlug = nextSlug;
     // The server may have normalized what it was sent, but the field may also have moved on since.
     if (project.slug === slugSent) {
       project.slug = nextSlug;
       if (slugInput) slugInput.value = nextSlug;
     }
-    if (previousSlug === nextSlug) return;
-
-    const runtime = getHomepageRuntime();
-    if (runtime) {
-      runtime.renameProjectSlug(previousSlug, nextSlug);
-      return;
-    }
-    const url = new URL(window.location.href);
-    if (url.pathname !== `/${nextSlug}`) {
-      url.pathname = `/${nextSlug}`;
-      window.history.replaceState(window.history.state, '', url.toString());
-    }
+    if (renamed) getHomepageRuntime()?.renameProjectSlug(nextSlug);
   };
 
   return {
@@ -106,7 +95,7 @@ export function projectPage(slug: string): PageAdapter {
       return { markdown: project.markdown ?? '', revision: project.revision ?? null };
     },
     findContent: findProjectContent,
-    stabilityRoot: (content) => findDetailScene() ?? content,
+    stabilityRoot: detailScene,
     toolbarTitle: () => project.name,
 
     saveBody({ markdown, stamp, cleanupCandidates }) {
@@ -130,9 +119,7 @@ export function projectPage(slug: string): PageAdapter {
     onSaved: (result) => followRename(result.slug),
 
     mountChrome({ content, store, markDirty, setToolbarTitle }) {
-      const scene = findDetailScene();
-      if (!scene) return;
-
+      const scene = detailScene();
       scene.querySelectorAll('video').forEach((video) => video.pause());
       scene.querySelector('.edit-buttons')?.classList.add('edit-controls-hidden');
 

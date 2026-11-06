@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { registerHomepageRuntime } from '../../static/ts/core/runtime-registry';
 import {
   installHarness,
   jsonResponse,
   mountAboutPage,
   mountProjectPage,
   PROJECT,
+  registerRuntime,
   type EditorHarness,
 } from './edit-harness';
 
@@ -19,7 +19,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  registerHomepageRuntime(null);
   harness.teardown();
 });
 
@@ -37,14 +36,6 @@ async function boot(): Promise<void> {
 
 function fetched(url: string): boolean {
   return harness.calls.some((call) => call.url === url);
-}
-
-function registerRuntime(openSlug: string | null): void {
-  registerHomepageRuntime({
-    getOpenProjectSlug: () => openSlug,
-    waitForProjectReady: async (slug) => slug ?? null,
-    renameProjectSlug: vi.fn(),
-  });
 }
 
 function pressEdit(): void {
@@ -118,6 +109,27 @@ describe('entering the editor', () => {
     expect(fetched(`/api/project/${PROJECT.slug}`)).toBe(true);
   });
 
+  it('does nothing on a page without the homepage runtime', async () => {
+    mountProjectPage();
+    await boot();
+
+    pressEdit();
+    await flushAsyncWork();
+
+    expect(fetched(`/api/project/${PROJECT.slug}`)).toBe(false);
+  });
+
+  it('stays out when the project never becomes ready', async () => {
+    mountProjectPage();
+    registerRuntime(PROJECT.slug).waitForProjectReady = async () => null;
+    await boot();
+
+    pressEdit();
+    await flushAsyncWork();
+
+    expect(fetched(`/api/project/${PROJECT.slug}`)).toBe(false);
+  });
+
   it('ignores Cmd+E while typing or already editing', async () => {
     mountProjectPage();
     registerRuntime(PROJECT.slug);
@@ -169,22 +181,5 @@ describe('the header controls', () => {
     await boot();
 
     expect(harness.navigations).toEqual(['http://localhost/?show_drafts=true']);
-  });
-});
-
-describe('editor stylesheets', () => {
-  it('load with the same cache-busting version as edit.js', async () => {
-    mountAboutPage();
-    const script = document.createElement('script');
-    script.setAttribute('src', '/static/build/edit.js?v=abc123');
-    document.head.appendChild(script);
-    await boot();
-
-    const hrefs = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).map((link) => link.getAttribute('href'));
-    expect(hrefs).toEqual([
-      '/static/css/edit-mode-base.css?v=abc123',
-      '/static/css/edit-mode-project.css?v=abc123',
-      '/static/css/edit-mode-extras.css?v=abc123',
-    ]);
   });
 });

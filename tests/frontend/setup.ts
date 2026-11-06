@@ -144,7 +144,6 @@ beforeEach(() => {
   document.head.innerHTML = '';
   document.body.innerHTML = '';
   document.body.className = '';
-  document.body.dataset.editMode = 'false';
   window.sessionStorage?.clear?.();
   window.localStorage?.clear?.();
   window.history.replaceState(null, '', '/');

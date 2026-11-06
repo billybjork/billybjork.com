@@ -70,7 +70,7 @@ describe('coming back after the reload', () => {
   }
 
   function mountContent(): HTMLElement[] {
-    document.body.innerHTML = '<section class="project-content"><div class="content-block"></div><div class="content-block"></div></section>';
+    document.body.innerHTML = '<section id="homepage-detail-content"><div class="project-content"><div class="content-block"></div><div class="content-block"></div></div></section>';
     return Array.from(document.querySelectorAll<HTMLElement>('.content-block'));
   }
 
