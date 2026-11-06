@@ -1,20 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Billy Bjork - About{% endblock %}
-
-{% block additional_head %}
-<!-- Additional head content -->
-{% endblock %}
-
 {% block content %}
 <section class="about-content">
-    {% if about_photo_link %}
+    {% if site.about_photo_link %}
     <figure class="about-photo-container">
-        <img src="{{ about_photo_link }}" 
+        <img src="{{ site.about_photo_link }}" 
             alt="Billy Bjork" 
             class="about-photo"
-            {% if about_photo_srcset %}srcset="{{ about_photo_srcset }}"{% endif %}
-            {% if about_photo_sizes %}sizes="{{ about_photo_sizes }}"{% endif %}
+            {% if site.about_photo_srcset %}srcset="{{ site.about_photo_srcset }}"{% endif %}
+            {% if site.about_photo_sizes %}sizes="{{ site.about_photo_sizes }}"{% endif %}
             width="8050"
             height="5367"
             loading="eager"

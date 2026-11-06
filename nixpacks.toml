@@ -12,4 +12,4 @@ cmds = [
 cmds = ["npm run build"]
 
 [start]
-cmd = ".venv/bin/uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = ".venv/bin/uvicorn main:create_app --factory --host 0.0.0.0 --port $PORT"

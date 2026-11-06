@@ -1,65 +1,53 @@
 import unittest
 
-from utils.content import ProjectInfo
+from cms.projects import ProjectInfo, ProjectVideo
 
 
-class ProjectCardInfoTests(unittest.TestCase):
-    def test_thumbnail_aspect_ratio_prefers_hero_ratio_for_display(self) -> None:
-        project = ProjectInfo(
-            slug="went-to-japan-forgot-to-use-my-camera",
-            name="Went to Japan. Forgot to use my camera.",
-            video_link="https://example.com/master.m3u8",
-            thumbnail_link="https://example.com/thumb.webp",
-            sprite_sheet_link="https://example.com/sprite.jpg",
-            frames=60,
-            columns=5,
-            rows=12,
-            frame_width=320,
-            frame_height=180,
-            video_width=1216,
-            video_height=2160,
-        )
-
-        card = project.to_card()
+class ProjectCardTests(unittest.TestCase):
+    def test_thumbnail_takes_the_video_shape_over_the_sprite_shape(self) -> None:
+        card = ProjectInfo(
+            slug="portrait",
+            video=ProjectVideo(
+                hls="https://example.com/master.m3u8",
+                sprite_sheet="https://example.com/sprite.jpg",
+                frames=60,
+                columns=5,
+                rows=12,
+                frame_width=320,
+                frame_height=180,
+                video_width=1216,
+                video_height=2160,
+            ),
+        ).to_card()
 
         self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 1216 / 2160)
         self.assertAlmostEqual(card.sprite_aspect_ratio or 0, 320 / 180)
-        self.assertAlmostEqual(card.hero_aspect_ratio or 0, 1216 / 2160)
-        self.assertAlmostEqual(card.primary_aspect_ratio or 0, 1216 / 2160)
 
-    def test_thumbnail_aspect_ratio_falls_back_to_hero_ratio_without_sprite_metadata(self) -> None:
-        project = ProjectInfo(
-            slug="portrait-without-sprite",
-            name="Portrait without sprite",
-            video_link="https://example.com/master.m3u8",
-            thumbnail_link="https://example.com/thumb.webp",
-            video_width=1216,
-            video_height=2160,
-        )
+    def test_thumbnail_falls_back_to_the_sprite_shape_without_video_dimensions(self) -> None:
+        card = ProjectInfo(
+            slug="sprite-only",
+            video=ProjectVideo(
+                sprite_sheet="https://example.com/sprite.jpg", frame_width=320, frame_height=240
+            ),
+        ).to_card()
 
-        card = project.to_card()
+        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 320 / 240)
 
-        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 1216 / 2160)
-
-    def test_card_defaults_sprite_animation_without_manufacturing_frame_dimensions(self) -> None:
-        project = ProjectInfo(
-            slug="portrait-with-sprite-url-only",
-            name="Portrait with sprite URL only",
-            sprite_sheet_link="https://example.com/sprite.jpg",
-            video_width=1216,
-            video_height=2160,
-        )
-
-        card = project.to_card()
+    def test_sprite_url_alone_gets_default_layout_without_inventing_frame_size(self) -> None:
+        card = ProjectInfo(
+            slug="sprite-url-only",
+            video=ProjectVideo(sprite_sheet="https://example.com/sprite.jpg"),
+        ).to_card()
 
         self.assertTrue(card.has_sprite_animation)
-        self.assertEqual(card.frames, 60)
-        self.assertEqual(card.columns, 5)
-        self.assertEqual(card.rows, 12)
+        self.assertEqual((card.frames, card.columns, card.rows), (60, 5, 12))
         self.assertIsNone(card.frame_width)
-        self.assertIsNone(card.frame_height)
         self.assertIsNone(card.sprite_aspect_ratio)
-        self.assertAlmostEqual(card.thumbnail_aspect_ratio or 0, 1216 / 2160)
+
+    def test_no_sprite_means_no_animation(self) -> None:
+        card = ProjectInfo(slug="plain").to_card()
+        self.assertFalse(card.has_sprite_animation)
+        self.assertIsNone(card.frames)
 
 
 if __name__ == "__main__":

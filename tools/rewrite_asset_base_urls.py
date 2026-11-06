@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from utils.object_storage import managed_public_base_urls, rewrite_public_urls_in_text
+from object_storage import managed_public_base_urls, rewrite_public_urls_in_text
 
 
 def parse_args() -> argparse.Namespace:

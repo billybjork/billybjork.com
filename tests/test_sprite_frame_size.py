@@ -1,6 +1,6 @@
 import unittest
 
-from utils.video import sprite_frame_size
+from media.video import sprite_frame_size
 
 
 class SpriteFrameSizeTests(unittest.TestCase):

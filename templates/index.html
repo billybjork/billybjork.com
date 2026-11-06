@@ -2,6 +2,10 @@
 
 {% block main_class %}homepage-shared-element{% endblock %}
 
+{% block preconnect %}<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>{% endblock %}
+
+{% block deferred_scripts %}<script src="{{ static_url(request, 'build/project.js') }}" defer></script>{% endblock %}
+
 {% block additional_head %}
 <link rel="stylesheet" href="{{ static_url(request, 'build/homepage.css') }}">
 {% endblock %}

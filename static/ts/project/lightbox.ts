@@ -2,7 +2,7 @@
  * Project Content Lightbox Utilities
  */
 
-import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
 
 const LIGHTBOX_VIDEO_TRIGGER_CLASS = 'lightbox-trigger-video';
 

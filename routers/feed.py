@@ -5,8 +5,7 @@ from email.utils import format_datetime
 from fastapi import APIRouter
 from fastapi.responses import Response
 
-from routers.pages import extract_meta_description
-from utils.content import load_all_project_info
+from cms.projects import load_all_projects
 
 router = APIRouter()
 
@@ -16,7 +15,6 @@ SITE_DESCRIPTION = "Projects by Billy Bjork"
 
 
 def _to_rfc822(d) -> str:
-    """Convert a date/string to RFC 822 format for RSS pubDate."""
     if isinstance(d, str):
         try:
             d = datetime.strptime(d, "%Y-%m-%d")
@@ -31,10 +29,7 @@ def _to_rfc822(d) -> str:
 
 @router.get("/feed.xml", include_in_schema=False)
 async def rss_feed():
-    projects = load_all_project_info(
-        include_drafts=False,
-        include_revision=False,
-    )
+    projects = load_all_projects()
 
     rss = ET.Element("rss", version="2.0")
     channel = ET.SubElement(rss, "channel")
@@ -50,9 +45,7 @@ async def rss_feed():
 
         ET.SubElement(item, "title").text = project.name
         ET.SubElement(item, "link").text = link
-        ET.SubElement(item, "description").text = extract_meta_description(
-            project.html_content
-        )
+        ET.SubElement(item, "description").text = project.meta_description
 
         pub_date = _to_rfc822(project.creation_date)
         if pub_date:

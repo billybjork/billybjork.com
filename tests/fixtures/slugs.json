@@ -1,0 +1,4 @@
+{
+  "valid": ["a", "project-1", "my_project", "0day"],
+  "invalid": ["", "-leading", "_leading", "Upper", "has space", "dot.dot", "ünicode"]
+}

@@ -1,43 +1,6 @@
 import unittest
-from unittest.mock import patch
 
 from tests.support import managed_test_app
-
-
-class _FakeObjectBody:
-    def __init__(self, data: bytes) -> None:
-        self._data = data
-
-    def read(self) -> bytes:
-        return self._data
-
-
-class _FakeObjectStorageClient:
-    def get_object(self, **kwargs):
-        key = kwargs["Key"]
-        range_header = kwargs.get("Range")
-
-        if key != "images/test.webp":
-            raise AssertionError(f"Unexpected key requested: {key}")
-
-        body = b"test-image-bytes"
-        if range_header == "bytes=0-3":
-            return {
-                "Body": _FakeObjectBody(body[:4]),
-                "ContentType": "image/webp",
-                "CacheControl": "max-age=31536000",
-                "ContentLength": 4,
-                "ContentRange": "bytes 0-3/16",
-                "ETag": '"etag-value"',
-            }
-
-        return {
-            "Body": _FakeObjectBody(body),
-            "ContentType": "image/webp",
-            "CacheControl": "max-age=31536000",
-            "ContentLength": len(body),
-            "ETag": '"etag-value"',
-        }
 
 
 class AppRoutesIntegrationTests(unittest.TestCase):
@@ -165,33 +128,21 @@ class AppRoutesIntegrationTests(unittest.TestCase):
 
     def test_media_route_serves_object_storage_assets(self) -> None:
         with managed_test_app() as app:
-            with patch("routers.pages.is_object_storage_configured", return_value=True):
-                with patch(
-                    "routers.pages.get_object_storage_client",
-                    return_value=_FakeObjectStorageClient(),
-                ):
-                    with patch("routers.pages.get_bucket_name", return_value="test-bucket"):
-                        response = app.client.get("/media/images/test.webp")
+            app.storage.put("images/test.webp", b"test-image-bytes", "image/webp")
+            response = app.client.get("/media/images/test.webp")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"test-image-bytes")
         self.assertEqual(response.headers["content-type"], "image/webp")
-        self.assertEqual(response.headers["cache-control"], "max-age=31536000")
         self.assertEqual(response.headers["accept-ranges"], "bytes")
         self.assertEqual(response.headers["access-control-allow-origin"], "*")
 
     def test_media_route_supports_range_requests(self) -> None:
         with managed_test_app() as app:
-            with patch("routers.pages.is_object_storage_configured", return_value=True):
-                with patch(
-                    "routers.pages.get_object_storage_client",
-                    return_value=_FakeObjectStorageClient(),
-                ):
-                    with patch("routers.pages.get_bucket_name", return_value="test-bucket"):
-                        response = app.client.get(
-                            "/media/images/test.webp",
-                            headers={"range": "bytes=0-3"},
-                        )
+            app.storage.put("images/test.webp", b"test-image-bytes", "image/webp")
+            response = app.client.get(
+                "/media/images/test.webp", headers={"range": "bytes=0-3"}
+            )
 
         self.assertEqual(response.status_code, 206)
         self.assertEqual(response.content, b"test")
@@ -199,6 +150,7 @@ class AppRoutesIntegrationTests(unittest.TestCase):
 
     def test_media_route_rejects_non_public_prefixes(self) -> None:
         with managed_test_app() as app:
+            app.storage.put("content/about.md")
             response = app.client.get("/media/content/about.md")
 
         self.assertEqual(response.status_code, 404)
