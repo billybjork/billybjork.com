@@ -2,12 +2,8 @@ import { checkAndHighlightCode } from './code-highlighting';
 import { scrollToHashTarget } from './hash-scroll';
 import { destroyHeroVideoPlayer } from './hero-player';
 import { initializeLightboxMedia } from './lightbox';
-import {
-  createSandboxedIframe,
-  cleanupIframe,
-  applySandboxInlineStyle,
-  type SandboxAlignment,
-} from '../utils/html-sandbox';
+import type { Alignment } from '../core/alignment';
+import { createSandboxedIframe } from '../core/html-sandbox';
 
 export { prepareHeroVideo } from './hero-player';
 
@@ -17,11 +13,11 @@ function decodeHtmlBlock(encoded: string): string {
 }
 
 /** A block whose whole content is one aligned <div> aligns its iframe the same way. */
-function inferHtmlBlockAlignment(html: string): SandboxAlignment | undefined {
+function inferHtmlBlockAlignment(html: string): Alignment | undefined {
   const alignMatch = html.trim().match(
     /^<div\b[^>]*\bstyle\s*=\s*["'][^"']*\btext-align\s*:\s*(center|right)\b[^"']*["'][^>]*>[\s\S]*<\/div>$/i
   );
-  return alignMatch?.[1] as SandboxAlignment | undefined;
+  return alignMatch?.[1] as Alignment | undefined;
 }
 
 function hydrateSandboxPlaceholder(placeholder: Element): void {
@@ -30,12 +26,7 @@ function hydrateSandboxPlaceholder(placeholder: Element): void {
 
   try {
     const html = decodeHtmlBlock(encoded);
-    const iframe = createSandboxedIframe(html);
-    const inlineStyle = placeholder.getAttribute('style');
-    const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
-    iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
-    applySandboxInlineStyle(iframe, inlineStyle, inferHtmlBlockAlignment(html));
-    placeholder.replaceWith(iframe);
+    placeholder.replaceWith(createSandboxedIframe(html, placeholder.getAttribute('style'), inferHtmlBlockAlignment(html)));
   } catch (error) {
     console.error('Failed to decode HTML block:', error);
   }
@@ -92,7 +83,6 @@ export function hydrateProjectDetail(root: HTMLElement): void {
 
 export function cleanupProjectDetail(root: HTMLElement): void {
   hydrateNearViewport.disconnect();
-  root.querySelectorAll<HTMLIFrameElement>('iframe.html-block-sandbox').forEach(cleanupIframe);
   root.querySelectorAll<HTMLVideoElement>('.video-container video').forEach(destroyHeroVideoPlayer);
 }
 

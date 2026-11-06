@@ -16,10 +16,10 @@ import type {
 import {
   buildMediaStyleString,
   getTextAlignmentStyle,
-  parseAlignmentFromStyle,
   parseTextAlignmentFromStyle,
   sizeStyleOf,
 } from './block-style';
+import { parseAlignmentFromStyle } from '../core/alignment';
 import { DIVIDER_LINE } from './inline-markdown';
 import { decodeHtmlEntities, escapeHtml } from './text';
 

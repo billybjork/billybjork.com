@@ -1,19 +1,17 @@
-import type { Alignment, BlockContext, HtmlBlock, ImageBlock, VideoBlock } from '../../types/blocks';
+import { applyAlignment } from '../../core/alignment';
+import type { BlockContext, HtmlBlock, ImageBlock, VideoBlock } from '../../types/blocks';
 import type { EditorContext } from '../context';
 import { ICONS } from '../icons';
 import { capturePosterFromVideo, uploadProcessedImage, type VideoUploadProgressUpdate } from '../media-upload';
 import { showNotification } from '../notify';
 import { clamp } from '../clamp';
 
-function applyAlignment(element: HTMLElement, align: Alignment): void {
-  element.style.display = 'block';
-  element.style.marginLeft = align === 'left' ? '' : 'auto';
-  element.style.marginRight = align === 'center' ? 'auto' : '';
-}
-
 function applyMediaStyle(element: HTMLElement, block: ImageBlock | VideoBlock): void {
   if (block.style) element.setAttribute('style', block.style);
-  if (block.align) applyAlignment(element, block.align);
+  if (block.align) {
+    element.style.display = 'block';
+    applyAlignment(element, block.align);
+  }
 }
 
 function selectOnClick(ctx: EditorContext, element: HTMLElement, block: ImageBlock | VideoBlock | HtmlBlock): void {
