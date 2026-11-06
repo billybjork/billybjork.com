@@ -6,7 +6,7 @@ const HLS_CONFIG: HlsConfig = {
   capLevelToPlayerSize: true,
 };
 
-export interface AttachHlsPlaybackOptions {
+interface AttachHlsPlaybackOptions {
   videoElement: HTMLVideoElement;
   sourceUrl: string;
   signal?: AbortSignal;

@@ -2,7 +2,7 @@ import { cleanupProjectDetail, hydrateProjectDetail, prepareHeroVideo } from '..
 import type { ProjectCard } from './card';
 import { coverHeroUntilReady } from './flight';
 
-export interface DetailElements {
+interface DetailElements {
   detailScene: HTMLElement;
   detailDate: HTMLElement;
   detailTitle: HTMLElement;

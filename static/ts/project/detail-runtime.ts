@@ -30,7 +30,7 @@ function hydrateSandboxPlaceholder(placeholder: Element): void {
 
   try {
     const html = decodeHtmlBlock(encoded);
-    const iframe = createSandboxedIframe(html, { allowFullscreen: true });
+    const iframe = createSandboxedIframe(html);
     const inlineStyle = placeholder.getAttribute('style');
     const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
     iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';

@@ -156,6 +156,25 @@ describe('HomepageController', () => {
     controller.destroy();
   });
 
+  it('tells the editor when a project is ready, and that it never will be once the scene closes', async () => {
+    stubDetailFetch();
+    const { controller, openButton, closeButton } = createHomepageFixture();
+    controller.init();
+
+    const ready = controller.waitForProjectReady('project-one');
+    const abandoned = controller.waitForProjectReady('project-two');
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+    await expect(ready).resolves.toBe('project-one');
+    await expect(controller.waitForProjectReady()).resolves.toBe('project-one');
+
+    closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+    await expect(abandoned).resolves.toBeNull();
+
+    controller.destroy();
+  });
+
   it('closes on browser back and reopens on forward from the cache, without touching history', async () => {
     const fetchMock = stubDetailFetch();
     const { controller, detailScene, openButton } = createHomepageFixture();

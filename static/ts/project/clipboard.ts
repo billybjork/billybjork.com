@@ -1,14 +1,10 @@
-export function showNotification(message: string, isError: boolean = false): void {
+function showNotification(message: string, isError: boolean = false): void {
   const notification = document.createElement('div');
   notification.className = `copy-notification${isError ? ' error' : ''}`;
   notification.textContent = message;
   document.body.appendChild(notification);
 
-  setTimeout(() => {
-    if (notification.parentNode) {
-      document.body.removeChild(notification);
-    }
-  }, 4000);
+  notification.addEventListener('animationend', () => notification.remove());
 }
 
 export function copyToClipboard(

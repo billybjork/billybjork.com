@@ -1,5 +1,5 @@
 import { isEditingActive } from '../core/edit-state';
-import { copyToClipboard, showNotification } from './clipboard';
+import { copyToClipboard } from './clipboard';
 import { resolveHashTarget } from './hash-scroll';
 import {
   closeActiveLightbox,
@@ -16,14 +16,9 @@ function handleCopyLinkClick(event: MouseEvent): void {
 
   event.preventDefault();
   const textToCopy = button.getAttribute('data-copy-text');
-  const notificationMessage = button.getAttribute('data-notification-message') || 'URL copied to clipboard!';
-
   if (textToCopy) {
-    copyToClipboard(textToCopy, notificationMessage);
-    return;
+    copyToClipboard(textToCopy, button.getAttribute('data-notification-message') ?? undefined);
   }
-
-  showNotification('No content available to copy.', true);
 }
 
 function handleMediaLightboxClick(event: MouseEvent): void {

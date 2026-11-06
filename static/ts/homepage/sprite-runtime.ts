@@ -1,3 +1,5 @@
+import { prefersReducedMotion } from './flight';
+
 const PIXELS_PER_FRAME = 3;
 const MAX_ANIMATION_SPEED = 30;
 const BASE_DECELERATION = 15;
@@ -19,7 +21,7 @@ export interface SpriteSheet {
   aspectRatio: number;
 }
 
-export interface SpriteThumbnailSource {
+interface SpriteThumbnailSource {
   cardEl: HTMLElement;
   thumbFrame: HTMLElement;
   thumbMedia: HTMLElement;
@@ -28,7 +30,7 @@ export interface SpriteThumbnailSource {
   displayAspectRatio: number;
 }
 
-export interface FrameNodeOptions {
+interface FrameNodeOptions {
   className?: string;
   width?: number;
   height?: number;
@@ -211,7 +213,7 @@ export class HomepageSpriteRuntime {
   private lastScrollEventTime = Date.now();
   private lastAnimationFrameTime = Date.now();
   private animationFrameId: number | null = null;
-  private readonly prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private readonly prefersReducedMotion = prefersReducedMotion();
   private activationObserver: IntersectionObserver | null = null;
   private readonly boundOnScroll = this.onScroll.bind(this);
   private readonly boundOnResize = this.onResize.bind(this);

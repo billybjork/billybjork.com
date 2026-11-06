@@ -5,7 +5,7 @@ const HERO_BRIDGE_FADE_MS = 180;
 const EASING_STANDARD = 'cubic-bezier(0.2, 0.0, 0, 1)';
 
 /** One end of a shared-element flight: the frame the media fills and the heading beside it. */
-export interface FlightEnd {
+interface FlightEnd {
   frame: HTMLElement;
   heading: HTMLElement | null;
 }
@@ -15,7 +15,7 @@ interface MeasuredHeading {
   rect: DOMRect;
 }
 
-export interface FlightPath {
+interface FlightPath {
   sourceRect: DOMRect;
   targetRect: DOMRect;
   sourceHeading: MeasuredHeading | null;
