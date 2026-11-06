@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildMorphKeyframes, coverBox, pinFlightTypography } from '../../static/ts/homepage/controller';
+import { pinFlightTypography } from '../../static/ts/homepage/controller';
+import { buildMorphKeyframes, coverBox } from '../../static/ts/homepage/morph';
 
 function parseKeyframe(keyframe: Keyframe): { tx: number; ty: number; scale: number; inset: number[] } {
   const transform = String(keyframe.transform);
