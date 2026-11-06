@@ -21,6 +21,11 @@ function loadCodeHighlightingIfNeeded(targetElement: Element): void {
   checkAndHighlightCode(targetElement);
 }
 
+function decodeHtmlBlock(encoded: string): string {
+  const bytes = Uint8Array.from(atob(encoded), (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 function inferLegacyHtmlBlockAlignment(html: string): SandboxAlignment | undefined {
   const trimmed = html.trim();
   const alignMatch = trimmed.match(
@@ -35,7 +40,7 @@ function hydrateSandboxPlaceholder(placeholder: Element): void {
   if (!encoded) return;
 
   try {
-    const html = atob(encoded);
+    const html = decodeHtmlBlock(encoded);
     const iframe = createSandboxedIframe(html, { allowFullscreen: true });
     const inlineStyle = placeholder.getAttribute('style');
     const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);

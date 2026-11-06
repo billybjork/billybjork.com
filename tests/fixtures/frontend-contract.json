@@ -1,0 +1,32 @@
+{
+  "homepage": [
+    "#homepage-list-scene",
+    "[data-homepage-project-card][data-slug][data-title][data-formatted-date]",
+    "[data-homepage-project-card][data-sprite-sheet][data-frames][data-columns][data-rows]",
+    "[data-homepage-project-card][data-sprite-aspect-ratio][data-hero-aspect-ratio]",
+    "[data-homepage-project-card][data-thumbnail]",
+    "[data-homepage-project-card] .homepage-card-heading[data-open-project]",
+    "[data-homepage-project-card] button[data-open-project]",
+    "[data-homepage-thumb-frame] [data-homepage-thumb-media]",
+    "#homepage-detail-scene .homepage-detail-scroll",
+    "#homepage-detail-scene [data-close-detail]",
+    "#homepage-detail-scene .homepage-close-button",
+    "#homepage-detail-scene .homepage-detail-heading #homepage-detail-date",
+    "#homepage-detail-scene .homepage-detail-heading #homepage-detail-title",
+    "#homepage-detail-hero-frame #homepage-detail-hero-media",
+    "#homepage-detail-scene #homepage-detail-content",
+    "#homepage-transition-layer"
+  ],
+  "homepageForEditors": [
+    "#homepage-detail-scene .homepage-detail-header .edit-buttons",
+    "[data-homepage-edit-project][data-project-slug]"
+  ],
+  "detailFragment": [
+    ".video-container",
+    ".video-container video[data-hls-url]",
+    ".project-content",
+    ".project-content .html-block-sandbox[data-html-b64]",
+    ".project-content video.lazy-inline-video",
+    ".project-content .copy-text-link[data-copy-text]"
+  ]
+}

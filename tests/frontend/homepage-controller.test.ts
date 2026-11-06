@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import contract from '../fixtures/frontend-contract.json';
 import { HomepageController } from '../../static/ts/homepage/controller';
 
 const DETAIL_RESPONSE_HTML = `
@@ -9,6 +10,24 @@ const DETAIL_RESPONSE_HTML = `
     <div class="content-block"><h2 id="section-two">Section Two</h2></div>
   </section>
 `;
+
+const FULL_DETAIL_HTML = `
+  <section class="video-container" id="hero">
+    <video data-hls-url="/video.m3u8" data-video-width="1280" data-video-height="720"></video>
+  </section>
+  <section class="project-content">
+    <p>Body</p>
+    <video class="lazy-inline-video" data-src="/inline.mp4" loop muted></video>
+    <div class="html-block-sandbox" data-html-b64="PHA+SGk8L3A+"></div>
+    <button class="copy-text-link" data-copy-text="http://localhost/project-one"></button>
+  </section>
+`;
+
+function expectContract(root: ParentNode, selectors: string[]): void {
+  selectors.forEach((selector) => {
+    expect(root.querySelector(selector), selector).not.toBeNull();
+  });
+}
 
 function createHomepageFixture(): {
   controller: HomepageController;
@@ -92,7 +111,7 @@ function createHomepageFixture(): {
               <time class="homepage-detail-date" id="homepage-detail-date"></time>
               <h2 class="homepage-detail-title" id="homepage-detail-title"></h2>
             </div>
-            <div class="homepage-detail-actions">
+            <div class="homepage-detail-actions edit-buttons">
               <button type="button" data-homepage-edit-project data-project-slug=""></button>
               <button class="homepage-close-button" type="button" data-close-detail>Close</button>
             </div>
@@ -106,6 +125,11 @@ function createHomepageFixture(): {
     </section>
     <div id="homepage-transition-layer" class="homepage-transition-layer"></div>
   `;
+
+  expectContract(document, [...contract.homepage, ...contract.homepageForEditors]);
+  const fullDetail = document.createElement('div');
+  fullDetail.innerHTML = FULL_DETAIL_HTML;
+  expectContract(fullDetail, contract.detailFragment);
 
   const listScene = document.getElementById('homepage-list-scene');
   const detailScene = document.getElementById('homepage-detail-scene');
@@ -439,12 +463,7 @@ describe('HomepageController', () => {
   it('covers the hero with the card frame until the video paints, and tears the player down on close', async () => {
     FakeHls.instances = [];
     vi.stubGlobal('Hls', FakeHls);
-    stubDetailFetch(`
-      <section class="video-container" id="hero">
-        <video data-hls-url="/video.m3u8" data-video-width="1280" data-video-height="720"></video>
-      </section>
-      <section class="project-content"><p>Body</p></section>
-    `);
+    stubDetailFetch(FULL_DETAIL_HTML);
     const { controller, openButton, closeButton } = createHomepageFixture();
     const heroFrame = document.getElementById('homepage-detail-hero-frame') as HTMLElement;
     controller.init();
