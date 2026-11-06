@@ -4,7 +4,7 @@
  */
 
 import type { Block, ImageBlock, VideoBlock, HtmlBlock, BlockType } from '../types/blocks';
-import { showNotification } from '../core/utils';
+import { showNotification } from './notify';
 
 // ========== TYPES ==========
 

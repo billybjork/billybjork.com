@@ -21,7 +21,7 @@ import {
   parseTextAlignmentFromStyle,
   buildMediaStyleString,
   getTextAlignmentStyle,
-} from '../core/utils';
+} from './block-style';
 
 // ========== CONSTANTS ==========
 

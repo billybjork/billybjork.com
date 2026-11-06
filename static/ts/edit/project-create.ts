@@ -3,7 +3,10 @@
  * Handles creating new projects with name, slug, date, and draft/pinned options
  */
 
-import { showNotification, fetchJSON, withShowDrafts, lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
+import { fetchJSON } from './api';
+import { showNotification } from './notify';
+import { withShowDrafts } from './show-drafts';
 
 interface ProjectCreateState {
   modal: HTMLElement | null;

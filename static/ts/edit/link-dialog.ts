@@ -3,7 +3,7 @@
  * Modal dialog for inserting/editing links with internal anchor support
  */
 
-import { lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
 
 export interface LinkDialogResult {
   action: 'insert' | 'remove' | 'cancel';

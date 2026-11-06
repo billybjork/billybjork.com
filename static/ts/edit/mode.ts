@@ -7,24 +7,21 @@
 import type { Block, BlockType, Alignment, TextBlock, ImageBlock, VideoBlock, CodeBlock, HtmlBlock, CalloutBlock, RowBlock } from '../types/blocks';
 import type { ProjectData, AboutData } from '../types/api';
 import {
-  isDevMode,
   setupAutoResizeTextarea,
-  createImageElement,
-  createVideoElement,
-  applyVideoPlaybackSettings,
   insertTextWithUndo,
   toggleFormat,
   findLinkAtCursor,
   handleFormattingShortcuts,
   handleListShortcuts,
   insertLink,
-  showNotification,
-  fetchJSON,
-  withShowDrafts,
-} from '../core/utils';
+} from './markdown-textarea';
+import { createImageElement, createVideoElement, applyVideoPlaybackSettings } from './media-elements';
+import { fetchJSON } from './api';
+import { showNotification } from './notify';
+import { withShowDrafts } from './show-drafts';
 import { getHomepageRuntime } from '../core/runtime-registry';
 import { createSandboxedIframe, cleanupIframe, applySandboxInlineStyle } from '../utils/html-sandbox';
-import { escapeHtmlAttr } from '../core/text';
+import { escapeHtmlAttr } from './text';
 import EditBlocks, { createBlock, blocksToMarkdown } from './blocks';
 import {
   applyBlockUpdates as applyBlockFieldUpdates,
@@ -224,11 +221,6 @@ function unbindToolbarViewportEvents(): void {
  * Initialize edit mode for a project
  */
 export async function init(slug: string): Promise<void> {
-  if (!isDevMode()) {
-    console.log('Edit mode only available on localhost');
-    return;
-  }
-
   projectSlug = slug;
   editMode = 'project';
   isActive = true;
@@ -252,11 +244,6 @@ export async function init(slug: string): Promise<void> {
  * Initialize edit mode for the about page
  */
 export async function initAbout(): Promise<void> {
-  if (!isDevMode()) {
-    console.log('Edit mode only available on localhost');
-    return;
-  }
-
   editMode = 'about';
   projectSlug = null;
   isActive = true;

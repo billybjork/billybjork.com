@@ -1,14 +1,4 @@
-/**
- * Edit Mode Utilities
- * Shared helper functions for the block editor
- */
-
-import type { Alignment, ImageBlock, VideoBlock } from '../types/blocks';
-import type { FetchJSONOptions } from '../types/api';
-import { showLinkDialog } from '../edit/link-dialog';
-
-type NotificationType = 'info' | 'success' | 'error' | 'warning';
-const EDIT_NOTIFICATION_STACK_ID = 'edit-notification-stack';
+import { showLinkDialog } from './link-dialog';
 
 interface FormatInfo {
   formatStart: number;
@@ -28,68 +18,6 @@ interface LinkInfo {
   urlEnd: number;
 }
 
-interface MediaStyleBlock {
-  style?: string | null;
-  align?: Alignment;
-}
-
-/**
- * Generate a unique ID for blocks
- */
-export function generateId(): string {
-  return 'block-' + Date.now() + '-' + Math.random().toString(36).substring(2, 11);
-}
-
-/**
- * Check if we're in edit mode (server-side authenticated).
- * The server sets data-edit-mode="true" on <body> when the user is
- * authenticated (either localhost or valid remote session cookie).
- */
-export function isDevMode(): boolean {
-  return document.body?.dataset.editMode === 'true';
-}
-
-import { isEditingActive } from './edit-state';
-export { isEditingActive };
-export { lockBodyScroll, unlockBodyScroll } from './scroll-lock';
-
-/**
- * Check if show drafts is active in the current URL
- */
-export function isShowDraftsActive(): boolean {
-  const storageKey = 'bb_show_drafts';
-  const params = new URLSearchParams(window.location.search);
-  if (params.has('show_drafts')) {
-    const isActive = params.get('show_drafts') === 'true';
-    if (isActive) {
-      sessionStorage.setItem(storageKey, 'true');
-    } else {
-      sessionStorage.removeItem(storageKey);
-    }
-    return isActive;
-  }
-  return sessionStorage.getItem(storageKey) === 'true';
-}
-
-/**
- * Add show_drafts=true to a URL if currently active
- */
-export function withShowDrafts(url: string): string {
-  try {
-    const next = new URL(url, window.location.origin);
-    if (isShowDraftsActive()) {
-      next.searchParams.set('show_drafts', 'true');
-    }
-    return next.toString();
-  } catch {
-    return url;
-  }
-}
-
-/**
- * Setup auto-resizing textarea
- * @returns The autoResize function for manual triggering
- */
 export function setupAutoResizeTextarea(
   textarea: HTMLTextAreaElement,
   onUpdate?: (value: string) => void
@@ -111,156 +39,6 @@ export function setupAutoResizeTextarea(
   return autoResize;
 }
 
-/**
- * Create image element with standard attributes
- */
-export function createImageElement(
-  block: ImageBlock,
-  onClick?: (element: HTMLImageElement, block: ImageBlock) => void
-): HTMLImageElement {
-  const img = document.createElement('img');
-  img.src = block.src;
-  img.alt = block.alt || '';
-  if (block.style) img.setAttribute('style', block.style);
-  if (block.align) applyAlignment(img, block.align);
-  if (onClick) {
-    img.addEventListener('click', (e) => {
-      e.stopPropagation();
-      onClick(img, block);
-    });
-  }
-  return img;
-}
-
-/**
- * Create video element (for content videos - MP4)
- */
-export function createVideoElement(
-  block: VideoBlock,
-  onClick?: (element: HTMLVideoElement, block: VideoBlock) => void
-): HTMLVideoElement {
-  const video = document.createElement('video');
-  video.src = block.src;
-  if (block.poster) {
-    video.poster = block.poster;
-    video.setAttribute('poster', block.poster);
-  }
-  video.className = 'content-video';
-  applyVideoPlaybackSettings(video, !!block.autoplay);
-  if (block.style) video.setAttribute('style', block.style);
-  if (block.align) applyAlignment(video, block.align);
-
-  if (onClick) {
-    video.addEventListener('click', (e) => {
-      e.stopPropagation();
-      onClick(video, block);
-    });
-  }
-  return video;
-}
-
-/**
- * Apply standard playback behavior for content videos.
- */
-export function applyVideoPlaybackSettings(video: HTMLVideoElement, autoplay: boolean): void {
-  const editing = isEditingActive();
-
-  video.loop = autoplay;
-  video.muted = autoplay;
-  video.defaultMuted = autoplay;
-  video.playsInline = editing || autoplay;
-  video.controls = editing || !autoplay;
-  video.autoplay = !editing && autoplay;
-
-  if (video.autoplay) {
-    video.setAttribute('autoplay', '');
-  } else {
-    video.removeAttribute('autoplay');
-  }
-
-  if (autoplay) {
-    video.setAttribute('muted', '');
-  } else {
-    video.removeAttribute('muted');
-  }
-
-  if (video.playsInline) {
-    video.setAttribute('playsinline', '');
-  } else {
-    video.removeAttribute('playsinline');
-  }
-
-  if (editing) {
-    video.pause();
-  }
-}
-
-/**
- * Apply alignment CSS to element
- */
-export function applyAlignment(element: HTMLElement, align: Alignment): void {
-  element.style.display = 'block';
-  element.style.marginLeft = '';
-  element.style.marginRight = '';
-
-  if (align === 'center') {
-    element.style.marginLeft = 'auto';
-    element.style.marginRight = 'auto';
-  } else if (align === 'right') {
-    element.style.marginLeft = 'auto';
-  }
-}
-
-/**
- * Get CSS style string for alignment
- */
-export function getAlignmentStyle(align: Alignment): string {
-  switch (align) {
-    case 'center': return 'margin-left: auto; margin-right: auto';
-    case 'right': return 'margin-left: auto';
-    default: return '';
-  }
-}
-
-/**
- * Parse alignment from inline style string
- */
-export function parseAlignmentFromStyle(style: string | null | undefined): Alignment {
-  if (!style) return 'left';
-  const hasMarginLeft = style.includes('margin-left: auto') || style.includes('margin-left:auto');
-  const hasMarginRight = style.includes('margin-right: auto') || style.includes('margin-right:auto');
-
-  if (hasMarginLeft && hasMarginRight) return 'center';
-  if (hasMarginLeft) return 'right';
-  return 'left';
-}
-
-/**
- * Build media style string (for images/videos with size and alignment)
- * Strips existing alignment margins and rebuilds with new alignment
- */
-export function buildMediaStyleString(block: MediaStyleBlock): string {
-  const styleParts: string[] = ['display: block'];
-
-  if (block.style) {
-    const sizeStyle = block.style
-      .replace(/margin-left:\s*auto;?\s*/g, '')
-      .replace(/margin-right:\s*auto;?\s*/g, '')
-      .replace(/display:\s*block;?\s*/g, '')
-      .trim();
-    if (sizeStyle) styleParts.push(sizeStyle);
-  }
-
-  const alignStyle = getAlignmentStyle(block.align ?? 'left');
-  if (alignStyle) styleParts.push(alignStyle);
-
-  return styleParts.join('; ');
-}
-
-/**
- * Insert text at cursor position with native undo support
- * Uses execCommand for undo stack, falls back to setRangeText
- */
 export function insertTextWithUndo(textarea: HTMLTextAreaElement, text: string): void {
   textarea.focus({ preventScroll: true });
   // execCommand preserves native undo stack
@@ -272,9 +50,6 @@ export function insertTextWithUndo(textarea: HTMLTextAreaElement, text: string):
   }
 }
 
-/**
- * Wrap selected text in textarea with before/after strings
- */
 export function wrapSelection(
   textarea: HTMLTextAreaElement,
   before: string,
@@ -297,9 +72,6 @@ export function wrapSelection(
   if (onUpdate) onUpdate();
 }
 
-/**
- * Find format markers around or containing the selection
- */
 function findFormatAroundSelection(
   value: string,
   selStart: number,
@@ -361,9 +133,6 @@ function findFormatAroundSelection(
   return null;
 }
 
-/**
- * Toggle formatting on selection - wraps if not formatted, unwraps if formatted
- */
 export function toggleFormat(
   textarea: HTMLTextAreaElement,
   before: string,
@@ -395,10 +164,6 @@ export function toggleFormat(
   if (onUpdate) onUpdate();
 }
 
-/**
- * Handle formatting keyboard shortcuts (Cmd/Ctrl + B/I/U/K)
- * @returns True if shortcut was handled
- */
 export function handleFormattingShortcuts(
   e: KeyboardEvent,
   textarea: HTMLTextAreaElement,
@@ -429,9 +194,6 @@ export function handleFormattingShortcuts(
   return false;
 }
 
-/**
- * Find markdown link at cursor position
- */
 export function findLinkAtCursor(textarea: HTMLTextAreaElement): LinkInfo | null {
   const { value, selectionStart } = textarea;
 
@@ -470,11 +232,6 @@ export function findLinkAtCursor(textarea: HTMLTextAreaElement): LinkInfo | null
   };
 }
 
-/**
- * Normalize link input from the dialog.
- * - Keeps anchors/relative paths/protocol URLs unchanged
- * - Adds https:// for bare domains (e.g. example.com)
- */
 function normalizeLinkUrl(input: string): string {
   const trimmed = (input || '').trim();
   if (!trimmed) return '';
@@ -503,11 +260,6 @@ function normalizeLinkUrl(input: string): string {
   return trimmed;
 }
 
-/**
- * Insert or edit markdown link at cursor
- * If cursor is inside existing link, edits the URL
- * Uses a modal dialog with support for internal anchors
- */
 export async function insertLink(
   textarea: HTMLTextAreaElement,
   container: HTMLElement | null,
@@ -555,26 +307,6 @@ export async function insertLink(
   if (onUpdate) onUpdate();
 }
 
-/**
- * Get CSS style string for text alignment
- */
-export function getTextAlignmentStyle(align: Alignment | undefined): string {
-  if (!align || align === 'left') return '';
-  return `text-align: ${align}`;
-}
-
-/**
- * Parse text alignment from inline style string
- */
-export function parseTextAlignmentFromStyle(style: string | null | undefined): Alignment {
-  if (!style) return 'left';
-  const match = style.match(/text-align:\s*(left|center|right)/);
-  return (match?.[1] as Alignment) ?? 'left';
-}
-
-/**
- * Indent selected lines or current line by 3 spaces
- */
 function indentLines(textarea: HTMLTextAreaElement, onUpdate?: () => void): void {
   const { value, selectionStart, selectionEnd } = textarea;
   const indent = '   '; // 3 spaces for list sub-items
@@ -605,9 +337,6 @@ function indentLines(textarea: HTMLTextAreaElement, onUpdate?: () => void): void
   if (onUpdate) onUpdate();
 }
 
-/**
- * Outdent selected lines or current line by up to 4 spaces
- */
 function outdentLines(textarea: HTMLTextAreaElement, onUpdate?: () => void): void {
   const { value, selectionStart, selectionEnd } = textarea;
 
@@ -642,10 +371,6 @@ function outdentLines(textarea: HTMLTextAreaElement, onUpdate?: () => void): voi
   if (onUpdate) onUpdate();
 }
 
-/**
- * Handle Enter key in list context - continue or end list
- * @returns True if handled as list operation
- */
 function handleListEnter(
   e: KeyboardEvent,
   textarea: HTMLTextAreaElement,
@@ -711,10 +436,6 @@ function handleListEnter(
   return false;
 }
 
-/**
- * Handle list-related keyboard shortcuts (Enter, Tab, Shift+Tab)
- * @returns True if shortcut was handled
- */
 export function handleListShortcuts(
   e: KeyboardEvent,
   textarea: HTMLTextAreaElement,
@@ -743,148 +464,3 @@ export function handleListShortcuts(
 
   return false;
 }
-
-/**
- * Show notification toast
- */
-export function showNotification(
-  message: string,
-  type: NotificationType = 'info',
-  duration: number = 3000
-): void {
-  let notificationStack = document.getElementById(EDIT_NOTIFICATION_STACK_ID);
-  if (!notificationStack) {
-    notificationStack = document.createElement('div');
-    notificationStack.id = EDIT_NOTIFICATION_STACK_ID;
-    notificationStack.className = 'edit-notification-stack';
-    document.body.appendChild(notificationStack);
-  }
-
-  const notification = document.createElement('div');
-  notification.className = `edit-notification edit-notification-${type}`;
-  notification.textContent = message;
-  notificationStack.appendChild(notification);
-
-  requestAnimationFrame(() => {
-    notification.classList.add('show');
-  });
-
-  setTimeout(() => {
-    notification.classList.remove('show');
-    setTimeout(() => {
-      notification.remove();
-      if (notificationStack && notificationStack.childElementCount === 0) {
-        notificationStack.remove();
-      }
-    }, 300);
-  }, duration);
-}
-
-/**
- * Deep clone an object
- */
-export function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj));
-}
-
-/**
- * Check if element is empty or contains only whitespace/br
- */
-export function isElementEmpty(element: HTMLElement): boolean {
-  const text = element.textContent?.trim() ?? '';
-  const html = element.innerHTML.trim();
-  return text === '' || html === '' || html === '<br>';
-}
-
-/**
- * Move caret to end of element
- */
-export function moveCaretToEnd(element: HTMLElement): void {
-  const range = document.createRange();
-  const selection = window.getSelection();
-  if (!selection) return;
-
-  range.selectNodeContents(element);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
-}
-
-/**
- * Fetch with error handling
- */
-export async function fetchJSON<T>(url: string, options: FetchJSONOptions = {}): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-
-  if (!response.ok) {
-    // Try to extract error detail from response
-    let detail = '';
-    try {
-      const errorData = await response.json();
-      detail = errorData.detail || '';
-    } catch {
-      // Ignore JSON parse errors
-    }
-    throw new Error(detail || `HTTP error! status: ${response.status}`);
-  }
-
-  return await response.json() as T;
-}
-
-/**
- * Debounce function
- */
-export function debounce<T extends (...args: Parameters<T>) => ReturnType<T>>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  return function executedFunction(...args: Parameters<T>) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
-// Create the EditUtils object for backwards compatibility with window.EditUtils
-export const EditUtils = {
-  generateId,
-  isDevMode,
-  isShowDraftsActive,
-  withShowDrafts,
-  setupAutoResizeTextarea,
-  createImageElement,
-  createVideoElement,
-  applyVideoPlaybackSettings,
-  applyAlignment,
-  getAlignmentStyle,
-  parseAlignmentFromStyle,
-  buildMediaStyleString,
-  insertTextWithUndo,
-  wrapSelection,
-  toggleFormat,
-  handleFormattingShortcuts,
-  findLinkAtCursor,
-  insertLink,
-  getTextAlignmentStyle,
-  parseTextAlignmentFromStyle,
-  handleListShortcuts,
-  showNotification,
-  deepClone,
-  isElementEmpty,
-  moveCaretToEnd,
-  fetchJSON,
-  debounce,
-};
-
-// Export for window global
-export default EditUtils;

@@ -3,7 +3,6 @@
  * Loaded in dev mode only - handles edit mode functionality
  */
 
-import { EditUtils } from '../core/utils';
 import EditBlocks from './blocks';
 import EditMode from './mode';
 import EditMedia from './media';
@@ -25,7 +24,6 @@ EditBootstrap.init();
 
 // Export modules
 export {
-  EditUtils,
   EditBlocks,
   EditMode,
   EditMedia,

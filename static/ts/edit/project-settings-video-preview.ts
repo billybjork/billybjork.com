@@ -1,5 +1,5 @@
 import { attachHlsPlayback } from '../core/hls';
-import { showNotification } from '../core/utils';
+import { showNotification } from './notify';
 
 type ViewType = 'settings' | 'video';
 

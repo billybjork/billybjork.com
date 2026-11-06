@@ -1,4 +1,4 @@
-import { escapeHtml, escapeHtmlAttr } from '../core/text';
+import { escapeHtml, escapeHtmlAttr } from './text';
 
 interface VideoDataTemplate {
   hls?: string;

@@ -1,16 +1,9 @@
-/**
- * Edit Mode Bootstrap (Dev Only)
- * Provides edit-mode UI controls and keyboard shortcuts.
- * Only activates on localhost — no-op in production.
- */
-
-import { isDevMode, isShowDraftsActive } from '../core/utils';
+import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
 import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
 import { restorePersistedScroll } from './scroll-restore';
 
 // ========== CONSTANTS ==========
 
-const SHOW_DRAFTS_KEY = 'bb_show_drafts';
 const EDIT_MODE_STYLE_HREFS = [
   '/static/css/edit-mode-base.css',
   '/static/css/edit-mode-settings.css',
@@ -233,10 +226,10 @@ function addShowDraftsToggle(): void {
     const url = new URL(window.location.href);
     if (isActive) {
       url.searchParams.delete('show_drafts');
-      sessionStorage.removeItem(SHOW_DRAFTS_KEY);
+      setShowDraftsRemembered(false);
     } else {
       url.searchParams.set('show_drafts', 'true');
-      sessionStorage.setItem(SHOW_DRAFTS_KEY, 'true');
+      setShowDraftsRemembered(true);
     }
     window.location.href = url.toString();
   });
@@ -359,8 +352,6 @@ function initializeEditMode(): void {
 // ========== ENTRY POINT ==========
 
 export function init(): void {
-  if (!isDevMode()) return;
-
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeEditMode);
   } else {

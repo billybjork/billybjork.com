@@ -4,7 +4,7 @@
  */
 
 import type { Block } from '../types/blocks';
-import { deepClone, showNotification } from '../core/utils';
+import { showNotification } from './notify';
 
 interface UndoState {
   blocks: Block[];
@@ -68,7 +68,7 @@ function captureState(): UndoState {
     throw new Error('EditUndo not initialized');
   }
   return {
-    blocks: deepClone(callbacks.getBlocks()),
+    blocks: structuredClone(callbacks.getBlocks()),
     timestamp: Date.now(),
   };
 }
@@ -131,7 +131,7 @@ function restoreState(state: UndoState | undefined): void {
   if (!state || !callbacks) return;
 
   isUndoing = true;
-  const nextBlocks = deepClone(state.blocks);
+  const nextBlocks = structuredClone(state.blocks);
   if (callbacks.restoreBlocks) {
     callbacks.restoreBlocks(nextBlocks);
   } else {

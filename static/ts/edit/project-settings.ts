@@ -3,9 +3,12 @@
  * Handles project metadata editing, hero video upload, and sprite range selection
  */
 
-import { showNotification, fetchJSON, withShowDrafts, lockBodyScroll, unlockBodyScroll } from '../core/utils';
+import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
+import { fetchJSON } from './api';
+import { showNotification } from './notify';
+import { withShowDrafts } from './show-drafts';
 import { destroyHlsInstance as destroyVideoHlsInstance } from '../core/hls';
-import { formatMinutesSeconds } from '../core/text';
+import { formatMinutesSeconds } from './text';
 import {
   renderPreviewStatus as renderProjectSettingsPreviewStatus,
   switchPreviewToHls as switchProjectSettingsPreviewToHls,
