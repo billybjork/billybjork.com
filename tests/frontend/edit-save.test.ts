@@ -4,11 +4,13 @@ import {
   blockWrappers,
   installHarness,
   jsonResponse,
+  lineInputs,
   mountProjectPage,
   notifications,
   openAboutEditor,
   openProjectEditor,
   PROJECT,
+  pressKey,
   statusText,
   toolbarButton,
   typeInLine,
@@ -122,6 +124,166 @@ describe('autosave', () => {
     expect(statusText()).toBe('All changes saved');
     await settle(3000);
     expect(statusText()).toBe('No unsaved changes');
+  });
+});
+
+describe('editing during a save', () => {
+  /** Holds each save open until the test answers it. */
+  function holdSaves(): Array<(response?: Response) => void> {
+    const pending: Array<(response?: Response) => void> = [];
+    harness.respond('/api/save-project', (call) => new Promise<Response>((resolve) => {
+      pending.push((response) => resolve(response ?? jsonResponse({
+        success: true,
+        slug: (call.body as { slug: string }).slug,
+        revision: `rev-${pending.length + 1}`,
+      })));
+    }));
+    return pending;
+  }
+
+  it('keeps a keystroke made while the request is out, and saves it next', async () => {
+    await openProjectEditor(harness, 'Hello');
+    const pending = holdSaves();
+    typeInLine('First');
+    await settle(AUTO_SAVE_MS);
+    expect(harness.saves().map((save) => save.markdown)).toEqual(['First']);
+
+    typeInLine('First and more');
+    pending[0]!();
+    await settle();
+
+    expect(statusText()).toBe('(unsaved)');
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+
+    await settle(AUTO_SAVE_MS);
+    expect(harness.saves().map((save) => save.markdown)).toEqual(['First', 'First and more']);
+    pending[1]!();
+    await settle();
+    expect(statusText()).toBe('All changes saved');
+  });
+
+  it('waits for the save in flight and builds on its revision, rather than aborting it', async () => {
+    await openProjectEditor(harness, 'Hello');
+    const pending = holdSaves();
+    typeInLine('First');
+    await settle(AUTO_SAVE_MS);
+
+    typeInLine('Second');
+    await settle(AUTO_SAVE_MS);
+    expect(harness.saves()).toHaveLength(1);
+
+    pending[0]!();
+    await settle();
+
+    expect(harness.saves().map((save) => [save.markdown, save.base_revision])).toEqual([
+      ['First', 'rev-1'],
+      ['Second', 'rev-2'],
+    ]);
+  });
+
+  it('keeps a cleanup candidate that arrives while the request is out', async () => {
+    const poster = (name: string) => `<video src="https://cdn.example/v.mp4" poster="https://cdn.example/${name}.webp" controls></video>`;
+    await openProjectEditor(harness, `${poster('a')}\n\n<!-- block -->\n\n${poster('b')}\n\n<!-- block -->\n\nText`);
+    const pending = holdSaves();
+    blockWrappers()[0]!.querySelector<HTMLButtonElement>('.block-delete-btn')!.click();
+    await settle(AUTO_SAVE_MS);
+    expect(harness.lastSave().cleanup_candidates).toEqual(['https://cdn.example/a.webp']);
+
+    blockWrappers()[0]!.querySelector<HTMLButtonElement>('.block-delete-btn')!.click();
+    pending[0]!();
+    await settle(AUTO_SAVE_MS);
+
+    expect(harness.lastSave().cleanup_candidates).toEqual(['https://cdn.example/b.webp']);
+  });
+
+  it('does not overwrite a slug typed while the rename was saving', async () => {
+    await openProjectEditor(harness, 'Hello');
+    const pending = holdSaves();
+    const slugInput = document.querySelector<HTMLInputElement>('#inline-settings-slug')!;
+    slugInput.value = 'new';
+    slugInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await settle(AUTO_SAVE_MS);
+
+    slugInput.value = 'newer';
+    slugInput.dispatchEvent(new Event('input', { bubbles: true }));
+    pending[0]!();
+    await settle();
+
+    expect(slugInput.value).toBe('newer');
+    await settle(AUTO_SAVE_MS);
+    expect(harness.lastSave()).toMatchObject({ slug: 'newer', original_slug: 'new' });
+  });
+
+  it('the Save button waits for the save in flight, and leaves only once everything is saved', async () => {
+    await openProjectEditor(harness, 'Hello');
+    const pending = holdSaves();
+    typeInLine('First');
+    await settle(AUTO_SAVE_MS);
+
+    typeInLine('Second');
+    toolbarButton('save').click();
+    await settle();
+    expect(harness.saves()).toHaveLength(1);
+    expect(harness.reload).not.toHaveBeenCalled();
+
+    pending[0]!();
+    await settle();
+    expect(harness.saves().map((save) => save.markdown)).toEqual(['First', 'Second']);
+    expect(harness.reload).not.toHaveBeenCalled();
+
+    pending[1]!();
+    await settle();
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cmd+S does not resend when the save in flight covered everything', async () => {
+    await openProjectEditor(harness, 'Hello');
+    const pending = holdSaves();
+    typeInLine('First');
+    await settle(AUTO_SAVE_MS);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, cancelable: true }));
+    pending[0]!();
+    await vi.waitFor(() => expect(harness.reload).toHaveBeenCalledTimes(1));
+
+    expect(harness.saves()).toHaveLength(1);
+  });
+
+  it('Cmd+S stops at a conflict from the save in flight', async () => {
+    await openProjectEditor(harness, 'Hello');
+    const pending = holdSaves();
+    typeInLine('First');
+    await settle(AUTO_SAVE_MS);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, cancelable: true }));
+    pending[0]!(jsonResponse({ conflict: true }, 409));
+    await vi.waitFor(() => expect(document.querySelector('.edit-conflict-banner')).not.toBeNull());
+    await settle();
+
+    expect(harness.saves()).toHaveLength(1);
+    expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it('Discard aborts the save in flight', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    let aborted = false;
+    await openProjectEditor(harness, 'Hello');
+    vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => {
+        aborted = true;
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    })));
+    typeInLine('First');
+    await settle(AUTO_SAVE_MS);
+
+    toolbarButton('cancel').click();
+    await settle();
+
+    expect(aborted).toBe(true);
+    expect(harness.reload).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -402,7 +564,7 @@ describe('renaming the slug', () => {
     await settle(AUTO_SAVE_MS);
 
     expect(harness.lastSave()).toMatchObject({ slug: 'new-slug', original_slug: PROJECT.slug });
-    expect(window.location.pathname).toBe('/new-slug');
+    expect(window.__bbHomepageRuntime?.renameProjectSlug).toHaveBeenCalledWith('new-slug');
 
     typeInLine('More');
     await settle(AUTO_SAVE_MS);
@@ -423,6 +585,40 @@ describe('project metadata', () => {
 
     expect(harness.lastSave()).toMatchObject({ name: 'Renamed', pinned: true, markdown: 'Hello' });
     expect(document.querySelector('.edit-project-name')?.textContent).toBe('Editing: Renamed');
+  });
+});
+
+describe('keys pressed in the header inputs', () => {
+  function nameInput(): HTMLInputElement {
+    const input = document.querySelector<HTMLInputElement>('.edit-project-header-name-input')!;
+    input.focus();
+    return input;
+  }
+
+  it('Cmd+S saves', async () => {
+    await openProjectEditor(harness, 'Hello');
+    typeInLine('Edited');
+    pressKey(nameInput(), 's', { metaKey: true });
+    await settle();
+
+    expect(harness.lastSave().markdown).toBe('Edited');
+  });
+
+  it('Escape discards', async () => {
+    await openProjectEditor(harness, 'Hello');
+    pressKey(nameInput(), 'Escape');
+    await settle();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cmd+Z undoes', async () => {
+    await openProjectEditor(harness, 'Hello');
+    typeInLine('Edited');
+    await settle(500);
+    pressKey(nameInput(), 'z', { metaKey: true });
+
+    expect(lineInputs()[0]?.value).toBe('Hello');
   });
 });
 

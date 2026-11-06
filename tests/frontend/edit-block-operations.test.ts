@@ -61,7 +61,7 @@ describe('adding blocks', () => {
     menuItem('code').click();
     expect(blockWrappers().map((el) => el.dataset.blockType)).toEqual(['code', 'text', 'text', 'divider']);
 
-    document.querySelector<HTMLButtonElement>('.merge-divider[data-after-index="2"] .merge-add-btn')!.click();
+    document.querySelectorAll<HTMLButtonElement>('.merge-divider .merge-add-btn')[1]!.click();
     menuItem('callout').click();
     expect(blockWrappers().map((el) => el.dataset.blockType)).toEqual(['code', 'text', 'callout', 'text', 'divider']);
 

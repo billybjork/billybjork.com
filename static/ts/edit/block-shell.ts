@@ -126,7 +126,6 @@ function createAddButton(ctx: EditorContext, insertIndex: number): HTMLButtonEle
 function createMergeDivider(ctx: EditorContext, afterIndex: number): HTMLElement {
   const divider = document.createElement('div');
   divider.className = 'merge-divider';
-  divider.dataset.afterIndex = String(afterIndex);
   divider.appendChild(createAddButton(ctx, afterIndex));
 
   if (ctx.store.canMergeIntoRow(afterIndex)) {

@@ -1,45 +1,26 @@
 import { projectSlugFromPath } from '../core/project-path';
 import { isEditingActive } from '../core/edit-state';
-import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
+import { isShowDraftsActive, rememberShowDrafts, withoutShowDrafts, withShowDrafts } from '../core/show-drafts';
+import { getHomepageRuntime } from '../core/runtime-registry';
 import { ICONS } from './icons';
 import { aboutPage, projectPage } from './page-adapter';
-import { ABOUT_PATH, findProjectContent, isAboutPage } from './page-content';
+import { isAboutPage } from './page-content';
 import { showProjectCreateDialog } from './project-create';
 import { restorePersistedScroll } from './scroll';
 import { openEditor } from './session';
-import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
 
-const EDIT_STYLESHEETS = ['edit-mode-base.css', 'edit-mode-project.css', 'edit-mode-extras.css'];
-const HOMEPAGE_RUNTIME_WAIT_MS = 1500;
-const PROJECT_READY_WAIT_MS = 2500;
+/** Only the homepage template mounts projects, so a page without its runtime has none to edit. */
+async function editProject(): Promise<void> {
+  const runtime = getHomepageRuntime();
+  const slug = runtime?.getOpenProjectSlug() || projectSlugFromPath(window.location.pathname);
+  if (!runtime || !slug) return;
 
-async function editProject(fallbackSlug: string | null = null): Promise<void> {
-  let slug = getHomepageRuntime()?.getOpenProjectSlug() || projectSlugFromPath(window.location.pathname) || fallbackSlug;
-
-  const runtime = getHomepageRuntime() ?? await waitForHomepageRuntime(HOMEPAGE_RUNTIME_WAIT_MS);
-  if (runtime && slug) {
-    slug = await runtime.waitForProjectReady(slug, PROJECT_READY_WAIT_MS);
-  }
-
-  if (slug && findProjectContent()) {
-    await openEditor(projectPage(slug));
-  }
+  const readySlug = await runtime.waitForProjectReady(slug);
+  if (readySlug) await openEditor(projectPage(readySlug));
 }
 
 function editCurrentPage(): void {
   void (isAboutPage() ? openEditor(aboutPage()) : editProject());
-}
-
-/** /static is served immutable, so these carry the version the server gave edit.js. */
-function loadEditorStylesheets(): void {
-  const editScript = document.querySelector<HTMLScriptElement>('script[src*="build/edit.js"]');
-  const version = editScript ? new URL(editScript.src, window.location.href).search : '';
-  EDIT_STYLESHEETS.forEach((name) => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `/static/css/${name}${version}`;
-    document.head.appendChild(link);
-  });
 }
 
 function attachHomepageEditButton(): void {
@@ -47,7 +28,7 @@ function attachHomepageEditButton(): void {
   button?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    void editProject(button.dataset.projectSlug || null);
+    void editProject();
   });
 }
 
@@ -107,14 +88,8 @@ function addHeaderButtons(): void {
       active ? 'Hide drafts' : 'Show drafts',
       ICONS.drafts,
       () => {
-        const url = new URL(window.location.href);
-        if (active) {
-          url.searchParams.delete('show_drafts');
-        } else {
-          url.searchParams.set('show_drafts', 'true');
-        }
-        setShowDraftsRemembered(!active);
-        window.location.href = url.toString();
+        rememberShowDrafts(!active);
+        window.location.href = active ? withoutShowDrafts(window.location.href) : withShowDrafts(window.location.href);
       },
     );
     nav.prepend(drafts);
@@ -133,19 +108,17 @@ function listenForEditShortcut(): void {
   });
 }
 
-function start(): void {
+/** edit.js is deferred, so the document is parsed and homepage.js has already run. */
+export function init(): void {
   restorePersistedScroll();
 
-  // Reading it also remembers a show_drafts query parameter for the tab.
   const showDrafts = isShowDraftsActive();
-  if (window.location.pathname === '/' && showDrafts && !new URLSearchParams(window.location.search).has('show_drafts')) {
-    const url = new URL(window.location.href);
-    url.searchParams.set('show_drafts', 'true');
-    window.location.replace(url.toString());
+  rememberShowDrafts(showDrafts);
+  if (window.location.pathname === '/' && showDrafts && !window.location.search.includes('show_drafts')) {
+    window.location.replace(withShowDrafts(window.location.href));
     return;
   }
 
-  loadEditorStylesheets();
   addHeaderButtons();
   compactHeaderWhenCrowded();
   attachHomepageEditButton();
@@ -153,13 +126,5 @@ function start(): void {
 
   if (new URLSearchParams(window.location.search).has('edit')) {
     editCurrentPage();
-  }
-}
-
-export function init(): void {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start);
-  } else {
-    start();
   }
 }

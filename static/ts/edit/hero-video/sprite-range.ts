@@ -40,6 +40,7 @@ export class SpriteRange {
     this.info = content.querySelector('.edit-hero-sprite-info');
     this.playhead = content.querySelector('.edit-hero-playhead');
     this.currentTimeLabel = content.querySelector('.edit-hero-current-time');
+    this.renderInfo();
   }
 
   get isLooping(): boolean {
@@ -232,10 +233,13 @@ export class SpriteRange {
       this.dimRight.style.left = `${startPct + widthPct}%`;
       this.dimRight.style.width = `${100 - startPct - widthPct}%`;
     }
-    if (this.info) {
-      const end = this.start + this.duration;
-      this.info.textContent = `Sprite: ${formatMinutesSeconds(this.start)} - ${formatMinutesSeconds(end)} (${this.duration.toFixed(1)}s)`;
-    }
+    this.renderInfo();
+  }
+
+  private renderInfo(): void {
+    if (!this.info) return;
+    const end = this.start + this.duration;
+    this.info.textContent = `Sprite: ${formatMinutesSeconds(this.start)} - ${formatMinutesSeconds(end)} (${this.duration.toFixed(1)}s)`;
   }
 
   private renderPlayhead(): void {

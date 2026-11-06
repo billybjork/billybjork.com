@@ -1,4 +1,4 @@
-import type { Alignment } from '../types/blocks';
+import { alignmentMargins, type Alignment } from '../core/alignment';
 
 interface MediaStyleBlock {
   style?: string | null;
@@ -8,24 +8,6 @@ interface MediaStyleBlock {
 type StyleMap = Record<string, string | undefined>;
 
 const ALIGNMENT_DECLARATION = /^(margin-(left|right)\s*:\s*auto|display\s*:\s*block)$/;
-
-function alignmentMargins(align: Alignment): string {
-  switch (align) {
-    case 'center': return 'margin-left: auto; margin-right: auto';
-    case 'right': return 'margin-left: auto';
-    default: return '';
-  }
-}
-
-export function parseAlignmentFromStyle(style: string | null | undefined): Alignment {
-  if (!style) return 'left';
-  const hasMarginLeft = style.includes('margin-left: auto') || style.includes('margin-left:auto');
-  const hasMarginRight = style.includes('margin-right: auto') || style.includes('margin-right:auto');
-
-  if (hasMarginLeft && hasMarginRight) return 'center';
-  if (hasMarginLeft) return 'right';
-  return 'left';
-}
 
 export function sizeStyleOf(style: string | null | undefined): string {
   return (style ?? '')
@@ -71,12 +53,4 @@ export function serializeStyle(styles: StyleMap): string {
     .filter(([, value]) => value)
     .map(([prop, value]) => `${prop}: ${value}`)
     .join('; ');
-}
-
-export function styleHasWidth(style: string | null | undefined): boolean {
-  return !!style && /(^|;)\s*width\s*:/.test(style);
-}
-
-export function styleHasHeight(style: string | null | undefined): boolean {
-  return !!style && /(^|;)\s*height\s*:/.test(style);
 }

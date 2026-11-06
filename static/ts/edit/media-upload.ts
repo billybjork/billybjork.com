@@ -1,4 +1,4 @@
-import { API, postForm, readErrorDetail, uploadWithProgress } from './api';
+import { API, postForm, postJSON, uploadWithProgress } from './api';
 import { formatMegabytes } from './text';
 
 const MAX_IMAGE_WIDTH = 2000;
@@ -131,7 +131,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 async function uploadImage(file: File | Blob): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('type', 'image');
   const { url } = await postForm<{ url: string }>(API.uploadMedia, formData, 'Image upload failed');
   return url;
 }
@@ -147,7 +146,7 @@ export async function uploadContentVideo(
   const formData = new FormData();
   formData.append('file', file);
 
-  const { result } = uploadWithProgress<{ url?: string }>(API.processContentVideo, formData, {
+  const { result } = uploadWithProgress<{ url: string }>(API.processContentVideo, formData, {
     onProgress(progress) {
       if (!progress) {
         onProgress?.({ stage: 'uploading', progress: 10, message: 'Uploading video...' });
@@ -167,7 +166,6 @@ export async function uploadContentVideo(
 
   try {
     const { url } = await result;
-    if (!url) throw new Error('Upload failed: no URL returned');
     onProgress?.({ stage: 'complete', progress: 100, message: 'Video ready!' });
     return url;
   } catch (error) {
@@ -178,17 +176,8 @@ export async function uploadContentVideo(
 }
 
 async function capturePosterOnServer(sourceUrl: string, frameTime: number): Promise<string> {
-  const response = await fetch(API.contentVideoPoster, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source_url: sourceUrl, frame_time: frameTime }),
-  });
-  if (!response.ok) {
-    throw new Error(await readErrorDetail(response) || `Poster extraction failed: ${response.status}`);
-  }
-  const payload = await response.json() as { url?: string };
-  if (!payload.url) throw new Error('Poster extraction returned no URL');
-  return payload.url;
+  const { url } = await postJSON<{ url: string }>(API.contentVideoPoster, { source_url: sourceUrl, frame_time: frameTime });
+  return url;
 }
 
 /**

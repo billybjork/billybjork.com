@@ -22,8 +22,13 @@
     <link rel="alternate" type="application/rss+xml" title="Billy Bjork RSS Feed" href="/feed.xml">
 
     {% block additional_head %}{% endblock %}
+    {% if is_dev_mode %}
+    <link rel="stylesheet" href="{{ static_url(request, 'css/edit-mode-base.css') }}">
+    <link rel="stylesheet" href="{{ static_url(request, 'css/edit-mode-project.css') }}">
+    <link rel="stylesheet" href="{{ static_url(request, 'css/edit-mode-extras.css') }}">
+    {% endif %}
 </head>
-<body data-edit-mode="{{ 'true' if is_dev_mode else 'false' }}">
+<body>
     <header id="main-header">
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>
@@ -40,10 +45,10 @@
 
     {% include "footer.html" %}
 
+    {% block additional_scripts %}{% endblock %}
+    {# Deferred scripts run in order: edit.js finds the runtime homepage.js registered. #}
     {% if is_dev_mode %}
     <script src="{{ static_url(request, 'build/edit.js') }}" defer></script>
     {% endif %}
-
-    {% block additional_scripts %}{% endblock %}
 </body>
 </html>

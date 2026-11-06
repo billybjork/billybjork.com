@@ -23,6 +23,9 @@ export const FULL_DETAIL_HTML = `
   </section>
 `;
 
+// The fixture mounts the page body; base.html's stylesheets and scripts are checked against the real render.
+const PAGE_ASSET = /^head |^script/;
+
 function expectContract(root: ParentNode, selectors: string[]): void {
   selectors.forEach((selector) => {
     expect(root.querySelector(selector), selector).not.toBeNull();
@@ -108,7 +111,7 @@ export function createHomepageFixture(): {
               <h2 class="homepage-detail-title" id="homepage-detail-title"></h2>
             </div>
             <div class="homepage-detail-actions edit-buttons">
-              <button type="button" data-homepage-edit-project data-project-slug=""></button>
+              <button type="button" data-homepage-edit-project></button>
               <button class="homepage-close-button" type="button" data-close-detail>Close</button>
             </div>
           </header>
@@ -122,7 +125,7 @@ export function createHomepageFixture(): {
     <div id="homepage-transition-layer" class="homepage-transition-layer"></div>
   `;
 
-  expectContract(document, [...contract.homepage, ...contract.homepageForEditors]);
+  expectContract(document, [...contract.homepage, ...contract.homepageForEditors.filter((selector) => !PAGE_ASSET.test(selector))]);
   const fullDetail = document.createElement('div');
   fullDetail.innerHTML = FULL_DETAIL_HTML;
   expectContract(fullDetail, contract.detailFragment);

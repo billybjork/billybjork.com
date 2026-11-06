@@ -1,4 +1,4 @@
-import { LINK_PATTERN, parseHeadingLine } from './inline-markdown';
+import { isRelativeUrl, LINK_PATTERN, parseHeadingLine } from './inline-markdown';
 import { showLinkDialog } from './link-dialog';
 import { clamp } from './clamp';
 
@@ -226,7 +226,7 @@ export function findLinkAtCursor(textarea: HTMLTextAreaElement): LinkInfo | null
 
 function normalizeLinkUrl(input: string): string {
   const trimmed = input.trim();
-  if (/^(#|\/|\.\/|\.\.\/)/.test(trimmed) || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) return trimmed;
+  if (isRelativeUrl(trimmed) || /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) return trimmed;
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) return `mailto:${trimmed}`;
   if (/^(?:www\.)?[\w-]+(?:\.[\w-]+)+(?::\d+)?(?:[/?#]|$)/.test(trimmed)) return `https://${trimmed}`;
   return trimmed;
@@ -305,15 +305,15 @@ function outdentLines(textarea: HTMLTextAreaElement, onUpdate: () => void): void
   onUpdate();
 }
 
-/** The marker that continues a list line (`- ` or the next number), and the item's text. */
-export function parseListLine(line: string): { indent: string; nextMarker: string; content: string } | null {
+/** What the next line of a list starts with (`- ` or the next number), and this item's text. */
+export function parseListLine(line: string): { continuation: string; content: string } | null {
   const unordered = line.match(/^(\s*)([-*+])\s(.*)$/);
   if (unordered) {
-    return { indent: unordered[1] ?? '', nextMarker: `${unordered[2]} `, content: unordered[3] ?? '' };
+    return { continuation: `${unordered[1] ?? ''}${unordered[2]} `, content: unordered[3] ?? '' };
   }
   const ordered = line.match(/^(\s*)(\d+)\.\s(.*)$/);
   if (ordered) {
-    return { indent: ordered[1] ?? '', nextMarker: `${Number.parseInt(ordered[2] ?? '1', 10) + 1}. `, content: ordered[3] ?? '' };
+    return { continuation: `${ordered[1] ?? ''}${Number.parseInt(ordered[2] ?? '1', 10) + 1}. `, content: ordered[3] ?? '' };
   }
   return null;
 }
@@ -331,7 +331,7 @@ function handleListEnter(event: KeyboardEvent, textarea: HTMLTextAreaElement, on
     textarea.value = value.slice(0, start) + value.slice(end);
     textarea.selectionStart = textarea.selectionEnd = start;
   } else {
-    insertTextWithUndo(textarea, `\n${list.indent}${list.nextMarker}`);
+    insertTextWithUndo(textarea, `\n${list.continuation}`);
   }
   onUpdate();
   return true;

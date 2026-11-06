@@ -1,5 +1,7 @@
+import type { Alignment } from '../core/alignment';
+
+export type { Alignment };
 export type BlockType = 'text' | 'image' | 'video' | 'code' | 'html' | 'callout' | 'divider' | 'row';
-export type Alignment = 'left' | 'center' | 'right';
 export type RowColumnSide = 'left' | 'right';
 
 /** Where a block sits: a top-level index, plus the column when it is inside a row. */

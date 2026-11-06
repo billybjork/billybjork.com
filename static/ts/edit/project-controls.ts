@@ -33,13 +33,6 @@ export function makeHeaderEditable(scene: HTMLElement, { project, markDirty, set
   const nameInput = nameEl.querySelector<HTMLInputElement>('input');
   if (!dateInput || !nameInput) return;
 
-  // The header belongs to the homepage scene, whose handlers must not see these.
-  [dateInput, nameInput].forEach((input) => {
-    for (const type of ['click', 'mousedown', 'pointerdown', 'keydown']) {
-      input.addEventListener(type, (event) => event.stopPropagation());
-    }
-  });
-
   dateInput.addEventListener('input', () => {
     project.date = dateInput.value;
     markDirty();

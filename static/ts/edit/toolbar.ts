@@ -34,8 +34,6 @@ interface FixedToolbar {
 export function createFixedToolbar(title: string, actions: ToolbarActions, signal: AbortSignal): FixedToolbar {
   const bar = document.createElement('div');
   bar.className = 'edit-mode-toolbar edit-mode-toolbar-fixed';
-  // Keeps the bar pinned on a ?edit load, where it renders before the stylesheets arrive.
-  bar.style.cssText = 'position: fixed; inset: 0 0 auto 0; z-index: 1200';
   const deleteButton = actions.deleteContent
     ? `<button class="edit-btn edit-btn-icon edit-btn-icon-danger" data-action="delete" aria-label="Delete project" title="Delete project">${ICONS.trash}</button>`
     : '';

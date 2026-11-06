@@ -1,6 +1,5 @@
-import { applySandboxInlineStyle, cleanupIframe, createSandboxedIframe } from '../../utils/html-sandbox';
+import { createSandboxedIframe } from '../../core/html-sandbox';
 import type { BlockContext, HtmlBlock } from '../../types/blocks';
-import { styleHasHeight } from '../block-style';
 import type { EditorContext } from '../context';
 import { setupAutoResizeTextarea } from '../markdown-textarea';
 import { createMediaCaptionInput } from './media';
@@ -47,7 +46,6 @@ export function renderHtmlBlock(ctx: EditorContext, block: HtmlBlock, context: B
 
   function renderPreview(html: string): void {
     if (iframe) {
-      cleanupIframe(iframe);
       iframe.remove();
       iframe = null;
     }
@@ -60,10 +58,8 @@ export function renderHtmlBlock(ctx: EditorContext, block: HtmlBlock, context: B
     }
 
     previewContainer.innerHTML = '';
-    iframe = createSandboxedIframe(html);
+    iframe = createSandboxedIframe(html, block.style, block.align);
     const previewIframe = iframe;
-    previewIframe.dataset.autoHeight = styleHasHeight(block.style) ? 'false' : 'true';
-    applySandboxInlineStyle(previewIframe, block.style, block.align);
     previewContainer.appendChild(previewIframe);
 
     selectOverlay = document.createElement('button');

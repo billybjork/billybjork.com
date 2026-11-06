@@ -1,3 +1,4 @@
+import { withShowDrafts } from '../core/show-drafts';
 import { cleanupProjectDetail, hydrateProjectDetail, prepareHeroVideo } from '../project/detail-runtime';
 import type { ProjectCard } from './card';
 import { coverHeroUntilReady } from './flight';
@@ -31,7 +32,6 @@ export class DetailLoader {
     }
     this.el.detailDate.textContent = card.formattedDate;
     this.el.detailTitle.textContent = card.title;
-    this.setEditTarget(card.slug);
 
     const html = await this.fetchHtml(card.slug, signal);
     if (signal.aborted) return;
@@ -74,27 +74,10 @@ export class DetailLoader {
     this.el.detailTitle.textContent = '';
     this.el.detailHeroFrame.style.removeProperty('--homepage-fallback-poster');
     this.el.detailHeroFrame.style.removeProperty('--homepage-hero-aspect');
-    this.setEditTarget(null);
   }
 
   hasMountedContent(): boolean {
     return this.el.detailContent.querySelector('.project-content') !== null;
-  }
-
-  renameCached(previousSlug: string, nextSlug: string): void {
-    const cached = this.htmlCache.get(previousSlug);
-    if (cached) {
-      this.htmlCache.delete(previousSlug);
-      this.htmlCache.set(nextSlug, cached);
-    }
-  }
-
-  /** Edit mode reads which project to open from the edit button. */
-  setEditTarget(slug: string | null): void {
-    const editButton = this.el.detailScene.querySelector<HTMLElement>('[data-homepage-edit-project]');
-    if (editButton) {
-      editButton.dataset.projectSlug = slug ?? '';
-    }
   }
 
   private async fetchHtml(slug: string, signal: AbortSignal): Promise<string> {
@@ -103,13 +86,7 @@ export class DetailLoader {
       return cached;
     }
 
-    const url = new URL(`/${slug}`, window.location.origin);
-    url.searchParams.set('_partial', '1');
-    if (new URL(window.location.href).searchParams.get('show_drafts') === 'true') {
-      url.searchParams.set('show_drafts', 'true');
-    }
-
-    const response = await fetch(url.toString(), { signal });
+    const response = await fetch(withShowDrafts(`/${slug}?_partial=1`), { signal });
     if (!response.ok) {
       throw new Error(`Failed to fetch project detail (${response.status})`);
     }

@@ -134,45 +134,88 @@ describe('HomepageController', () => {
     controller.destroy();
   });
 
-  it('keeps the open scene, edit affordance, and URL in sync after a slug rename', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      text: async () => DETAIL_RESPONSE_HTML,
-    })));
-
-    const { controller, editButton } = createHomepageFixture();
+  it('moves the URL to a renamed project, keeping show_drafts', async () => {
+    stubDetailFetch();
+    const { controller, openButton } = createHomepageFixture();
+    window.history.replaceState(null, '', 'http://localhost/?show_drafts=true');
     controller.init();
-    document.querySelector('[data-open-project="project-one"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
-    controller.renameProjectSlug('project-one', 'project-renamed');
+    controller.renameProjectSlug('project-renamed');
 
-    const renamedOpenButton = document.querySelector<HTMLButtonElement>('[data-open-project="project-renamed"]');
-    expect(controller.getOpenProjectSlug()).toBe('project-renamed');
     expect(window.location.pathname).toBe('/project-renamed');
-    expect(editButton.dataset.projectSlug).toBe('project-renamed');
-    expect(renamedOpenButton).not.toBeNull();
+    expect(window.location.search).toBe('?show_drafts=true');
 
     controller.destroy();
   });
 
-  it('tells the editor when a project is ready, and that it never will be once the scene closes', async () => {
+  it('names the project being opened before it has landed', async () => {
     stubDetailFetch();
-    const { controller, openButton, closeButton } = createHomepageFixture();
+    const { controller, openButton } = createHomepageFixture();
     controller.init();
+    expect(controller.getOpenProjectSlug()).toBeNull();
 
-    const ready = controller.waitForProjectReady('project-one');
-    const abandoned = controller.waitForProjectReady('project-two');
     openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(controller.getOpenProjectSlug()).toBe('project-one');
     await flushAsyncWork();
-    await expect(ready).resolves.toBe('project-one');
-    await expect(controller.waitForProjectReady()).resolves.toBe('project-one');
-
-    closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsyncWork();
-    await expect(abandoned).resolves.toBeNull();
+    expect(controller.getOpenProjectSlug()).toBe('project-one');
 
     controller.destroy();
+  });
+
+  describe('waitForProjectReady', () => {
+    it('answers null at once when nothing is open or opening', async () => {
+      const { controller } = createHomepageFixture();
+      controller.init();
+      await expect(controller.waitForProjectReady('project-one')).resolves.toBeNull();
+      controller.destroy();
+    });
+
+    it('settles when the open lands: the slug for that project, null for any other', async () => {
+      stubDetailFetch();
+      const { controller, openButton } = createHomepageFixture();
+      controller.init();
+
+      openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const ready = controller.waitForProjectReady('project-one');
+      const other = controller.waitForProjectReady('project-two');
+      await flushAsyncWork();
+
+      await expect(ready).resolves.toBe('project-one');
+      await expect(other).resolves.toBeNull();
+      await expect(controller.waitForProjectReady('project-one')).resolves.toBe('project-one');
+      controller.destroy();
+    });
+
+    it('settles null when the open fails', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 })));
+      const { controller, openButton } = createHomepageFixture();
+      controller.init();
+
+      openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const ready = controller.waitForProjectReady('project-one');
+      await flushAsyncWork();
+
+      await expect(ready).resolves.toBeNull();
+      controller.destroy();
+    });
+
+    it('settles null when the scene closes mid-open or after opening', async () => {
+      stubDetailFetch();
+      const { controller, openButton, closeButton } = createHomepageFixture();
+      controller.init();
+      openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+
+      closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const closing = controller.waitForProjectReady('project-one');
+      await flushAsyncWork();
+
+      await expect(closing).resolves.toBeNull();
+      controller.destroy();
+    });
   });
 
   it('closes on browser back and reopens on forward from the cache, without touching history', async () => {

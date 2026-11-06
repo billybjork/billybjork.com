@@ -54,16 +54,5 @@ export function unlockBodyScroll(): void {
   body.style.width = '';
   body.style.overflow = '';
 
-  // Force instant restoration even when global smooth scrolling is enabled.
-  const html = document.documentElement;
-  const previousInlineScrollBehavior = html.style.scrollBehavior;
-  html.style.scrollBehavior = 'auto';
-  window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' });
-  requestAnimationFrame(() => {
-    if (previousInlineScrollBehavior) {
-      html.style.scrollBehavior = previousInlineScrollBehavior;
-    } else {
-      html.style.removeProperty('scroll-behavior');
-    }
-  });
+  window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
 }

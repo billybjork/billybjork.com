@@ -29,6 +29,10 @@ const HEADING_LINE = /^(\s*)(#{1,6})\s+(.*)$/;
 const QUOTE_LINE = /^(\s*)>\s+(.*)$/;
 const LIST_LINE = /^(\s*)([-*+]|\d+\.)\s+/;
 
+export function isRelativeUrl(url: string): boolean {
+  return /^(#|\/|\.\/|\.\.\/)/.test(url);
+}
+
 export const DIVIDER_LINE = /^(\*{3,}|-{3,}|_{3,})$/;
 export const LINK_PATTERN = String.raw`\[([^\]]*)\]\(([^)]*)\)`;
 
@@ -206,9 +210,7 @@ function matchMarkdownEmphasisUnderscore(input: string): InlineMatch | null {
 function sanitizeUrl(url: string): string | null {
   const trimmed = (url || '').trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith('#') || trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
-    return trimmed;
-  }
+  if (isRelativeUrl(trimmed)) return trimmed;
 
   try {
     const parsed = new URL(trimmed, window.location.origin);
@@ -236,7 +238,7 @@ function renderInlineMarkdown(text: string): DocumentFragment {
     if (safeUrl) {
       const link = document.createElement('a');
       link.href = safeUrl;
-      if (!/^(#|\/|\.\/|\.\.\/)/.test(safeUrl)) {
+      if (!isRelativeUrl(safeUrl)) {
         link.rel = 'noopener';
         link.target = '_blank';
       }
@@ -380,7 +382,8 @@ export function renderedToRawBoundaries(line: string, lineType: string | undefin
   if (lineType?.startsWith('heading-')) {
     bodyStart = parseHeadingLine(line)?.prefixLength ?? 0;
   } else if (lineType === 'quote') {
-    bodyStart = line.match(/^(\s*)>\s+/)?.[0].length ?? 0;
+    const quote = line.match(QUOTE_LINE);
+    bodyStart = quote ? quote[0].length - (quote[2]?.length ?? 0) : 0;
   }
 
   const body = line.slice(bodyStart);

@@ -83,7 +83,6 @@
                         class="edit-project-btn homepage-edit-project-btn"
                         type="button"
                         data-homepage-edit-project
-                        data-project-slug=""
                         aria-label="Edit project"
                         title="Edit">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -109,5 +108,5 @@
 {% endblock %}
 
 {% block additional_scripts %}
-<script src="{{ static_url(request, 'build/homepage.js') }}"></script>
+<script src="{{ static_url(request, 'build/homepage.js') }}" defer></script>
 {% endblock %}

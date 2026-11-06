@@ -37,13 +37,11 @@ export interface SaveResult {
 }
 
 export interface VideoThumbnailsResult {
-  success: boolean;
   temp_id: string;
   duration: number;
   frames?: string[];
   hls_session_id?: string;
   hls_url?: string;
-  detail?: string;
 }
 
 export interface MoreThumbnailsResult {
@@ -59,9 +57,7 @@ export interface HlsProgress {
 }
 
 export interface SpriteSheetResult {
-  success: boolean;
-  video?: VideoData;
-  detail?: string;
+  video: VideoData;
 }
 
 export interface FetchJSONOptions extends RequestInit {

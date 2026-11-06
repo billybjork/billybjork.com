@@ -1,5 +1,6 @@
 import type { BlockContext, HtmlBlock, ImageBlock, VideoBlock } from '../types/blocks';
-import { parseStyle, serializeStyle, styleHasHeight, styleHasWidth } from './block-style';
+import { styleDeclares, syncSandboxAutoHeight } from '../core/html-sandbox';
+import { parseStyle, serializeStyle } from './block-style';
 import { uploadContentVideo, uploadProcessedImage, type VideoUploadProgressUpdate } from './media-upload';
 import { showNotification } from './notify';
 import type { BlockStore } from './store';
@@ -158,9 +159,9 @@ export function createMediaController(store: BlockStore, signal: AbortSignal): M
 
     const style = resizedStyle(block.style, finished.lastWidth, finished.maxWidth, isIframe ? finished.lastHeight : undefined);
     writeStyle(style, true);
-    if (!styleHasWidth(style)) element.style.width = '';
-    if (!styleHasHeight(style)) element.style.height = '';
-    if (isIframe) element.dataset.autoHeight = styleHasHeight(style) ? 'false' : 'true';
+    if (!styleDeclares(style, 'width')) element.style.width = '';
+    if (!styleDeclares(style, 'height')) element.style.height = '';
+    if (isIframe) syncSandboxAutoHeight(element, style);
   };
 
   const startResize = (event: MouseEvent, position: HandlePosition): void => {

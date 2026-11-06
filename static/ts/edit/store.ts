@@ -25,14 +25,12 @@ export interface BlockStore {
 
   addCleanupCandidate(url: string | null | undefined): void;
   cleanupCandidates(): string[];
-  clearCleanupCandidates(): void;
+  forgetCleanupCandidates(urls: string[]): void;
 }
 
 interface StoreDeps {
   onEdit(): void;
   render(): void;
-  /** Only projects clean up assets through candidates; the server diffs the about page itself. */
-  tracksAssets: boolean;
 }
 
 /**
@@ -61,7 +59,7 @@ export function createBlockStore(initial: Block[], deps: StoreDeps): BlockStore 
 
   const addCleanupCandidate = (url: string | null | undefined): void => {
     const clean = (url ?? '').trim();
-    if (deps.tracksAssets && isAssetUrl(clean)) candidates.add(clean);
+    if (isAssetUrl(clean)) candidates.add(clean);
   };
 
   const trackRemoved = (block: Block | undefined): void => {
@@ -179,6 +177,6 @@ export function createBlockStore(initial: Block[], deps: StoreDeps): BlockStore 
 
     addCleanupCandidate,
     cleanupCandidates: () => Array.from(candidates),
-    clearCleanupCandidates: () => candidates.clear(),
+    forgetCleanupCandidates: (urls) => urls.forEach((url) => candidates.delete(url)),
   };
 }

@@ -19,7 +19,11 @@
   ],
   "homepageForEditors": [
     "#homepage-detail-scene .homepage-detail-header .edit-buttons",
-    "[data-homepage-edit-project][data-project-slug]"
+    "[data-homepage-edit-project]",
+    "head link[href*='css/edit-mode-base.css']",
+    "head link[href*='css/edit-mode-project.css']",
+    "head link[href*='css/edit-mode-extras.css']",
+    "script[src*='build/homepage.js'][defer] ~ script[src*='build/edit.js'][defer]"
   ],
   "detailFragment": [
     ".video-container",

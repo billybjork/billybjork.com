@@ -1,4 +1,4 @@
-import { prefersReducedMotion } from './flight';
+import { prefersReducedMotion } from '../core/reduced-motion';
 
 const PIXELS_PER_FRAME = 3;
 const MAX_ANIMATION_SPEED = 30;
@@ -51,7 +51,6 @@ export class SpriteThumbnail {
   private lastRenderedWidth = -1;
   private lastRenderedHeight = -1;
   private isFrozen = false;
-  private frozenFrameIndex = 0;
   private spriteNode: HTMLElement | null = null;
 
   constructor(source: SpriteThumbnailSource) {
@@ -72,12 +71,12 @@ export class SpriteThumbnail {
     this.thumbMedia.appendChild(spriteNode);
     this.spriteNode = spriteNode;
     this.applyFrame(0);
+    this.measureSheet();
   }
 
   freeze(): void {
     this.isFrozen = true;
-    this.frozenFrameIndex = this.currentFrameIndex;
-    this.applyFrame(this.frozenFrameIndex);
+    this.refresh();
   }
 
   unfreeze(): void {
@@ -85,11 +84,11 @@ export class SpriteThumbnail {
   }
 
   refresh(): void {
-    this.applyFrame(this.getCurrentFrameIndex());
+    this.applyFrame(this.currentFrameIndex);
   }
 
   getCurrentFrameIndex(): number {
-    return this.isFrozen ? this.frozenFrameIndex : this.currentFrameIndex;
+    return this.currentFrameIndex;
   }
 
   /** Aspect ratio of the media this card shows, before any frame crops it. */
@@ -103,7 +102,7 @@ export class SpriteThumbnail {
 
   update(progress: number): void {
     if (!this.sheet) return;
-    this.applyFrame(this.isFrozen ? this.frozenFrameIndex : normalizeFrameIndex(progress, this.sheet.frames));
+    this.applyFrame(this.isFrozen ? this.currentFrameIndex : normalizeFrameIndex(progress, this.sheet.frames));
   }
 
   createFrameNode(frameIndex: number, options: FrameNodeOptions = {}): HTMLElement {
@@ -132,7 +131,8 @@ export class SpriteThumbnail {
     return node;
   }
 
-  primeSheetDimensions(): void {
+  /** The sheet's real shape replaces data-sprite-aspect-ratio once it has loaded. */
+  private measureSheet(): void {
     if (!this.sheet) return;
     const image = new Image();
     image.decoding = 'async';
@@ -224,7 +224,6 @@ export class HomepageSpriteRuntime {
   }
 
   init(): void {
-    this.thumbnails.forEach((thumbnail) => thumbnail.primeSheetDimensions());
     this.initActivationObserver();
     window.addEventListener('scroll', this.boundOnScroll, { passive: true });
     window.addEventListener('resize', this.boundOnResize, { passive: true });

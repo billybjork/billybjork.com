@@ -2,9 +2,8 @@ const stroked = (body: string, size?: number): string => (
   `<svg viewBox="0 0 24 24"${size ? ` width="${size}" height="${size}"` : ''} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
 );
 
-// Header icons carry a size because they render before the editor stylesheets arrive.
 const headerIcon = (body: string): string => (
-  `<svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${body}</svg>`
+  `<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">${body}</svg>`
 );
 
 export const ICONS = {
