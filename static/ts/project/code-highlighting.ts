@@ -1,68 +1,32 @@
-/**
- * Code Highlighting Module
- * Dynamically loads Prism.js for syntax highlighting
- */
+const PRISM_BASE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0';
 
-// Prism.js CDN URLs
-const PRISM_CSS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css';
-const PRISM_JS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js';
-const PRISM_PYTHON_URL = 'https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js';
+let prismLoading: Promise<void> | null = null;
 
-/**
- * Dynamically load a JavaScript file
- */
-function loadScript(url: string, callback?: () => void): void {
-  const script = document.createElement('script');
-  script.type = 'text/javascript';
-
-  script.onload = function() {
-    if (callback) callback();
-  };
-
-  script.src = url;
-  document.head.appendChild(script);
-}
-
-/**
- * Dynamically load a CSS file
- */
-function loadCSS(url: string, callback?: () => void): void {
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = url;
-
-  link.onload = function() {
-    if (callback) callback();
-  };
-
-  document.head.appendChild(link);
-}
-
-/**
- * Load Prism.js and its CSS
- */
-function loadPrism(callback?: () => void): void {
-  loadCSS(PRISM_CSS_URL, function() {
-    loadScript(PRISM_JS_URL, function() {
-      // Load the necessary language components
-      loadScript(PRISM_PYTHON_URL, function() {
-        if (callback) callback();
-      });
-    });
+function appendToHead(element: HTMLScriptElement | HTMLLinkElement): Promise<void> {
+  return new Promise((resolve) => {
+    element.onload = () => resolve();
+    document.head.appendChild(element);
   });
 }
 
-/**
- * Check for code snippets and highlight them
- */
+function appendScript(src: string): Promise<void> {
+  const script = document.createElement('script');
+  script.src = src;
+  return appendToHead(script);
+}
+
+async function loadPrism(): Promise<void> {
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = `${PRISM_BASE_URL}/themes/prism-okaidia.min.css`;
+  await appendToHead(stylesheet);
+  await appendScript(`${PRISM_BASE_URL}/prism.min.js`);
+  await appendScript(`${PRISM_BASE_URL}/components/prism-python.min.js`);
+}
+
 export function checkAndHighlightCode(targetElement: Element): void {
-  if (targetElement.querySelector('pre code')) {
-    if (typeof window.Prism === 'undefined') {
-      loadPrism(function() {
-        window.Prism?.highlightAllUnder(targetElement);
-      });
-    } else {
-      window.Prism.highlightAllUnder(targetElement);
-    }
-  }
+  if (!targetElement.querySelector('pre code')) return;
+
+  prismLoading ??= window.Prism ? Promise.resolve() : loadPrism();
+  void prismLoading.then(() => window.Prism?.highlightAllUnder(targetElement));
 }

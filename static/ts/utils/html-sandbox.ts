@@ -1,8 +1,3 @@
-/**
- * HTML Sandbox Utility
- * Provides iframe-based isolation for HTML blocks
- */
-
 interface SandboxOptions {
   allowFullscreen?: boolean;
 }
@@ -16,10 +11,8 @@ export type SandboxAlignment = 'left' | 'center' | 'right';
 
 const PX_SIZE_VALUE_PATTERN = /^\s*([0-9]*\.?[0-9]+)\s*px(?:\s*!important)?\s*$/i;
 
-// Global registry: contentWindow -> { iframe, nonce }
 const iframeRegistry = new WeakMap<Window, IframeRegistry>();
 
-// Single global message listener (set up once)
 let listenerInitialized = false;
 
 function isAutoHeightEnabled(iframe: HTMLIFrameElement): boolean {
@@ -37,7 +30,7 @@ function initGlobalResizeListener(): void {
     const entry = iframeRegistry.get(e.source as Window);
     if (!entry) return;
 
-    // Validate nonce to prevent spoofing
+    // Sandboxed content is untrusted: only its own nonce may resize its own frame.
     if (e.data.nonce !== entry.nonce) return;
     if (!isAutoHeightEnabled(entry.iframe)) return;
 
@@ -159,7 +152,6 @@ export function createSandboxedIframe(
   iframe.style.minHeight = '60px';
   iframe.dataset.autoHeight = 'true';
 
-  // Register for resize messages
   iframe.addEventListener('load', () => {
     if (iframe.contentWindow) {
       iframeRegistry.set(iframe.contentWindow, { iframe, nonce });

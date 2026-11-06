@@ -19,7 +19,7 @@ describe('project lightbox behavior', () => {
       </div>
     `;
 
-    initializeLightboxMedia();
+    initializeLightboxMedia(document.body);
 
     expect(document.getElementById('eligible')?.classList.contains('lightbox-trigger-video')).toBe(true);
     expect(document.getElementById('native-controls')?.classList.contains('lightbox-trigger-video')).toBe(false);

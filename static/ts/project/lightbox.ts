@@ -1,7 +1,3 @@
-/**
- * Project Content Lightbox Utilities
- */
-
 import { lockBodyScroll, unlockBodyScroll } from '../core/scroll-lock';
 
 const LIGHTBOX_VIDEO_TRIGGER_CLASS = 'lightbox-trigger-video';
@@ -27,24 +23,15 @@ export function closeActiveLightbox(): boolean {
   return true;
 }
 
-function videoHasNativeFullscreenControls(videoElement: HTMLVideoElement): boolean {
-  return videoElement.controls || videoElement.hasAttribute('controls');
-}
-
 export function isEligibleLightboxVideo(videoElement: HTMLVideoElement): boolean {
   if (!videoElement.closest('.project-content')) return false;
   if (videoElement.closest('.video-container')) return false;
   if (videoElement.dataset.lightbox === 'off') return false;
-  if (videoHasNativeFullscreenControls(videoElement)) return false;
-  return (
-    videoElement.loop ||
-    videoElement.autoplay ||
-    videoElement.hasAttribute('loop') ||
-    videoElement.hasAttribute('autoplay')
-  );
+  if (videoElement.controls) return false;
+  return videoElement.loop || videoElement.autoplay;
 }
 
-export function initializeLightboxMedia(root: ParentNode = document): void {
+export function initializeLightboxMedia(root: ParentNode): void {
   const videos = root.querySelectorAll<HTMLVideoElement>('.project-content video');
   videos.forEach(video => {
     video.classList.toggle(LIGHTBOX_VIDEO_TRIGGER_CLASS, isEligibleLightboxVideo(video));
@@ -99,32 +86,15 @@ export function openVideoLightbox(video: HTMLVideoElement): void {
   enlargedVideo.removeAttribute('id');
   enlargedVideo.classList.remove('lazy-inline-video', LIGHTBOX_VIDEO_TRIGGER_CLASS);
 
-  const shouldAutoplay = video.autoplay || video.hasAttribute('autoplay') || video.loop || video.hasAttribute('loop');
-  const shouldLoop = video.loop || video.hasAttribute('loop');
+  const shouldAutoplay = video.autoplay || video.loop;
 
   enlargedVideo.controls = false;
-  enlargedVideo.removeAttribute('controls');
   enlargedVideo.autoplay = shouldAutoplay;
-  enlargedVideo.loop = shouldLoop;
+  enlargedVideo.loop = video.loop;
   enlargedVideo.muted = true;
   enlargedVideo.defaultMuted = true;
   enlargedVideo.playsInline = true;
   enlargedVideo.preload = 'auto';
-
-  if (shouldAutoplay) {
-    enlargedVideo.setAttribute('autoplay', '');
-  } else {
-    enlargedVideo.removeAttribute('autoplay');
-  }
-
-  if (shouldLoop) {
-    enlargedVideo.setAttribute('loop', '');
-  } else {
-    enlargedVideo.removeAttribute('loop');
-  }
-
-  enlargedVideo.setAttribute('muted', '');
-  enlargedVideo.setAttribute('playsinline', '');
 
   if (video.currentSrc) {
     enlargedVideo.src = video.currentSrc;
@@ -137,7 +107,7 @@ export function openVideoLightbox(video: HTMLVideoElement): void {
     overlay.classList.add('visible');
     if (shouldAutoplay) {
       enlargedVideo.play().catch(() => {
-        // Ignore autoplay errors; user can still close the modal.
+        // Autoplay was blocked; the overlay can still be closed.
       });
     }
   });

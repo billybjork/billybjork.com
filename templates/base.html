@@ -3,33 +3,22 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-        <!-- Title Tag with Prefix -->
         <title>
             Billy Bjork{% if page_title %} | {{ page_title }}{% endif %}
         </title>
 
         <meta name="description" content="{{ page_meta_description if page_meta_description else 'big idea guy' }}">
-        
-        <!-- Open Graph Meta Tags -->
         <meta property="og:title" content="Billy Bjork{% if page_title %} | {{ page_title }}{% endif %}">
         <meta property="og:description" content="{{ page_meta_description if page_meta_description else 'big idea guy' }}">
         <meta property="og:type" content="website">
         <meta property="og:url" content="{{ request.url }}">
         <meta property="og:image" content="{{ og_image_link if og_image_link else '' }}">
-
-    <!-- Font and network setup -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=block" rel="stylesheet">
-    <!-- Main stylesheet -->
     <link rel="stylesheet" href="{{ static_url(request, 'css/styles.css') }}">
-
-    <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ static_url(request, 'assets/favicon.ico') }}">
-
-    <!-- RSS Feed -->
     <link rel="alternate" type="application/rss+xml" title="Billy Bjork RSS Feed" href="/feed.xml">
 
     {% block additional_head %}{% endblock %}

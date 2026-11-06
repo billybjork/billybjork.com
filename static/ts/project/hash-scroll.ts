@@ -1,7 +1,3 @@
-/**
- * Hash target resolution + scrolling for project content anchors.
- */
-
 export function resolveHashTarget(hash: string): HTMLElement | null {
   const rawId = hash.startsWith('#') ? hash.slice(1) : hash;
   if (!rawId) return null;
@@ -10,30 +6,18 @@ export function resolveHashTarget(hash: string): HTMLElement | null {
   try {
     decodedId = decodeURIComponent(rawId);
   } catch {
-    decodedId = rawId;
+    // Not percent-encoded after all; the raw id is the id.
   }
 
-  const direct = document.getElementById(decodedId) || document.getElementById(rawId);
-  if (direct) return direct;
-
-  // Fallback for stale/legacy hashes like "heading_1" when only "heading" exists.
-  const baseDecoded = decodedId.replace(/_\d+$/, '');
-  if (baseDecoded && baseDecoded !== decodedId) {
-    const fallback = document.getElementById(baseDecoded);
-    if (fallback) return fallback;
+  // Links out in the wild can carry a duplicate-heading suffix ("heading_1"); land them on "heading".
+  const candidates = [decodedId, rawId, decodedId.replace(/_\d+$/, ''), rawId.replace(/_\d+$/, '')];
+  for (const id of candidates) {
+    const target = document.getElementById(id);
+    if (target) return target;
   }
-
-  const baseRaw = rawId.replace(/_\d+$/, '');
-  if (baseRaw && baseRaw !== rawId) {
-    const fallback = document.getElementById(baseRaw);
-    if (fallback) return fallback;
-  }
-
   return null;
 }
 
 export function scrollToHashTarget(behavior: ScrollBehavior = 'auto'): void {
-  const target = resolveHashTarget(window.location.hash);
-  if (!target) return;
-  target.scrollIntoView({ behavior, block: 'start' });
+  resolveHashTarget(window.location.hash)?.scrollIntoView({ behavior, block: 'start' });
 }

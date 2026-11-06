@@ -16,13 +16,12 @@ function decodeHtmlBlock(encoded: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-function inferLegacyHtmlBlockAlignment(html: string): SandboxAlignment | undefined {
-  const trimmed = html.trim();
-  const alignMatch = trimmed.match(
+/** A block whose whole content is one aligned <div> aligns its iframe the same way. */
+function inferHtmlBlockAlignment(html: string): SandboxAlignment | undefined {
+  const alignMatch = html.trim().match(
     /^<div\b[^>]*\bstyle\s*=\s*["'][^"']*\btext-align\s*:\s*(center|right)\b[^"']*["'][^>]*>[\s\S]*<\/div>$/i
   );
-  if (!alignMatch) return undefined;
-  return alignMatch[1] as SandboxAlignment;
+  return alignMatch?.[1] as SandboxAlignment | undefined;
 }
 
 function hydrateSandboxPlaceholder(placeholder: Element): void {
@@ -35,7 +34,7 @@ function hydrateSandboxPlaceholder(placeholder: Element): void {
     const inlineStyle = placeholder.getAttribute('style');
     const hasManualHeight = !!inlineStyle && /(^|;)\s*height\s*:/.test(inlineStyle);
     iframe.dataset.autoHeight = hasManualHeight ? 'false' : 'true';
-    applySandboxInlineStyle(iframe, inlineStyle, inferLegacyHtmlBlockAlignment(html));
+    applySandboxInlineStyle(iframe, inlineStyle, inferHtmlBlockAlignment(html));
     placeholder.replaceWith(iframe);
   } catch (error) {
     console.error('Failed to decode HTML block:', error);

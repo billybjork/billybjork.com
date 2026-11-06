@@ -1,7 +1,7 @@
 /* Styles for project detail content, wherever it is mounted: the homepage's
    detail scene and /test. */
 
-/* Block spacing - driven by editor block separators */
+/* Spacing comes from the editor's block separators. */
 .project-content > .content-block + .content-block,
 .project-content > .content-block + .project-links {
     margin-top: var(--content-block-space);
@@ -121,7 +121,6 @@
     transition: color 0.3s ease;
 }
 
-/* Constrain media elements */
 .project-content img,
 .project-content video,
 .project-content iframe:not(.html-block-sandbox) {
@@ -148,7 +147,6 @@
     color: rgba(255, 255, 255, 0.62);
 }
 
-/* Image lightbox */
 .image-lightbox {
     position: fixed;
     inset: 0;
@@ -192,7 +190,6 @@
     transform: scale(1.3);
 }
 
-/* Adjust code blocks */
 .project-content pre,
 .project-content code {
     white-space: pre-wrap;
@@ -216,12 +213,10 @@
     margin: 0;
 }
 
-/* Handle long words */
 .project-content {
     word-break: break-word;
 }
 
-/* Lists */
 .project-content ul,
 .project-content ol {
     margin: 1em 0;
@@ -246,7 +241,6 @@
     margin: 0.25em 0;
 }
 
-/* Reset list styles for project-links (YouTube/share buttons) */
 .project-content .project-links ul {
     list-style-type: none;
     margin: 0;
@@ -259,7 +253,6 @@
     margin-right: var(--spacing-medium);
 }
 
-/* Blockquotes */
 .project-content blockquote {
     margin: 1em 0;
     padding: 0.5em 1em;
@@ -272,7 +265,6 @@
     margin: 0;
 }
 
-/* Horizontal rules / section dividers */
 .project-content hr {
     border: none;
     text-align: center;
@@ -309,7 +301,6 @@
     white-space: nowrap;
 }
 
-/* Override copy-text-link styles when used as icon button in project-links */
 .project-links .copy-text-link {
     color: var(--primary-color);
     background: none;

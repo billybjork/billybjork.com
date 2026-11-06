@@ -1,7 +1,3 @@
-/**
- * Project Clipboard + Notification Utilities
- */
-
 export function showNotification(message: string, isError: boolean = false): void {
   const notification = document.createElement('div');
   notification.className = `copy-notification${isError ? ' error' : ''}`;

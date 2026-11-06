@@ -56,13 +56,18 @@ describe('buildMorphKeyframes', () => {
     }
   });
 
-  it('scales media uniformly so it never stretches mid-flight', () => {
+  it('moves the visible window in a straight line between the frames', () => {
     const keyframes = buildMorphKeyframes(thumb, portraitHero, 16 / 9);
+    const sourceMedia = coverBox(thumb, 16 / 9);
+
     for (const keyframe of keyframes) {
-      expect(String(keyframe.transform)).toMatch(/scale\([-\d.e]+\)$/);
+      const t = Number(keyframe.offset);
+      const visible = visibleBox(sourceMedia, keyframe);
+      expect(visible.left).toBeCloseTo(thumb.left + (portraitHero.left - thumb.left) * t);
+      expect(visible.top).toBeCloseTo(thumb.top + (portraitHero.top - thumb.top) * t);
+      expect(visible.width).toBeCloseTo(thumb.width + (portraitHero.width - thumb.width) * t);
+      expect(visible.height).toBeCloseTo(thumb.height + (portraitHero.height - thumb.height) * t);
     }
-    expect(keyframes[0].offset).toBe(0);
-    expect(keyframes[keyframes.length - 1].offset).toBe(1);
   });
 
   it('needs no crop when the frames share the media aspect ratio', () => {
