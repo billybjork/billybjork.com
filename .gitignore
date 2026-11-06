@@ -155,6 +155,7 @@ static/build/
 *.js.map
 
 # Agent tooling
+.local/
 .playwright-mcp/
 .claude/settings.local.json
 .claude/worktrees/

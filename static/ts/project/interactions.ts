@@ -1,5 +1,5 @@
 import { isEditingActive } from '../core/edit-state';
-import { copyToClipboard } from './clipboard';
+import { initCopyLinks } from './clipboard';
 import { resolveHashTarget } from './hash-scroll';
 import {
   closeActiveLightbox,
@@ -9,17 +9,6 @@ import {
 } from './lightbox';
 
 const LATE_LAYOUT_SETTLE_MS = 180;
-
-function handleCopyLinkClick(event: MouseEvent): void {
-  const button = (event.target as HTMLElement).closest<HTMLElement>('.copy-text-link');
-  if (!button) return;
-
-  event.preventDefault();
-  const textToCopy = button.getAttribute('data-copy-text');
-  if (textToCopy) {
-    copyToClipboard(textToCopy, button.getAttribute('data-notification-message') ?? undefined);
-  }
-}
 
 function handleMediaLightboxClick(event: MouseEvent): void {
   const target = event.target as HTMLElement;
@@ -74,7 +63,7 @@ function handleEscapeKey(event: KeyboardEvent): void {
  * and marks the event handled for whatever is beneath it.
  */
 export function initProjectInteractions(): void {
-  document.body.addEventListener('click', handleCopyLinkClick);
+  initCopyLinks();
   document.body.addEventListener('click', handleMediaLightboxClick);
   document.body.addEventListener('click', handleInPageAnchorClick);
   document.addEventListener('keydown', handleEscapeKey, true);

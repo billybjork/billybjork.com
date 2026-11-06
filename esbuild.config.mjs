@@ -7,9 +7,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
 const outputDir = 'static/build';
 
-// One bundle per page: homepage.js for /, edit.js for editors, project.js for /test.
+// One bundle per page: homepage.js for /, about.js for /me, edit.js for editors, project.js for /test.
 const entryPoints = {
   homepage: 'static/ts/homepage/index.ts',
+  about: 'static/ts/about/index.ts',
   edit: 'static/ts/edit/index.ts',
   project: 'static/ts/project/index.ts',
 };

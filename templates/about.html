@@ -21,3 +21,7 @@
     {% endif %}
 </section>
 {% endblock %}
+
+{% block additional_scripts %}
+<script src="{{ static_url(request, 'build/about.js') }}" defer></script>
+{% endblock %}

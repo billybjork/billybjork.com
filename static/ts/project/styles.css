@@ -278,29 +278,6 @@
     letter-spacing: 0.2em;
 }
 
-@keyframes fadeInOut {
-    0%, 100% { opacity: 0; }
-    10%, 90% { opacity: 1; }
-}
-
-.copy-notification {
-    position: fixed;
-    bottom: 3rem;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--highlight-color);
-    color: var(--background-color);
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    font-size: var(--font-size-small);
-    font-weight: 500;
-    z-index: 1000;
-    opacity: 0;
-    animation: fadeInOut 4s ease-in-out;
-    display: inline-block;
-    white-space: nowrap;
-}
-
 .project-links .copy-text-link {
     color: var(--primary-color);
     background: none;

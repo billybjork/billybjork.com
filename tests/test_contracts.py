@@ -34,12 +34,24 @@ class PublishedBlockStyleTests(unittest.TestCase):
 
 
 class AboutContentTests(unittest.TestCase):
-    """The about page loads no project code, so a click-to-copy link there does nothing."""
+    """The link's markup, what /me loads to run it, and the styles it shows are all it needs to work."""
 
-    def test_git_copy_uses_a_link_that_works_there(self) -> None:
+    def test_git_copy_has_the_copy_email_link(self) -> None:
         about = (FIXTURES.parent.parent / "content/about.md").read_text(encoding="utf-8")
-        self.assertNotIn("copy-text-link", about)
-        self.assertIn('<a href="mailto:billy@billybjork.com">', markdown_to_html(about))
+        self.assertIn(
+            '<a href="#" class="copy-text-link" data-copy-text="billy@billybjork.com" '
+            'data-notification-message="Email copied to clipboard!">Hit me up!</a>',
+            markdown_to_html(about),
+        )
+
+    def test_about_page_loads_the_copy_handler(self) -> None:
+        with managed_test_app() as app:
+            self.assertIn("build/about.js", app.client.get("/me").text)
+
+    def test_copy_styles_are_in_the_stylesheet_every_page_loads(self) -> None:
+        css = (FIXTURES.parent.parent / "static/css/styles.css").read_text(encoding="utf-8")
+        self.assertIn(".copy-notification", css)
+        self.assertIn("@keyframes fadeInOut", css)
 
 
 class SlugTests(unittest.TestCase):

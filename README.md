@@ -17,7 +17,7 @@ Imports point down this list; `tests/test_architecture.py` enforces it.
 | `cms/` | Content on disk: `projects`, `about`, `site_settings`, `documents` (frontmatter files), `markdown` (rendering), `sync` (to and from object storage), `assets` (registry and orphan cleanup), `paths` |
 | `object_storage.py`, `config.py`, `media/keys.py`, `media/sprite_format.py` | The bucket and public URLs; settings; the bucket's layout and sprite format, shared by `cms` and `media` |
 | `tools/` | One-off scripts |
-| `static/ts/` | Frontend, one esbuild bundle per entry (`esbuild.config.mjs`): `homepage/`, `project/`, `edit/`, shared `core/` |
+| `static/ts/` | Frontend, one esbuild bundle per entry (`esbuild.config.mjs`): `homepage/`, `about/`, `project/`, `edit/`, shared `core/` |
 
 ## Setup
 

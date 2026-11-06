@@ -16,7 +16,7 @@ title: About
 #### Facts about me:
   * Grew up in Minnesota. Live in Los Angeles.
   * Went to film school, but currently focused on learning to write software.
-  * I'd enjoy collaborating with you. <a href="mailto:billy@billybjork.com">Hit me up!</a>
+  * I'd enjoy collaborating with you. <a href="#" class="copy-text-link" data-copy-text="billy@billybjork.com" data-notification-message="Email copied to clipboard!">Hit me up!</a>
 
 #### What fills me up:
   * Snowboarding. My first and longest love.
