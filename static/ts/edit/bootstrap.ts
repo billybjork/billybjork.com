@@ -1,54 +1,44 @@
-import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
 import { isEditingActive } from '../core/edit-state';
 import { getHomepageRuntime, waitForHomepageRuntime } from '../core/runtime-registry';
-import { restorePersistedScroll } from './scroll';
-import { openEditor } from './session';
+import { ICONS } from './icons';
 import { aboutPage, projectPage } from './page-adapter';
 import { ABOUT_PATH, findProjectContent, isAboutPage } from './page-content';
 import { showProjectCreateDialog } from './project-create';
-import { ICONS } from './icons';
+import { restorePersistedScroll } from './scroll';
+import { openEditor } from './session';
+import { isShowDraftsActive, setShowDraftsRemembered } from './show-drafts';
 
 const EDIT_STYLESHEETS = ['edit-mode-base.css', 'edit-mode-project.css', 'edit-mode-extras.css'];
-
-let headerCompactionObserver: ResizeObserver | null = null;
-let headerCompactionResizeHandlerBound = false;
-let headerCompactionFrame: number | null = null;
+const HOMEPAGE_RUNTIME_WAIT_MS = 1500;
+const PROJECT_READY_WAIT_MS = 2500;
 
 function readProjectSlugFromPath(): string | null {
   const pathname = window.location.pathname.replace(/\/+$/, '');
-  if (!pathname || pathname === '/' || pathname === ABOUT_PATH) {
-    return null;
-  }
+  if (!pathname || pathname === ABOUT_PATH) return null;
 
   const slug = decodeURIComponent(pathname.slice(1)).trim();
   return slug && !slug.includes('/') ? slug : null;
 }
 
-function getActiveProjectSlug(): string | null {
-  const homepageSlug = getHomepageRuntime()?.getOpenProjectSlug();
-  return homepageSlug || readProjectSlugFromPath();
+async function editProject(fallbackSlug: string | null = null): Promise<void> {
+  let slug = getHomepageRuntime()?.getOpenProjectSlug() || readProjectSlugFromPath() || fallbackSlug;
+
+  const runtime = getHomepageRuntime() ?? await waitForHomepageRuntime(HOMEPAGE_RUNTIME_WAIT_MS);
+  if (runtime && slug) {
+    slug = await runtime.waitForProjectReady(slug, PROJECT_READY_WAIT_MS);
+  }
+
+  if (slug && findProjectContent()) {
+    await openEditor(projectPage(slug));
+  }
 }
 
-async function activateProjectEditMode(preferredSlug?: string | null): Promise<void> {
-  let slug = getActiveProjectSlug();
-  if (!slug) {
-    slug = preferredSlug ?? null;
-  }
-
-  const homepageRuntime = getHomepageRuntime() ?? await waitForHomepageRuntime(1500);
-  if (homepageRuntime && slug) {
-    slug = await homepageRuntime.waitForProjectReady(slug, 2500);
-  }
-
-  if (!slug || !findProjectContent()) {
-    return;
-  }
-
-  await openEditor(projectPage(slug));
+function editCurrentPage(): void {
+  void (isAboutPage() ? openEditor(aboutPage()) : editProject());
 }
 
 /** /static is served immutable, so these carry the version the server gave edit.js. */
-function loadEditModeCSS(): void {
+function loadEditorStylesheets(): void {
   const editScript = document.querySelector<HTMLScriptElement>('script[src*="build/edit.js"]');
   const version = editScript ? new URL(editScript.src, window.location.href).search : '';
   EDIT_STYLESHEETS.forEach((name) => {
@@ -59,188 +49,124 @@ function loadEditModeCSS(): void {
   });
 }
 
-function attachHomepageProjectControlHandlers(): void {
-  const editBtn = document.querySelector<HTMLButtonElement>('[data-homepage-edit-project]');
-  if (!editBtn || editBtn.dataset.editHandlersAttached === 'true') return;
-
-  editBtn.dataset.editHandlersAttached = 'true';
-  editBtn.addEventListener('click', async (event) => {
+function attachHomepageEditButton(): void {
+  const button = document.querySelector<HTMLButtonElement>('[data-homepage-edit-project]');
+  button?.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    await activateProjectEditMode(editBtn.dataset.projectSlug || getActiveProjectSlug());
+    void editProject(button.dataset.projectSlug || null);
   });
 }
 
-function initHeaderNavCompaction(): void {
-  const mainHeader = document.querySelector<HTMLElement>('#main-header');
-  const nav = mainHeader?.querySelector<HTMLElement>('nav');
-  if (!mainHeader || !nav) return;
+/** Collapses the injected buttons to icons when the header would otherwise overflow. */
+function compactHeaderWhenCrowded(): void {
+  const header = document.querySelector<HTMLElement>('#main-header');
+  const nav = header?.querySelector<HTMLElement>('nav');
+  if (!header || !nav) return;
 
-  const updateCompaction = (): void => {
-    nav.classList.remove('compact-edit-actions');
-    if (!nav.querySelector('.new-project-btn, .show-drafts-toggle')) return;
-
-    if (mainHeader.scrollWidth > mainHeader.clientWidth + 1) {
-      nav.classList.add('compact-edit-actions');
-    }
-  };
-
-  const scheduleCompactionUpdate = (): void => {
-    if (headerCompactionFrame !== null) {
-      cancelAnimationFrame(headerCompactionFrame);
-    }
-    headerCompactionFrame = requestAnimationFrame(() => {
-      headerCompactionFrame = null;
-      updateCompaction();
+  let frame: number | null = null;
+  const schedule = (): void => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      nav.classList.remove('compact-edit-actions');
+      if (header.scrollWidth > header.clientWidth + 1) {
+        nav.classList.add('compact-edit-actions');
+      }
     });
   };
 
-  scheduleCompactionUpdate();
-
-  if (!headerCompactionResizeHandlerBound) {
-    window.addEventListener('resize', scheduleCompactionUpdate, { passive: true });
-    headerCompactionResizeHandlerBound = true;
-  }
-
-  if (typeof ResizeObserver !== 'undefined') {
-    headerCompactionObserver?.disconnect();
-    headerCompactionObserver = new ResizeObserver(scheduleCompactionUpdate);
-    headerCompactionObserver.observe(mainHeader);
-    headerCompactionObserver.observe(nav);
-  }
+  schedule();
+  window.addEventListener('resize', schedule, { passive: true });
+  const observer = new ResizeObserver(schedule);
+  observer.observe(header);
+  observer.observe(nav);
 }
 
-/**
- * Add new project button to header (or Edit button on /me page)
- */
-function addNewProjectButton(): void {
-  const header = document.querySelector<HTMLElement>('#main-header nav');
-  if (!header || header.querySelector('.new-project-btn')) return;
-
-  const onAboutPage = isAboutPage();
-  const buttonLabel = onAboutPage ? 'Edit' : 'New Project';
-  const buttonIcon = onAboutPage ? ICONS.edit : ICONS.newProject;
-
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'new-project-btn';
-  btn.title = buttonLabel;
-  btn.setAttribute('aria-label', buttonLabel);
-  btn.innerHTML = `${buttonIcon}<span class="btn-label">${buttonLabel}</span>`;
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (onAboutPage) {
-      void openEditor(aboutPage());
-    } else {
-      showProjectCreateDialog();
-    }
+function createHeaderButton(className: string, label: string, ariaLabel: string, icon: string, onClick: () => void): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.title = label;
+  button.setAttribute('aria-label', ariaLabel);
+  button.innerHTML = `${icon}<span class="btn-label">${label}</span>`;
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    onClick();
   });
-
-  header.insertBefore(btn, header.firstChild);
+  return button;
 }
 
-/**
- * Add "Show Drafts" / "Hide Drafts" toggle to header nav (home page only)
- */
-function addShowDraftsToggle(): void {
-  if (window.location.pathname !== '/') return;
+function addHeaderButtons(): void {
+  const nav = document.querySelector<HTMLElement>('#main-header nav');
+  if (!nav) return;
 
-  const header = document.querySelector<HTMLElement>('#main-header nav');
-  if (!header || header.querySelector('.show-drafts-toggle')) return;
-
-  const isActive = isShowDraftsActive();
-
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'show-drafts-toggle' + (isActive ? ' active' : '');
-  btn.title = 'Drafts';
-  btn.setAttribute('aria-label', isActive ? 'Hide drafts' : 'Show drafts');
-  btn.innerHTML = `${ICONS.drafts}<span class="btn-label">Drafts</span>`;
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    const url = new URL(window.location.href);
-    if (isActive) {
-      url.searchParams.delete('show_drafts');
-      setShowDraftsRemembered(false);
-    } else {
-      url.searchParams.set('show_drafts', 'true');
-      setShowDraftsRemembered(true);
-    }
-    window.location.href = url.toString();
-  });
-
-  const newProjectBtn = header.querySelector('.new-project-btn');
-  if (newProjectBtn) {
-    header.insertBefore(btn, newProjectBtn);
-  } else {
-    header.insertBefore(btn, header.firstChild);
-  }
-}
-
-/**
- * Cmd/Ctrl + E keyboard shortcut to enter edit mode
- */
-function initEditModeKeyboardShortcut(): void {
-  document.addEventListener('keydown', async function(event) {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'e') {
-      if (isEditingActive()) return;
-
-      const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
-        return;
-      }
-
-      event.preventDefault();
-
-      if (isAboutPage()) {
-        void openEditor(aboutPage());
-      } else {
-        await activateProjectEditMode(getActiveProjectSlug());
-      }
-    }
-  });
-}
-
-function openEditorFromUrl(): void {
-  if (!new URLSearchParams(window.location.search).has('edit')) return;
-  if (isAboutPage()) {
-    void openEditor(aboutPage());
-  } else {
-    void activateProjectEditMode(readProjectSlugFromPath());
-  }
-}
-
-function initializeEditMode(): void {
-  restorePersistedScroll();
-
-  // Also syncs the show_drafts query parameter into the tab's memory.
-  const showDrafts = isShowDraftsActive();
+  const primary = isAboutPage()
+    ? createHeaderButton('new-project-btn', 'Edit', 'Edit', ICONS.edit, editCurrentPage)
+    : createHeaderButton('new-project-btn', 'New Project', 'New Project', ICONS.newProject, showProjectCreateDialog);
+  nav.prepend(primary);
 
   if (window.location.pathname === '/') {
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has('show_drafts') && showDrafts) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('show_drafts', 'true');
-      window.location.replace(url.toString());
-      return;
-    }
+    const active = isShowDraftsActive();
+    const drafts = createHeaderButton(
+      `show-drafts-toggle${active ? ' active' : ''}`,
+      'Drafts',
+      active ? 'Hide drafts' : 'Show drafts',
+      ICONS.drafts,
+      () => {
+        const url = new URL(window.location.href);
+        if (active) {
+          url.searchParams.delete('show_drafts');
+        } else {
+          url.searchParams.set('show_drafts', 'true');
+        }
+        setShowDraftsRemembered(!active);
+        window.location.href = url.toString();
+      },
+    );
+    nav.prepend(drafts);
+  }
+}
+
+function listenForEditShortcut(): void {
+  document.addEventListener('keydown', (event) => {
+    if (!(event.metaKey || event.ctrlKey) || event.key !== 'e' || isEditingActive()) return;
+
+    const active = document.activeElement;
+    if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') return;
+
+    event.preventDefault();
+    editCurrentPage();
+  });
+}
+
+function start(): void {
+  restorePersistedScroll();
+
+  // Reading it also remembers a show_drafts query parameter for the tab.
+  const showDrafts = isShowDraftsActive();
+  if (window.location.pathname === '/' && showDrafts && !new URLSearchParams(window.location.search).has('show_drafts')) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('show_drafts', 'true');
+    window.location.replace(url.toString());
+    return;
   }
 
-  loadEditModeCSS();
+  loadEditorStylesheets();
+  addHeaderButtons();
+  compactHeaderWhenCrowded();
+  attachHomepageEditButton();
+  listenForEditShortcut();
 
-  addNewProjectButton();
-  addShowDraftsToggle();
-  initHeaderNavCompaction();
-  attachHomepageProjectControlHandlers();
-
-  openEditorFromUrl();
-  initEditModeKeyboardShortcut();
+  if (new URLSearchParams(window.location.search).has('edit')) {
+    editCurrentPage();
+  }
 }
 
 export function init(): void {
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeEditMode);
+    document.addEventListener('DOMContentLoaded', start);
   } else {
-    initializeEditMode();
+    start();
   }
 }

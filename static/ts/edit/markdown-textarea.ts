@@ -1,6 +1,6 @@
 import { LINK_PATTERN, parseHeadingLine } from './inline-markdown';
 import { showLinkDialog } from './link-dialog';
-import { clamp } from './text';
+import { clamp } from './clamp';
 
 interface FormatInfo {
   formatStart: number;

@@ -15,7 +15,7 @@ import { buildHeroVideoMarkup } from './markup';
 import { SpriteRange } from './sprite-range';
 import { renderTimelineFrames } from './timeline';
 
-export interface HeroVideoEditorOptions {
+interface HeroVideoEditorOptions {
   slug: string;
   /** A new video to upload; null re-cuts the sprite from the project's current video. */
   file: File | null;

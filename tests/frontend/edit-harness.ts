@@ -66,6 +66,8 @@ function installExecCommand(): void {
 /** Stubs fetch, location.reload, and assignments to location.href; the rest of location stays real. */
 export function installHarness(): EditorHarness {
   vi.resetModules();
+  document.body.removeAttribute('data-scroll-lock-count');
+  document.body.removeAttribute('style');
   const calls: RecordedCall[] = [];
   const handlers = new Map<string, (call: RecordedCall) => Response | Promise<Response>>();
   const reload = vi.fn();
@@ -214,4 +216,59 @@ export function pressKey(target: EventTarget, key: string, modifiers: KeyboardEv
 
 export function notifications(): string[] {
   return Array.from(document.querySelectorAll('.edit-notification')).map((el) => el.textContent ?? '');
+}
+
+/** A hand-driven XMLHttpRequest. */
+export function stubXhr(): { instance(): FakeXhr } {
+  let last: FakeXhr | null = null;
+  vi.stubGlobal('XMLHttpRequest', class extends FakeXhr {
+    constructor() {
+      super();
+      last = this;
+    }
+  });
+  return { instance: () => last as unknown as FakeXhr };
+}
+
+export class FakeXhr {
+  url = '';
+  status = 0;
+  responseText = '';
+  aborted = false;
+  private readonly listeners = new Map<string, Array<(event: unknown) => void>>();
+  private readonly uploadListeners = new Map<string, Array<(event: unknown) => void>>();
+  readonly upload = {
+    addEventListener: (type: string, listener: (event: unknown) => void) => {
+      this.uploadListeners.set(type, [...(this.uploadListeners.get(type) ?? []), listener]);
+    },
+  };
+
+  addEventListener(type: string, listener: (event: unknown) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+
+  open(_method: string, url: string): void {
+    this.url = url;
+  }
+
+  send(): void {}
+
+  abort(): void {
+    this.aborted = true;
+    this.listeners.get('abort')?.forEach((listener) => listener({}));
+  }
+
+  progress(loaded: number, total: number): void {
+    this.uploadListeners.get('progress')?.forEach((listener) => listener({ lengthComputable: true, loaded, total }));
+  }
+
+  sent(): void {
+    this.uploadListeners.get('load')?.forEach((listener) => listener({}));
+  }
+
+  finish(status: number, body: unknown): void {
+    this.status = status;
+    this.responseText = JSON.stringify(body);
+    this.listeners.get('load')?.forEach((listener) => listener({}));
+  }
 }

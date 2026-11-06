@@ -1,8 +1,8 @@
 import type { Block, BlockContext, BlockType, RowBlock } from '../types/blocks';
 import { createBlock } from './blocks';
-import { clamp } from './text';
+import { clamp } from './clamp';
 
-export interface UpdateOptions {
+interface UpdateOptions {
   render?: boolean;
   markDirty?: boolean;
 }
@@ -28,7 +28,7 @@ export interface BlockStore {
   clearCleanupCandidates(): void;
 }
 
-export interface StoreDeps {
+interface StoreDeps {
   onEdit(): void;
   render(): void;
   /** Only projects clean up assets through candidates; the server diffs the about page itself. */

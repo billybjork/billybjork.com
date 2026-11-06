@@ -29,7 +29,7 @@ function nextStatus(status: SaveStatus, action: SaveAction): SaveStatus {
   }
 }
 
-export interface SaveController {
+interface SaveController {
   isDirty(): boolean;
   markDirty(): void;
   /** The Save button: saves if needed, then leaves through `exit`. */
@@ -38,7 +38,7 @@ export interface SaveController {
   stop(): void;
 }
 
-export interface SaveDeps {
+interface SaveDeps {
   page: PageAdapter;
   store: BlockStore;
   revision: string | null;

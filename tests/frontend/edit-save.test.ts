@@ -4,6 +4,7 @@ import {
   blockWrappers,
   installHarness,
   jsonResponse,
+  mountProjectPage,
   notifications,
   openAboutEditor,
   openProjectEditor,
@@ -200,6 +201,19 @@ describe('conflicts', () => {
     expect(notifications()).toContain('Force save failed');
   });
 
+  it('"Keep mine" replaces a pending autosave rather than racing it', async () => {
+    await openProjectEditor(harness, 'Hello');
+    conflictOnce('/api/save-project');
+    typeInLine('Mine');
+    await settle(AUTO_SAVE_MS);
+    typeInLine('Mine, again');
+    document.querySelector<HTMLButtonElement>('.edit-conflict-keep')!.click();
+    await settle(AUTO_SAVE_MS * 2);
+
+    expect(harness.saves()).toHaveLength(2);
+    expect(harness.lastSave()).toMatchObject({ force: true, markdown: 'Mine, again' });
+  });
+
   it('"Load theirs" reloads out of edit mode without saving', async () => {
     await openProjectEditor(harness, 'Hello');
     conflictOnce('/api/save-project');
@@ -296,6 +310,21 @@ describe('the Save button', () => {
 });
 
 describe('Discard', () => {
+  it('sends no autosave while the asset cleanup is in flight', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    let finish!: (response: Response) => void;
+    harness.respond('/api/cleanup-assets', () => new Promise<Response>((resolve) => { finish = resolve; }));
+    await openProjectEditor(harness, '<video src="https://cdn.example/v.mp4" poster="https://cdn.example/p.webp" controls></video>\n\n<!-- block -->\n\nText');
+    blockWrappers()[0]!.querySelector<HTMLButtonElement>('.block-delete-btn')!.click();
+    toolbarButton('cancel').click();
+    await settle(AUTO_SAVE_MS * 2);
+    expect(harness.saves()).toHaveLength(0);
+
+    finish(jsonResponse({ success: true }));
+    await settle();
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
   it('asks first when dirty and stays if declined', async () => {
     vi.stubGlobal('confirm', vi.fn(() => false));
     await openProjectEditor(harness, 'Hello');
@@ -425,6 +454,41 @@ describe('deleting the project', () => {
 });
 
 describe('opening the editor', () => {
+  it('opens one session even when asked twice while loading', async () => {
+    mountProjectPage();
+    harness.respond(`/api/project/${PROJECT.slug}`, () => jsonResponse({ ...PROJECT, markdown: 'Hello' }));
+    const { openEditor } = await import('../../static/ts/edit/session');
+    const { projectPage } = await import('../../static/ts/edit/page-adapter');
+    await Promise.all([openEditor(projectPage(PROJECT.slug)), openEditor(projectPage(PROJECT.slug))]);
+
+    expect(document.querySelectorAll('.edit-mode-toolbar')).toHaveLength(1);
+    expect(blockWrappers()).toHaveLength(1);
+  });
+
+  it('stops answering keys and page events after leaving', async () => {
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    await openProjectEditor(harness, 'Hello');
+    typeInLine('Edited');
+    toolbarButton('cancel').click();
+    await settle();
+    harness.reload.mockClear();
+
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(unload.defaultPrevented).toBe(false);
+    expect(harness.reload).not.toHaveBeenCalled();
+  });
+
+  it('hides the project\'s own controls and shows the editing panel above the hero', async () => {
+    await openProjectEditor(harness, 'Hello');
+
+    expect(document.querySelector('.edit-buttons')?.classList.contains('edit-controls-hidden')).toBe(true);
+    expect(document.querySelector('.edit-inline-top-controls')?.nextElementSibling?.classList.contains('video-container')).toBe(true);
+  });
+
   it('marks the URL and the body, and replaces the page content with blocks', async () => {
     await openProjectEditor(harness, 'One\n\n<!-- block -->\n\nTwo');
 

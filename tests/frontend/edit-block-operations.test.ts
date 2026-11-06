@@ -74,11 +74,20 @@ describe('adding blocks', () => {
     ].join('\n\n<!-- block -->\n\n'));
   });
 
+  it('puts the caret in a new text block, ready to type', async () => {
+    await openProjectEditor(harness, 'One');
+    document.querySelector<HTMLButtonElement>('.add-block-wrapper-bottom .merge-add-btn')!.click();
+    menuItem('text').click();
+
+    const line = blockWrappers()[1]!.querySelector('.text-block-line');
+    expect(line?.classList.contains('is-editing')).toBe(true);
+    expect(document.activeElement).toBe(line?.querySelector('.text-line-input'));
+  });
+
   it('puts the caret in a new callout', async () => {
     await openProjectEditor(harness, 'One');
     document.querySelector<HTMLButtonElement>('.add-block-wrapper-bottom .merge-add-btn')!.click();
     menuItem('callout').click();
-    await vi.advanceTimersByTimeAsync(100);
 
     expect(document.activeElement).toBe(blockWrappers()[1]!.querySelector('.callout-textarea'));
   });

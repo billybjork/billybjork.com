@@ -10,9 +10,9 @@ import {
   handleListShortcuts,
   parseListLine,
 } from './markdown-textarea';
-import { clamp } from './text';
+import { clamp } from './clamp';
 
-export type LineSelection = number | { start: number; end?: number } | null;
+type LineSelection = number | { start: number; end?: number } | null;
 
 const PLACEHOLDER = 'Type something... (type / for commands)';
 const MIN_LINE_HEIGHT_PX = 27;

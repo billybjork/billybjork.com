@@ -4,7 +4,7 @@ import { onEscape } from './modal';
 // Matches the .link-dialog-backdrop opacity transition in edit-mode-extras.css.
 const FADE_OUT_MS = 150;
 
-export interface LinkDialogResult {
+interface LinkDialogResult {
   action: 'insert' | 'remove' | 'cancel';
   url?: string;
 }

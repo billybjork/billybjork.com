@@ -34,7 +34,7 @@ const SELECTION_MIRROR_PROPERTIES = [
   'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
 ];
 
-export interface InlineToolbarTarget {
+interface InlineToolbarTarget {
   textarea: HTMLTextAreaElement;
   row: HTMLElement;
   onEdit: () => void;

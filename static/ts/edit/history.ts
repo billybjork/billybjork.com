@@ -2,7 +2,7 @@ import type { Block } from '../types/blocks';
 import { rerenderBlockInPlace, renderBlocks } from './block-shell';
 import type { EditorContext } from './context';
 import { showNotification } from './notify';
-import { clamp } from './text';
+import { clamp } from './clamp';
 import { activateLine } from './line-editor';
 
 const MAX_HISTORY = 50;
@@ -17,7 +17,7 @@ interface FocusSnapshot {
   selectionEnd: number;
 }
 
-export interface History {
+interface History {
   /** Notes that the document changed; rapid changes collapse into one step. */
   record(): void;
   undo(): void;

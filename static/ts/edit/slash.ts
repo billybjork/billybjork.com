@@ -1,6 +1,6 @@
 import type { BlockType } from '../types/blocks';
 import { ICONS } from './icons';
-import { clamp } from './text';
+import { clamp } from './clamp';
 
 interface SlashCommand {
   id: BlockType;

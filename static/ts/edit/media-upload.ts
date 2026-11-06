@@ -128,7 +128,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
   });
 }
 
-export async function uploadImage(file: File | Blob): Promise<string> {
+async function uploadImage(file: File | Blob): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', 'image');

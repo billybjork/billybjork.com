@@ -6,7 +6,7 @@ import { SLUG_INPUT_PATTERN } from './slug';
 import type { BlockStore } from './store';
 import { escapeHtml } from './text';
 
-export interface ProjectControlsDeps {
+interface ProjectControlsDeps {
   project: ProjectData;
   /** The project's slug as the server knows it, which the slug field may have moved ahead of. */
   savedSlug(): string;

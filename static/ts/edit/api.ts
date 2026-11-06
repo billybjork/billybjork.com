@@ -53,12 +53,12 @@ export async function postForm<T>(url: string, formData: FormData, fallback: str
   return await response.json() as T;
 }
 
-export interface UploadProgress {
+interface UploadProgress {
   loaded: number;
   total: number;
 }
 
-export interface UploadHandlers {
+interface UploadHandlers {
   /** Fires with sizes when the browser knows them, and with null when it does not. */
   onProgress?: (progress: UploadProgress | null) => void;
   /** The body is on the server; the response is still to come. */

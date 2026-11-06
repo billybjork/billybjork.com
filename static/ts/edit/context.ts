@@ -3,7 +3,7 @@ import type { MediaController } from './media-selection';
 import type { SlashMenu } from './slash';
 import type { BlockStore } from './store';
 
-export interface DragState {
+interface DragState {
   sourceIndex: number | null;
   dropIndex: number | null;
 }

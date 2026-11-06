@@ -5,7 +5,7 @@ interface MediaStyleBlock {
   align?: Alignment;
 }
 
-export type StyleMap = Record<string, string | undefined>;
+type StyleMap = Record<string, string | undefined>;
 
 const ALIGNMENT_DECLARATION = /^(margin-(left|right)\s*:\s*auto|display\s*:\s*block)$/;
 

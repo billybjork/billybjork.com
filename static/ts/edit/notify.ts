@@ -1,4 +1,4 @@
-export type NotificationType = 'info' | 'success' | 'error' | 'warning';
+type NotificationType = 'info' | 'success' | 'error' | 'warning';
 
 const STACK_ID = 'edit-notification-stack';
 // Matches the .edit-notification opacity transition in edit-mode-base.css.

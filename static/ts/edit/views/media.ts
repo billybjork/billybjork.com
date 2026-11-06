@@ -3,7 +3,7 @@ import type { EditorContext } from '../context';
 import { ICONS } from '../icons';
 import { capturePosterFromVideo, uploadProcessedImage, type VideoUploadProgressUpdate } from '../media-upload';
 import { showNotification } from '../notify';
-import { clamp } from '../text';
+import { clamp } from '../clamp';
 
 function applyAlignment(element: HTMLElement, align: Alignment): void {
   element.style.display = 'block';

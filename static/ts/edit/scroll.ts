@@ -1,6 +1,6 @@
 import { isEditingActive } from '../core/edit-state';
 import { findActiveContent } from './page-content';
-import { clamp } from './text';
+import { clamp } from './clamp';
 
 const STORAGE_KEY = 'bb_edit_scroll_restore_v1';
 const STORED_TTL_MS = 30_000;
@@ -133,8 +133,6 @@ export function createScrollAnchors() {
     },
   };
 }
-
-export type ScrollAnchors = ReturnType<typeof createScrollAnchors>;
 
 interface StoredScrollState {
   pathname: string;

@@ -1,13 +1,13 @@
 import { slugify, uniqueSlug } from './slug';
 
-export interface HeadingLine {
+interface HeadingLine {
   indent: string;
   level: number;
   body: string;
   prefixLength: number;
 }
 
-export type LinePreviewType =
+type LinePreviewType =
   | 'empty'
   | 'divider'
   | 'heading-1'
@@ -20,7 +20,7 @@ export type LinePreviewType =
   | 'list'
   | 'paragraph';
 
-export interface LinePreview {
+interface LinePreview {
   node: Node;
   type: LinePreviewType;
 }
@@ -222,7 +222,7 @@ function sanitizeUrl(url: string): string | null {
   return null;
 }
 
-export function renderInlineMarkdown(text: string): DocumentFragment {
+function renderInlineMarkdown(text: string): DocumentFragment {
   const fragment = document.createDocumentFragment();
   let lastIndex = 0;
 

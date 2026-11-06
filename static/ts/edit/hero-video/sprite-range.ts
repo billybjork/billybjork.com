@@ -1,4 +1,5 @@
-import { clamp, formatMinutesSeconds } from '../text';
+import { clamp } from '../clamp';
+import { formatMinutesSeconds } from '../text';
 
 const MIN_DURATION = 1;
 const MAX_DURATION = 6;

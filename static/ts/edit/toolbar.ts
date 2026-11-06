@@ -18,7 +18,7 @@ const SAVE_BUTTON_CLASS: Partial<Record<SaveStatus, string>> = {
   conflict: 'has-error',
 };
 
-export interface ToolbarActions {
+interface ToolbarActions {
   undo(): void;
   redo(): void;
   discard(): void;
@@ -27,7 +27,7 @@ export interface ToolbarActions {
   deleteContent?: () => void;
 }
 
-export interface FixedToolbar {
+interface FixedToolbar {
   setStatus(status: SaveStatus): void;
   setTitle(title: string): void;
 }

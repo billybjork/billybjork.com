@@ -3,7 +3,7 @@ import { parseStyle, serializeStyle, styleHasHeight, styleHasWidth } from './blo
 import { uploadContentVideo, uploadProcessedImage, type VideoUploadProgressUpdate } from './media-upload';
 import { showNotification } from './notify';
 import type { BlockStore } from './store';
-import { clamp } from './text';
+import { clamp } from './clamp';
 
 type SelectableBlock = ImageBlock | VideoBlock | HtmlBlock;
 type HandlePosition = 'n' | 'e' | 's' | 'w' | 'nw' | 'ne' | 'sw' | 'se';

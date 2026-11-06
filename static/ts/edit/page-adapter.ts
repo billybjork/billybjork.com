@@ -12,13 +12,13 @@ export interface LoadedContent {
   revision: string | null;
 }
 
-export interface SaveBodyInput {
+interface SaveBodyInput {
   markdown: string;
   stamp: { force: true } | { base_revision: string | null };
   cleanupCandidates: string[];
 }
 
-export interface PageChromeDeps {
+interface PageChromeDeps {
   content: HTMLElement;
   store: BlockStore;
   markDirty(): void;
