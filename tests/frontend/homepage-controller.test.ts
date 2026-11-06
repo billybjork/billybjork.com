@@ -54,6 +54,28 @@ function createHomepageFixture(): {
             </button>
           </article>
         </li>
+        <li>
+          <article
+            class="homepage-project-card"
+            data-homepage-project-card
+            data-slug="project-two"
+            data-title="Project Two"
+            data-formatted-date="2023"
+            data-hero-aspect-ratio="0.5625"
+            data-thumbnail="/thumb-two.webp">
+            <header class="homepage-card-heading" data-open-project="project-two">
+              <time class="homepage-card-date">2023</time>
+              <h2 class="homepage-card-title">Project Two</h2>
+            </header>
+            <button class="homepage-open-button" type="button" data-open-project="project-two">
+              <span class="homepage-thumb-frame" data-homepage-thumb-frame>
+                <span class="homepage-thumb-media" data-homepage-thumb-media>
+                  <img class="homepage-thumb-image" src="/thumb-two.webp" alt="">
+                </span>
+              </span>
+            </button>
+          </article>
+        </li>
       </ul>
     </div>
     <section
@@ -118,7 +140,7 @@ function createHomepageFixture(): {
     transitionLayer,
   });
 
-  const openButton = detailScene.ownerDocument.querySelector<HTMLButtonElement>('[data-open-project="project-one"]');
+  const openButton = detailScene.ownerDocument.querySelector<HTMLButtonElement>('button[data-open-project="project-one"]');
   const closeButton = detailScene.querySelector<HTMLButtonElement>('.homepage-close-button');
   const editButton = detailScene.querySelector<HTMLButtonElement>('[data-homepage-edit-project]');
   if (!openButton || !closeButton || !editButton) {
@@ -133,6 +155,51 @@ function createHomepageFixture(): {
     closeButton,
     editButton,
   };
+}
+
+function isDetailOpen(detailScene: HTMLElement): boolean {
+  return detailScene.classList.contains('homepage-visible') && detailScene.getAttribute('aria-hidden') === 'false';
+}
+
+function stubDetailFetch(html: string = DETAIL_RESPONSE_HTML) {
+  const fetchMock = vi.fn(async () => ({ ok: true, text: async () => html }));
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+function navigateBack(url: string): void {
+  window.history.replaceState(window.history.state, '', url);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+}
+
+class FakeHls {
+  static Events = { MANIFEST_PARSED: 'manifest-parsed', ERROR: 'error' };
+  static ErrorTypes = { NETWORK_ERROR: 'network', MEDIA_ERROR: 'media' };
+  static instances: FakeHls[] = [];
+  static isSupported = (): boolean => true;
+
+  levels: unknown[] = [];
+  startLevel = -1;
+  destroyed = false;
+  private readonly handlers = new Map<string, () => void>();
+
+  constructor() {
+    FakeHls.instances.push(this);
+  }
+
+  on(event: string, handler: () => void): void {
+    this.handlers.set(event, handler);
+  }
+
+  loadSource(): void {}
+
+  attachMedia(): void {
+    queueMicrotask(() => this.handlers.get(FakeHls.Events.MANIFEST_PARSED)?.());
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+  }
 }
 
 async function flushAsyncWork(iterations: number = 6): Promise<void> {
@@ -159,14 +226,14 @@ describe('HomepageController', () => {
     openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
-    expect(detailScene.dataset.sceneState).toBe('open:detail');
+    expect(isDetailOpen(detailScene)).toBe(true);
     expect(window.location.pathname).toBe('/project-one');
     expect(detailContent.querySelector('.project-content')).not.toBeNull();
 
     closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
-    expect(detailScene.dataset.sceneState).toBe('closed');
+    expect(isDetailOpen(detailScene)).toBe(false);
     expect(window.location.pathname).toBe('/');
     expect(detailContent.querySelector('.project-content')).toBeNull();
 
@@ -198,7 +265,7 @@ describe('HomepageController', () => {
     openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
-    expect(detailScene.dataset.sceneState).toBe('open:detail');
+    expect(isDetailOpen(detailScene)).toBe(true);
     expect(flightsMidAnimation).toEqual([['2024 Project One', '']]);
     expect(document.querySelector('.homepage-heading-flight')).toBeNull();
     expect(cardHeading?.classList.contains('homepage-source-hidden')).toBe(true);
@@ -207,7 +274,7 @@ describe('HomepageController', () => {
     closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
-    expect(detailScene.dataset.sceneState).toBe('closed');
+    expect(isDetailOpen(detailScene)).toBe(false);
     expect(flightsMidAnimation).toHaveLength(2);
     expect(flightsMidAnimation[1][0]).toBe('2024 Project One');
     expect(document.querySelector('.homepage-heading-flight')).toBeNull();
@@ -230,7 +297,7 @@ describe('HomepageController', () => {
     await flushAsyncWork();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(detailScene.dataset.sceneState).toBe('open:detail');
+    expect(isDetailOpen(detailScene)).toBe(true);
     expect(window.location.pathname).toBe('/project-one');
     expect(
       scrollSpy.mock.contexts.some((element) => element instanceof HTMLElement && element.id === 'section-one')
@@ -273,7 +340,7 @@ describe('HomepageController', () => {
 
     const { controller, editButton } = createHomepageFixture();
     controller.init();
-    await controller.openProject('project-one', { historyMode: 'push' });
+    document.querySelector('[data-open-project="project-one"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsyncWork();
 
     controller.renameProjectSlug('project-one', 'project-renamed');
@@ -283,6 +350,129 @@ describe('HomepageController', () => {
     expect(window.location.pathname).toBe('/project-renamed');
     expect(editButton.dataset.projectSlug).toBe('project-renamed');
     expect(renamedOpenButton).not.toBeNull();
+
+    controller.destroy();
+  });
+
+  it('closes on browser back and reopens on forward from the cache, without touching history', async () => {
+    const fetchMock = stubDetailFetch();
+    const { controller, detailScene, openButton } = createHomepageFixture();
+    controller.init();
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+    const pushSpy = vi.spyOn(window.history, 'pushState');
+
+    navigateBack('http://localhost/');
+    await flushAsyncWork();
+    expect(isDetailOpen(detailScene)).toBe(false);
+    expect(controller.getOpenProjectSlug()).toBeNull();
+
+    navigateBack('http://localhost/project-one');
+    await flushAsyncWork();
+    expect(isDetailOpen(detailScene)).toBe(true);
+    expect(controller.getOpenProjectSlug()).toBe('project-one');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(pushSpy).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
+  it('switches directly between projects when history moves from one to the other', async () => {
+    stubDetailFetch();
+    const { controller, detailScene } = createHomepageFixture();
+    window.history.replaceState(null, '', 'http://localhost/project-one');
+    controller.init();
+    await flushAsyncWork();
+    expect(document.getElementById('homepage-detail-title')?.textContent).toBe('Project One');
+
+    navigateBack('http://localhost/project-two');
+    await flushAsyncWork();
+
+    expect(controller.getOpenProjectSlug()).toBe('project-two');
+    expect(isDetailOpen(detailScene)).toBe(true);
+    expect(document.getElementById('homepage-detail-title')?.textContent).toBe('Project Two');
+    expect(document.getElementById('homepage-detail-date')?.textContent).toBe('2023');
+    expect(document.getElementById('homepage-detail-hero-frame')?.style.getPropertyValue('--homepage-hero-aspect')).toBe('0.5625');
+    expect(document.querySelectorAll('.homepage-active-card')).toHaveLength(1);
+
+    controller.destroy();
+  });
+
+  it('returns to the list intact when the detail fails to load', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 })));
+    const { controller, detailScene, openButton } = createHomepageFixture();
+    controller.init();
+
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    expect(consoleError).toHaveBeenCalled();
+    expect(isDetailOpen(detailScene)).toBe(false);
+    expect(controller.getOpenProjectSlug()).toBeNull();
+    expect(window.location.pathname).toBe('/');
+    expect(document.body.classList.contains('homepage-nav-hidden')).toBe(false);
+    expect(document.querySelector('.homepage-source-hidden, .homepage-target-hidden, .homepage-active-card')).toBeNull();
+
+    controller.destroy();
+  });
+
+  it('closes the open project on Escape and restores focus to what opened it', async () => {
+    stubDetailFetch();
+    const { controller, detailScene, openButton } = createHomepageFixture();
+    controller.init();
+    openButton.focus();
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+    expect(document.activeElement?.classList.contains('homepage-close-button')).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+
+    expect(isDetailOpen(detailScene)).toBe(false);
+    expect(window.location.pathname).toBe('/');
+    expect(document.activeElement).toBe(openButton);
+
+    controller.destroy();
+  });
+
+  it('covers the hero with the card frame until the video paints, and tears the player down on close', async () => {
+    FakeHls.instances = [];
+    vi.stubGlobal('Hls', FakeHls);
+    stubDetailFetch(`
+      <section class="video-container" id="hero">
+        <video data-hls-url="/video.m3u8" data-video-width="1280" data-video-height="720"></video>
+      </section>
+      <section class="project-content"><p>Body</p></section>
+    `);
+    const { controller, openButton, closeButton } = createHomepageFixture();
+    const heroFrame = document.getElementById('homepage-detail-hero-frame') as HTMLElement;
+    controller.init();
+
+    openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    const video = heroFrame.querySelector('video') as HTMLVideoElement;
+    expect(heroFrame.querySelector('.video-container')?.id).toBe('');
+    expect(video.poster).toContain('/thumb.webp');
+    expect(FakeHls.instances).toHaveLength(1);
+    expect(heroFrame.querySelector('.homepage-hero-bridge')).not.toBeNull();
+    expect(heroFrame.style.getPropertyValue('--homepage-fallback-poster')).toContain('/thumb.webp');
+
+    Object.defineProperty(video, 'readyState', { configurable: true, value: 2 });
+    Object.defineProperty(video, 'videoWidth', { configurable: true, value: 1280 });
+    Object.defineProperty(video, 'videoHeight', { configurable: true, value: 720 });
+    video.dispatchEvent(new Event('loadeddata'));
+    await flushAsyncWork();
+
+    expect(heroFrame.querySelector('.homepage-hero-bridge')).toBeNull();
+    expect(heroFrame.style.getPropertyValue('--homepage-fallback-poster')).toBe('none');
+
+    closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsyncWork();
+
+    expect(FakeHls.instances[0]?.destroyed).toBe(true);
+    expect(heroFrame.querySelector('video')).toBeNull();
 
     controller.destroy();
   });
