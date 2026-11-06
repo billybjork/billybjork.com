@@ -4,99 +4,44 @@ export interface HomepageRuntimeApi {
   renameProjectSlug(previousSlug: string, nextSlug: string): void;
 }
 
-interface RuntimeServices {
-  homepage?: HomepageRuntimeApi;
-}
-
 declare global {
   interface Window {
-    __bbRuntimeServices__?: RuntimeServices;
+    __bbHomepageRuntime?: HomepageRuntimeApi;
   }
 }
 
-const RUNTIME_STORE_KEY = '__bbRuntimeServices__';
+/**
+ * homepage.js and edit.js are separate bundles, each with its own copy of this
+ * module, so the runtime and its wake-up have to travel through `window`.
+ */
+const RUNTIME_CHANGED_EVENT = 'bb:homepage-runtime-changed';
 
-type RuntimeServiceName = keyof RuntimeServices;
-
-type RuntimeWaiterMap = {
-  [K in RuntimeServiceName]: Array<(service: NonNullable<RuntimeServices[K]> | null) => void>;
-};
-
-const runtimeWaiters: RuntimeWaiterMap = {
-  homepage: [],
-};
-
-function getRuntimeStore(): RuntimeServices {
-  window[RUNTIME_STORE_KEY] ??= {};
-  return window[RUNTIME_STORE_KEY] as RuntimeServices;
-}
-
-export function registerRuntime<K extends RuntimeServiceName>(
-  name: K,
-  service: RuntimeServices[K] | null
-): void {
-  const store = getRuntimeStore();
-
-  if (service) {
-    store[name] = service;
+export function registerHomepageRuntime(runtime: HomepageRuntimeApi | null): void {
+  if (runtime) {
+    window.__bbHomepageRuntime = runtime;
   } else {
-    delete store[name];
+    delete window.__bbHomepageRuntime;
   }
-
-  const waiters = runtimeWaiters[name];
-  if (!waiters.length) return;
-
-  const queued = waiters.splice(0, waiters.length);
-  queued.forEach((resolve) => resolve((store[name] ?? null) as NonNullable<RuntimeServices[K]> | null));
+  window.dispatchEvent(new CustomEvent(RUNTIME_CHANGED_EVENT));
 }
 
-export function getRuntime<K extends RuntimeServiceName>(
-  name: K
-): NonNullable<RuntimeServices[K]> | null {
-  const store = getRuntimeStore();
-  return (store[name] ?? null) as NonNullable<RuntimeServices[K]> | null;
+export function getHomepageRuntime(): HomepageRuntimeApi | null {
+  return window.__bbHomepageRuntime ?? null;
 }
 
-export function waitForRuntime<K extends RuntimeServiceName>(
-  name: K,
-  timeoutMs: number = 2000
-): Promise<NonNullable<RuntimeServices[K]> | null> {
-  const existing = getRuntime(name);
+export function waitForHomepageRuntime(timeoutMs: number = 2000): Promise<HomepageRuntimeApi | null> {
+  const existing = getHomepageRuntime();
   if (existing) {
     return Promise.resolve(existing);
   }
 
   return new Promise((resolve) => {
-    const waiters = runtimeWaiters[name] as Array<(service: NonNullable<RuntimeServices[K]> | null) => void>;
-    let settled = false;
-
-    const finish = (service: NonNullable<RuntimeServices[K]> | null): void => {
-      if (settled) return;
-      settled = true;
-      const index = waiters.indexOf(finish);
-      if (index >= 0) {
-        waiters.splice(index, 1);
-      }
+    const finish = (): void => {
+      window.removeEventListener(RUNTIME_CHANGED_EVENT, finish);
       clearTimeout(timeoutId);
-      resolve(service);
+      resolve(getHomepageRuntime());
     };
-
-    const timeoutId = window.setTimeout(() => {
-      finish(getRuntime(name));
-    }, timeoutMs);
-
-    waiters.push(finish);
+    const timeoutId = window.setTimeout(finish, timeoutMs);
+    window.addEventListener(RUNTIME_CHANGED_EVENT, finish);
   });
-}
-
-export function registerHomepageRuntime(runtime: HomepageRuntimeApi | null): void {
-  registerRuntime('homepage', runtime);
-}
-
-export function getHomepageRuntime(): HomepageRuntimeApi | null {
-  return getRuntime('homepage');
-}
-
-export function waitForHomepageRuntime(timeoutMs?: number): Promise<HomepageRuntimeApi | null> {
-  return waitForRuntime('homepage', timeoutMs);
 }
