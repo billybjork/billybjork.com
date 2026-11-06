@@ -9,6 +9,7 @@ import {
   pressKey,
   statusText,
   stubXhr,
+  toolbarButton,
   type EditorHarness,
   type FakeXhr,
 } from './edit-harness';
@@ -125,6 +126,42 @@ describe('re-cutting the sprite from the current video', () => {
     expect(button.disabled).toBe(false);
     expect(button.textContent).toBe('Generate New Sprite');
     expect(dialog()).not.toBeNull();
+  });
+
+  it('retries with the same temp video after a failure', async () => {
+    await openUpdateSprite();
+    let attempts = 0;
+    const sent: Array<FormDataEntryValue | null> = [];
+    harness.respond('/api/generate-sprite-sheet', (call) => {
+      attempts += 1;
+      sent.push((call.body as FormData).get('temp_id'));
+      return attempts === 1 ? jsonResponse({ detail: 'ffmpeg sad' }, 500) : jsonResponse({ success: true, video: NEW_VIDEO });
+    });
+    const button = dialog()!.querySelector<HTMLButtonElement>('#hero-video-process')!;
+
+    button.click();
+    await settle();
+    button.click();
+    await settle();
+
+    expect(sent).toEqual(['temp-1', 'temp-1']);
+    expect(notifications()).toContain('Hero sprite updated successfully!');
+  });
+
+  it('offers a new video for cleanup if it is discarded before a save, and the server keeps what is saved', async () => {
+    vi.stubGlobal('confirm', () => true);
+    await openUpdateSprite();
+    respondToProcess();
+    harness.respond('/api/cleanup-assets', () => jsonResponse({ success: true }));
+    dialog()!.querySelector<HTMLButtonElement>('#hero-video-process')!.click();
+    await settle();
+
+    toolbarButton('cancel').click();
+    await settle();
+
+    const cleanup = harness.calls.find((call) => call.url === '/api/cleanup-assets');
+    expect((cleanup?.body as { urls: string[] }).urls).toEqual(expect.arrayContaining([NEW_VIDEO.hls, NEW_VIDEO.spriteSheet]));
+    expect(harness.saves()).toHaveLength(0);
   });
 
   it('warns before leaving only while processing', async () => {
@@ -264,7 +301,7 @@ describe('uploading a new video', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it('flags a failed encode and still lets the sprite retry it', async () => {
+  it('flags a failed encode and says what to do about it', async () => {
     const { xhr } = await openWithUpload();
     harness.respond('/api/hls-progress/session-1', () => jsonResponse({ status: 'error' }));
     await finishUpload(xhr, { hls_session_id: 'session-1' });
@@ -272,7 +309,7 @@ describe('uploading a new video', () => {
 
     const fill = dialog()!.querySelector<HTMLElement>('.edit-hero-progress-fill')!;
     expect(fill.classList.contains('has-error')).toBe(true);
-    expect(dialog()?.querySelector('.edit-hero-progress-text')?.textContent).toBe('HLS encoding failed - will retry on confirm');
+    expect(dialog()?.querySelector('.edit-hero-progress-text')?.textContent).toBe('HLS encoding failed. Close this and upload the video again.');
 
     await settle(2000);
     expect(fill.classList.contains('has-error')).toBe(false);

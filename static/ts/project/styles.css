@@ -323,3 +323,10 @@
     border: none;
     display: block;
 }
+
+.project-content .callout {
+    padding: 1rem;
+    background: rgba(59, 130, 246, 0.1);
+    border-left: 4px solid #3b82f6;
+    border-radius: 0 8px 8px 0;
+}

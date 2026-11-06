@@ -77,10 +77,12 @@ def run_startup_sync(policy: str) -> None:
 
 
 def sync_from_object_storage(*, require_marker: bool = False) -> int:
-    """Download all content files from object storage to local filesystem.
+    """Make local content match object storage, on app startup after a redeploy.
 
-    Called on app startup so the container has the latest content even after a
-    redeploy.
+    Local files the bucket lacks are removed, or a project deleted in the editor
+    would return from the image's git copy. A listing with no content files says
+    nothing about what should exist, so it removes nothing. Any listing or
+    download failure raises before anything is removed.
 
     Returns:
         Number of files synced.
@@ -94,7 +96,7 @@ def sync_from_object_storage(*, require_marker: bool = False) -> int:
         return 0
 
     client = get_object_storage_client()
-    synced = 0
+    pulled: set[Path] = set()
 
     for object_key in list_keys(OBJECT_STORAGE_CONTENT_PREFIX):
         relative = object_key[len(OBJECT_STORAGE_CONTENT_PREFIX):]
@@ -104,16 +106,20 @@ def sync_from_object_storage(*, require_marker: bool = False) -> int:
 
         local_path.parent.mkdir(parents=True, exist_ok=True)
         client.download_file(get_bucket_name(), object_key, str(local_path))
-        synced += 1
+        pulled.add(local_path)
 
-    if synced:
+    if pulled:
         logger.info(
             "Synced %d file(s) from object storage to %s",
-            synced,
+            len(pulled),
             get_content_paths().content_dir,
         )
+        for path in _iter_local_content_files():
+            if path.resolve() not in pulled:
+                path.unlink()
+                logger.info("Removed local content file absent from object storage: %s", path)
 
-    return synced
+    return len(pulled)
 
 
 def has_canonical_marker() -> bool:

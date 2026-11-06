@@ -1,7 +1,7 @@
 import io
 from typing import BinaryIO
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 MAX_IMAGE_DIMENSION = 2000
 WEBP_QUALITY = 80
@@ -13,16 +13,15 @@ def process_image(file_data: BinaryIO) -> bytes:
     Raises ValueError for data that isn't an image.
     """
     try:
-        img = Image.open(file_data)
+        img = ImageOps.exif_transpose(Image.open(file_data))
     except Exception as e:
         raise ValueError(f"Failed to open image: {e}")
 
     if img.mode in ('RGBA', 'LA', 'P'):
         # Transparency flattens onto white.
+        img = img.convert('RGBA')
         background = Image.new('RGB', img.size, (255, 255, 255))
-        if img.mode == 'P':
-            img = img.convert('RGBA')
-        background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+        background.paste(img, mask=img.split()[-1])
         img = background
     elif img.mode != 'RGB':
         img = img.convert('RGB')

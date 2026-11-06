@@ -1,7 +1,7 @@
 import type { BlockContext, HtmlBlock, ImageBlock, VideoBlock } from '../types/blocks';
 import { styleDeclares, syncSandboxAutoHeight } from '../core/html-sandbox';
 import { parseStyle, serializeStyle } from './block-style';
-import { uploadContentVideo, uploadProcessedImage, type VideoUploadProgressUpdate } from './media-upload';
+import { uploadContentVideo, uploadImage, type VideoUploadProgressUpdate } from './media-upload';
 import { showNotification } from './notify';
 import type { BlockStore } from './store';
 import { clamp } from './clamp';
@@ -27,8 +27,8 @@ interface ResizeState {
 export interface MediaController {
   select(element: HTMLElement, block: SelectableBlock): void;
   deselect(): void;
-  uploadImageInto(file: File, context: BlockContext): Promise<void>;
-  uploadVideoInto(file: File, context: BlockContext, onProgress?: (update: VideoUploadProgressUpdate) => void): Promise<void>;
+  uploadImageInto(file: File, blockId: string): Promise<void>;
+  uploadVideoInto(file: File, blockId: string, onProgress?: (update: VideoUploadProgressUpdate) => void): Promise<void>;
 }
 
 const MIN_WIDTH_PERCENT = 20;
@@ -68,17 +68,6 @@ function positionHandle(handle: HTMLElement, position: HandlePosition, rect: DOM
   handle.style.left = `${left - HANDLE_OFFSET_PX}px`;
 }
 
-function findBlockContext(store: BlockStore, blockId: string): BlockContext | null {
-  for (const [index, block] of store.blocks.entries()) {
-    if (block.id === blockId) return { index };
-    if (block.type === 'row') {
-      if (block.left.id === blockId) return { index, rowSide: 'left' };
-      if (block.right.id === blockId) return { index, rowSide: 'right' };
-    }
-  }
-  return null;
-}
-
 export function createMediaController(store: BlockStore, signal: AbortSignal): MediaController {
   let selected: { element: HTMLElement; block: SelectableBlock; context: BlockContext | null } | null = null;
   let handles: HTMLDivElement[] = [];
@@ -97,7 +86,7 @@ export function createMediaController(store: BlockStore, signal: AbortSignal): M
 
   const writeStyle = (style: string | null, markDirty: boolean): void => {
     if (!selected) return;
-    selected.context ??= findBlockContext(store, selected.block.id);
+    selected.context ??= store.contextOf(selected.block.id);
     if (selected.context) {
       store.updateFields(selected.context, { style }, { render: false, markDirty });
     }
@@ -219,11 +208,12 @@ export function createMediaController(store: BlockStore, signal: AbortSignal): M
     selected = null;
   };
 
-  const uploadImageInto = async (file: File, context: BlockContext): Promise<void> => {
+  const uploadImageInto = async (file: File, blockId: string): Promise<void> => {
     showNotification('Processing image...', 'info');
     try {
-      const url = await uploadProcessedImage(file);
-      if (!store.blockAt(context)) throw new Error('Target block not found');
+      const url = await uploadImage(file);
+      const context = store.contextOf(blockId);
+      if (!context) throw new Error('Target block not found');
       store.updateFields(context, { src: url, alt: file.name.replace(/\.[^/.]+$/, '') });
       showNotification('Image uploaded!', 'success');
     } catch (error) {
@@ -243,7 +233,13 @@ export function createMediaController(store: BlockStore, signal: AbortSignal): M
     const index = Number.parseInt(focused?.closest<HTMLElement>('.block-wrapper')?.dataset.blockIndex ?? '', 10);
     if (Number.isNaN(index)) return;
     const rowSide = focused?.closest('.row-column-left') ? 'left' : focused?.closest('.row-column-right') ? 'right' : undefined;
-    void uploadImageInto(file, { index, rowSide });
+    let target = store.blockAt({ index, rowSide });
+    // Only an image block can hold it, so anywhere else it gets its own block next to the focus.
+    if (target?.type !== 'image') {
+      const inserted = store.insert(index + 1, 'image');
+      target = store.blockAt({ index: inserted });
+    }
+    if (target) void uploadImageInto(file, target.id);
   }, { signal });
 
   document.addEventListener('click', (event) => {
@@ -260,7 +256,7 @@ export function createMediaController(store: BlockStore, signal: AbortSignal): M
       if (selected?.element === element) return;
       deselect();
 
-      selected = { element, block, context: findBlockContext(store, block.id) };
+      selected = { element, block, context: store.contextOf(block.id) };
       element.classList.add('media-selected');
       createHandles(element, block.type === 'html' ? ALL_HANDLES : CORNER_HANDLES);
       updateHandlePositions();
@@ -269,11 +265,12 @@ export function createMediaController(store: BlockStore, signal: AbortSignal): M
     deselect,
     uploadImageInto,
 
-    async uploadVideoInto(file, context, onProgress) {
+    async uploadVideoInto(file, blockId, onProgress) {
       showNotification('Processing video...', 'info');
       try {
         const url = await uploadContentVideo(file, onProgress);
-        if (!store.blockAt(context)) throw new Error('Target block not found');
+        const context = store.contextOf(blockId);
+        if (!context) throw new Error('Target block not found');
         store.updateFields(context, { src: url });
         showNotification('Video processed!', 'success');
       } catch (error) {

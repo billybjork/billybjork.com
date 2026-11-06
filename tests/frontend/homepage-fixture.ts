@@ -102,7 +102,7 @@ export function createHomepageFixture(): {
       class="homepage-detail-scene"
       id="homepage-detail-scene"
       aria-hidden="true">
-      <div class="homepage-detail-backdrop" data-close-detail></div>
+      <div class="homepage-detail-backdrop"></div>
       <div class="homepage-detail-scroll">
         <article class="homepage-detail-shell">
           <header class="homepage-detail-header">
@@ -167,7 +167,7 @@ export function navigateBack(url: string): void {
 }
 
 export class FakeHls {
-  static Events = { MANIFEST_PARSED: 'manifest-parsed', ERROR: 'error' };
+  static Events = { MANIFEST_PARSED: 'manifest-parsed', FRAG_LOADED: 'frag-loaded', ERROR: 'error' };
   static ErrorTypes = { NETWORK_ERROR: 'network', MEDIA_ERROR: 'media' };
   static instances: FakeHls[] = [];
   static isSupported = (): boolean => true;
@@ -175,20 +175,36 @@ export class FakeHls {
   levels: unknown[] = [];
   startLevel = -1;
   destroyed = false;
-  private readonly handlers = new Map<string, () => void>();
+  startLoads = 0;
+  mediaRecoveries = 0;
+  /** Stands in for a server with nothing to play: the manifest never parses. */
+  static manifestLoads = true;
+  private readonly handlers = new Map<string, (event: string, data: unknown) => void>();
 
   constructor() {
     FakeHls.instances.push(this);
   }
 
-  on(event: string, handler: () => void): void {
+  on(event: string, handler: (event: string, data: unknown) => void): void {
     this.handlers.set(event, handler);
+  }
+
+  emit(event: string, data?: unknown): void {
+    this.handlers.get(event)?.(event, data);
+  }
+
+  startLoad(): void {
+    this.startLoads += 1;
+  }
+
+  recoverMediaError(): void {
+    this.mediaRecoveries += 1;
   }
 
   loadSource(): void {}
 
   attachMedia(): void {
-    queueMicrotask(() => this.handlers.get(FakeHls.Events.MANIFEST_PARSED)?.());
+    if (FakeHls.manifestLoads) queueMicrotask(() => this.emit(FakeHls.Events.MANIFEST_PARSED));
   }
 
   destroy(): void {

@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from analytics import get_project_stats, record_view
 from client_address import client_ip
 from cms.about import load_about
-from cms.projects import ProjectCard, load_all_projects, load_project
+from cms.projects import ProjectCard, ProjectInfo, load_all_projects, load_project
 from cms.site_settings import load_site_settings
 from edit_auth import is_edit_mode
 from templating import templates
@@ -42,10 +42,19 @@ def _page_context(request: Request) -> dict:
     }
 
 
-def _render_homepage(request: Request, show_drafts: bool, **context) -> HTMLResponse:
+def _render_homepage(
+    request: Request,
+    show_drafts: bool,
+    opening: ProjectInfo | None = None,
+    **context,
+) -> HTMLResponse:
+    """`opening` is the project the URL names; the page opens it from its card, so it always has one."""
     page = _page_context(request)
     page.update((key, value) for key, value in context.items() if value)
-    page["projects"] = _homepage_cards(show_drafts and page["is_dev_mode"])
+    cards = _homepage_cards(show_drafts and page["is_dev_mode"])
+    if opening and all(card.slug != opening.slug for card in cards):
+        cards.append(opening.to_card())
+    page["projects"] = cards
     return templates.TemplateResponse(request, "index.html", page)
 
 
@@ -86,13 +95,14 @@ async def read_project(
     show_drafts: bool = Query(False),
 ):
     project = load_project(project_slug)
-    if not project:
+    if not project or (project.is_draft and not is_edit_mode(request)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     if not _is_partial_request(request):
         return _render_homepage(
             request,
             show_drafts,
+            opening=project,
             page_title=project.name,
             page_meta_description=project.meta_description,
             og_image_link=project.og_image_link,

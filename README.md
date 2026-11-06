@@ -48,7 +48,7 @@ To move public asset hosts: copy objects preserving keys, set the new base and l
 
 ## Routes
 
-Public: `/`, `/me`, `/{slug}` (a project; `?_partial=1` returns just its detail fragment), `/feed.xml`, `/media/*`, `/test`, `/will-you-be-my-valentine`.
+Public: `/`, `/me`, `/{slug}` (a project, 404 for a draft unless editing; `?_partial=1` returns just its detail fragment), `/feed.xml`, `/media/*`, `/test`, `/will-you-be-my-valentine`.
 
 Editing: `/edit/login`, `/edit/logout`, `/api/*` (gated server-side by `edit_auth.require_edit_mode`). `Cmd/Ctrl+E` enters edit mode on project pages and `/me`.
 
@@ -82,7 +82,7 @@ youtube: https://youtube.com/watch?v=...
 
 The OG image is `og_image`, else `video.thumbnail`, else `video.spriteSheet`.
 
-**Object storage is the runtime source of truth; git is a backup.** Saves write the local file and then upload it, startup pulls everything back, and deletes archive to `content-archive/` first. Direct edits under `content/` are not canonical until published:
+**Object storage is the runtime source of truth; git is a backup.** Saves write the local file and then upload it, and report `synced: false` if the upload failed. Startup pulls everything back and removes local files the bucket lacks, unless the bucket has no content at all. Deletes and renames archive to `content-archive/` first, and stop if that fails. Direct edits under `content/` are not canonical until published:
 
 ```bash
 uv run python -m cms.sync seed                 # upload content/ and write the canonical marker
@@ -100,4 +100,4 @@ Saves use optimistic locking: a request carries `base_revision`, a mismatch retu
 | Content videos | Compress | MP4 @ 720p, crf 28 |
 | Hero videos | Full pipeline | HLS ladder, sprite sheet, poster of frame 0 |
 
-`media/keys.py` defines the object keys.
+`media/keys.py` defines the object keys. Hero video files are deleted only when no content references them and no encode is writing them; a project's hero folder need not match its slug.

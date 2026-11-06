@@ -194,7 +194,7 @@ class HeroVideoEditor {
           this.hideProgressAfter(HLS_READY_MESSAGE_MS);
         },
         onError: () => {
-          this.progressText.textContent = 'HLS encoding failed - will retry on confirm';
+          this.progressText.textContent = 'HLS encoding failed. Close this and upload the video again.';
           this.progressFill.classList.add('has-error');
           this.hideProgressAfter(HLS_FAILED_MESSAGE_MS, () => this.progressFill.classList.remove('has-error'));
         },
@@ -409,11 +409,10 @@ class HeroVideoEditor {
     formData.append('sprite_start', String(this.sprite.start));
     formData.append('sprite_duration', String(this.sprite.duration));
     if (this.hlsSessionId) formData.append('hls_session_id', this.hlsSessionId);
-    // A poll still waiting on its timer must not ask about a temp id this request consumes.
-    this.tempId = null;
 
     try {
       const result = await postForm<SpriteSheetResult>(API.generateSpriteSheet, formData, 'Sprite sheet generation failed');
+      this.tempId = null;
       this.stopHlsWatch?.();
 
       this.setProgress(95, 'Saving...');

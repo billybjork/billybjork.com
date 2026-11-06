@@ -3,7 +3,7 @@ import { withShowDrafts } from '../core/show-drafts';
 import type { AboutData, ProjectData, SaveResult } from '../types/api';
 import { API, fetchJSON } from './api';
 import { showNotification } from './notify';
-import { findActiveContent, findProjectContent } from './page-content';
+import { findActiveContent, findDetailScroller, findProjectContent } from './page-content';
 import { createProjectTopControls, makeHeaderEditable } from './project-controls';
 import type { BlockStore } from './store';
 
@@ -33,6 +33,8 @@ export interface PageAdapter {
   findContent(): HTMLElement | null;
   /** The subtree whose late-loading media can shift the content while the editor opens. */
   stabilityRoot(content: HTMLElement): ParentNode;
+  /** What scrolls this page's content; null means the window. */
+  scrollContainer(): HTMLElement | null;
   toolbarTitle(): string;
   saveBody(input: SaveBodyInput): Record<string, unknown>;
   onSaved(result: SaveResult): void;
@@ -58,6 +60,7 @@ export function aboutPage(): PageAdapter {
     },
     findContent: findActiveContent,
     stabilityRoot: (content) => content,
+    scrollContainer: () => null,
     toolbarTitle: () => 'About Page',
     saveBody: ({ markdown, stamp }) => ({ markdown, ...stamp }),
     onSaved() {},
@@ -95,6 +98,7 @@ export function projectPage(slug: string): PageAdapter {
     },
     findContent: findProjectContent,
     stabilityRoot: detailScene,
+    scrollContainer: findDetailScroller,
     toolbarTitle: () => project.name,
 
     saveBody({ markdown, stamp, cleanupCandidates }) {

@@ -5,7 +5,7 @@ import { syncDetailScroll } from '../project/detail-runtime';
 import { readProjectCards, type ProjectCard } from './card';
 import { DetailLoader } from './detail-loader';
 import { measureFlight, TransitionFlight } from './flight';
-import { currentProjectSlug, pushProjectUrl, replaceProjectUrl } from './history';
+import { currentProjectSlug, pushProjectUrl, replaceProjectUrl, restoreEditingUrl } from './history';
 import { HomepageSpriteRuntime } from './sprite-runtime';
 
 const OPEN_DURATION_MS = 340;
@@ -50,6 +50,7 @@ export class HomepageController implements HomepageRuntimeApi {
   private sprites: HomepageSpriteRuntime | null = null;
   private openSlug: string | null = null;
   private openingSlug: string | null = null;
+  private renamedSlug: string | null = null;
   private lastFocusedBeforeOpen: Element | null = null;
   private state: SceneState = 'closed';
   private transition = new AbortController();
@@ -94,6 +95,7 @@ export class HomepageController implements HomepageRuntimeApi {
   }
 
   renameProjectSlug(nextSlug: string): void {
+    this.renamedSlug = nextSlug;
     replaceProjectUrl(nextSlug);
   }
 
@@ -107,10 +109,15 @@ export class HomepageController implements HomepageRuntimeApi {
     if (slug) {
       event.preventDefault();
       void this.openProject(slug, 'push');
-    } else if (target.closest('[data-close-detail]') && this.openSlug) {
+    } else if (this.openSlug && !isEditingActive() && (target.closest('[data-close-detail]') || this.isClickOutsideDetail(target))) {
       event.preventDefault();
       void this.closeProject('push');
     }
+  }
+
+  /** The scroller covers the scene, so its own margins are "outside". A drag selecting text can end here too. */
+  private isClickOutsideDetail(target: Element): boolean {
+    return target === this.detailScroll && window.getSelection()?.isCollapsed !== false;
   }
 
   private onKeyDown(event: KeyboardEvent): void {
@@ -122,6 +129,13 @@ export class HomepageController implements HomepageRuntimeApi {
   }
 
   private onPopState(): void {
+    // The editor holds this page, and resetting the scene would wipe it. Leaving goes through Save or Discard.
+    if (isEditingActive()) {
+      const editing = this.renamedSlug ?? this.openSlug;
+      if (editing) restoreEditingUrl(editing);
+      return;
+    }
+
     const slug = currentProjectSlug();
     if (slug) {
       void this.openProject(slug, 'none');

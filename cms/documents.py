@@ -10,7 +10,11 @@ from pathlib import Path
 import yaml
 
 from cms import sync
-from object_storage import rewrite_public_urls_in_text
+from object_storage import is_object_storage_configured, rewrite_public_urls_in_text
+
+
+class ArchiveFailed(Exception):
+    """The safety copy could not be written, so the document was left in place."""
 
 
 def _date_representer(dumper, data):
@@ -65,19 +69,30 @@ def read_document(path: Path) -> Document | None:
     return document
 
 
-def write_document(path: Path, frontmatter: dict, markdown_content: str) -> None:
+def write_document(path: Path, frontmatter: dict, markdown_content: str) -> bool:
+    """False when object storage is configured but the upload failed: the next deploy loses the write."""
     frontmatter_text = yaml.dump(
         frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"---\n{frontmatter_text}---\n\n{markdown_content}", encoding="utf-8")
     _cache.pop(path, None)
-    sync.sync_to_object_storage(path)
+    return sync.sync_to_object_storage(path) or not is_object_storage_configured()
 
 
-def delete_document(path: Path) -> None:
-    """Archive to object storage as a safety net, then remove from both places."""
-    sync.archive_to_object_storage(path)
+def archive_document(path: Path) -> None:
+    """Copy to the archive as a safety net. Raises ArchiveFailed; without object storage there is no archive."""
+    if is_object_storage_configured() and not sync.archive_to_object_storage(path):
+        raise ArchiveFailed(path.name)
+
+
+def remove_document(path: Path) -> None:
     path.unlink()
     _cache.pop(path, None)
     sync.delete_from_object_storage(path)
+
+
+def delete_document(path: Path) -> None:
+    """Archive, then remove from both places. A failed archive stops the delete."""
+    archive_document(path)
+    remove_document(path)

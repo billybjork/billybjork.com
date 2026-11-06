@@ -422,10 +422,14 @@ def extract_thumbnail_frames(video_path: str, num_frames: int, width: int, heigh
     return frames_b64
 
 
-def encode_and_upload_hls(video_path: str, project_slug: str, progress_callback: ProgressCallback) -> str:
+def encode_and_upload_hls(
+    video_path: str,
+    project_slug: str,
+    version: str,
+    progress_callback: ProgressCallback,
+) -> str:
     """Runs right after upload, while the user is still choosing a sprite range."""
     _require_ffmpeg()
-    version = str(int(time.time()))
 
     with tempfile.TemporaryDirectory() as temp_dir:
         hls_dir = os.path.join(temp_dir, 'hls')

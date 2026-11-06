@@ -10,9 +10,18 @@ const STORED_RESTORE_PASSES = 4;
 const LATE_RESTORE_DELAY_MS = 180;
 const LATE_RESTORE_PASSES = 2;
 
-function scrollInstantlyTo(top: number): void {
-  const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-  window.scrollTo({ top: clamp(top, 0, maxScrollTop), left: 0, behavior: 'instant' });
+/** What scrolls the content: an element, or null for the window. */
+type Scroller = HTMLElement | null;
+
+function scrollTopOf(scroller: Scroller): number {
+  return scroller ? scroller.scrollTop : window.scrollY;
+}
+
+function scrollInstantlyTo(scroller: Scroller, top: number): void {
+  const maxScrollTop = scroller
+    ? Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    : Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  (scroller ?? window).scrollTo({ top: clamp(top, 0, maxScrollTop), left: 0, behavior: 'instant' });
 }
 
 function runOverFrames(passes: number, pass: () => void, isCurrent: () => boolean = () => true): void {
@@ -49,16 +58,16 @@ function wrapperAt(blocksRoot: HTMLElement, index: number): HTMLElement | null {
   return blocksRoot.querySelector<HTMLElement>(`.block-wrapper[data-block-index="${index}"]`);
 }
 
-function scrollSoThatElementIsAt(element: HTMLElement, top: number): void {
+function scrollSoThatElementIsAt(scroller: Scroller, element: HTMLElement, top: number): void {
   const delta = element.getBoundingClientRect().top - top;
-  if (Math.abs(delta) >= 1) scrollInstantlyTo(window.scrollY + delta);
+  if (Math.abs(delta) >= 1) scrollInstantlyTo(scroller, scrollTopOf(scroller) + delta);
 }
 
 /**
  * Keeps the page visually still while the editor rebuilds its DOM. A newer restore of the
  * same kind cancels an older one, so a fast sequence of re-renders never fights itself.
  */
-export function createScrollAnchors() {
+export function createScrollAnchors(scroller: Scroller) {
   const latest = { render: 0, modeSwitch: 0, container: 0 };
 
   const hold = (kind: keyof typeof latest, root: ParentNode, restoreOnce: () => void): void => {
@@ -87,7 +96,7 @@ export function createScrollAnchors() {
         const target = (anchor.blockId
           ? blocksRoot.querySelector<HTMLElement>(`.block-wrapper[data-block-id="${anchor.blockId}"]`)
           : null) ?? wrapperAt(blocksRoot, clamp(anchor.blockIndex, 0, count - 1));
-        if (target) scrollSoThatElementIsAt(target, anchor.blockTop);
+        if (target) scrollSoThatElementIsAt(scroller, target, anchor.blockTop);
       });
     },
 
@@ -101,7 +110,7 @@ export function createScrollAnchors() {
       return (blocksRoot, stabilityRoot) => {
         if (blockIndex < 0) {
           hold('container', stabilityRoot, () => {
-            scrollInstantlyTo(window.scrollY + content.getBoundingClientRect().top + offsetWithinContent);
+            scrollInstantlyTo(scroller, scrollTopOf(scroller) + content.getBoundingClientRect().top + offsetWithinContent);
           });
           return;
         }
@@ -109,7 +118,7 @@ export function createScrollAnchors() {
         if (count === 0) return;
         hold('modeSwitch', stabilityRoot, () => {
           const target = wrapperAt(blocksRoot, clamp(blockIndex, 0, count - 1));
-          if (target) scrollSoThatElementIsAt(target, blockTop);
+          if (target) scrollSoThatElementIsAt(scroller, target, blockTop);
         });
       };
     },
@@ -118,7 +127,7 @@ export function createScrollAnchors() {
 
 interface StoredScrollState {
   pathname: string;
-  scrollY: number;
+  scrollTop: number;
   offsetWithinContent: number | null;
   anchorIndex: number | null;
   anchorTop: number | null;
@@ -133,13 +142,13 @@ function captureBlockPosition(content: HTMLElement): { anchorIndex: number | nul
     : { anchorIndex: null, anchorTop: null };
 }
 
-export function persistScrollForNavigation(): void {
+export function persistScrollForNavigation(scroller: Scroller): void {
   const content = findActiveContent();
   const position = content ? captureBlockPosition(content) : { anchorIndex: null, anchorTop: null };
 
   const state: StoredScrollState = {
     pathname: window.location.pathname,
-    scrollY: window.scrollY,
+    scrollTop: scrollTopOf(scroller),
     offsetWithinContent: content ? -content.getBoundingClientRect().top : null,
     ...position,
     expiresAt: Date.now() + STORED_TTL_MS,
@@ -158,7 +167,8 @@ function readStoredState(): StoredScrollState | null {
   }
 }
 
-export function restorePersistedScroll(): void {
+/** Call once the content is on the page: a project's detail mounts well after the document loads. */
+export function restorePersistedScroll(scroller: Scroller): void {
   const state = readStoredState();
   if (!state || Date.now() > state.expiresAt) {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -172,19 +182,21 @@ export function restorePersistedScroll(): void {
     if (window.location.hash) return;
 
     const content = findActiveContent();
-    let targetTop = state.scrollY;
+    let targetTop = state.scrollTop;
     const anchor = content && state.anchorIndex !== null
       ? content.querySelectorAll<HTMLElement>('.content-block')[state.anchorIndex]
       : null;
     if (anchor && state.anchorTop !== null) {
-      targetTop = window.scrollY + anchor.getBoundingClientRect().top - state.anchorTop;
+      targetTop = scrollTopOf(scroller) + anchor.getBoundingClientRect().top - state.anchorTop;
     } else if (content && state.offsetWithinContent !== null) {
-      targetTop = window.scrollY + content.getBoundingClientRect().top + state.offsetWithinContent;
+      targetTop = scrollTopOf(scroller) + content.getBoundingClientRect().top + state.offsetWithinContent;
     }
-    scrollInstantlyTo(targetTop);
+    scrollInstantlyTo(scroller, targetTop);
   };
 
   runOverFrames(STORED_RESTORE_PASSES, restoreOnce);
-  window.addEventListener('load', () => runOverFrames(STORED_RESTORE_PASSES, restoreOnce), { once: true });
+  if (document.readyState !== 'complete') {
+    window.addEventListener('load', () => runOverFrames(STORED_RESTORE_PASSES, restoreOnce), { once: true });
+  }
   setTimeout(() => runOverFrames(LATE_RESTORE_PASSES, restoreOnce), LATE_RESTORE_DELAY_MS);
 }

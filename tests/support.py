@@ -27,11 +27,14 @@ class FakeObjectStorage:
 
     def __init__(self) -> None:
         self.objects: dict[str, dict] = {}
+        self.failing_upload_prefixes: tuple[str, ...] = ()
 
     def put(self, key: str, body: bytes = b"x", content_type: str = "application/octet-stream") -> None:
         self.objects[key] = {"Body": body, "ContentType": content_type, "CacheControl": None}
 
     def upload_fileobj(self, fileobj, _bucket, key, ExtraArgs=None) -> None:
+        if key.startswith(self.failing_upload_prefixes):
+            raise ClientError({"Error": {"Code": "SlowDown"}}, "upload")
         extra = ExtraArgs or {}
         self.objects[key] = {
             "Body": fileobj.read(),
@@ -121,11 +124,16 @@ def _seed_content_root(content_root: Path) -> None:
 
 
 @contextmanager
-def managed_test_app(startup_content_sync_policy: str = "off") -> Iterator[TestAppHarness]:
+def managed_test_app(
+    startup_content_sync_policy: str = "off",
+    storage_configured: bool = True,
+) -> Iterator[TestAppHarness]:
     storage = FakeObjectStorage()
     environment = {
-        "OBJECT_STORAGE_ACCESS_KEY_ID": "key",
-        "OBJECT_STORAGE_SECRET_ACCESS_KEY": "secret",
+        "OBJECT_STORAGE_ACCESS_KEY_ID": "key" if storage_configured else "",
+        "OBJECT_STORAGE_SECRET_ACCESS_KEY": "secret" if storage_configured else "",
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
         "OBJECT_STORAGE_BUCKET": "bucket",
         "OBJECT_STORAGE_PUBLIC_BASE_URL": PUBLIC_BASE_URL,
         "OBJECT_STORAGE_LEGACY_PUBLIC_BASE_URLS": "",

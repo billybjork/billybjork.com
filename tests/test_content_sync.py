@@ -31,6 +31,35 @@ class StartupSyncTests(unittest.TestCase):
             run_startup_sync("guarded")
             self.assertTrue((app.projects_dir / "pulled.md").exists())
 
+    def test_pull_removes_local_files_the_bucket_no_longer_has(self) -> None:
+        with managed_test_app() as app:
+            app.storage.put("content/about.md", b"---\ntitle: About\n---\n\nFrom the bucket\n")
+            (app.content_root / ".dotfile").write_text("sync metadata stays", encoding="utf-8")
+
+            run_startup_sync("always")
+
+            self.assertFalse(app.project_file.exists())
+            self.assertEqual(app.client.get("/sample-project").status_code, 404)
+            self.assertTrue((app.content_root / "about.md").exists())
+            self.assertTrue((app.content_root / ".dotfile").exists())
+
+    def test_pull_removes_nothing_when_the_bucket_has_no_content(self) -> None:
+        with managed_test_app() as app:
+            run_startup_sync("always")
+            self.assertTrue(app.project_file.exists())
+
+            app.storage.put("content/.object-storage-canonical.json", b"{}")
+            run_startup_sync("always")
+            self.assertTrue(app.project_file.exists())
+
+    def test_failed_pull_removes_nothing(self) -> None:
+        with managed_test_app() as app:
+            app.storage.put("content/about.md", b"body")
+            with patch.object(app.storage, "download_file", side_effect=OSError("network")):
+                with self.assertRaises(OSError):
+                    run_startup_sync("always")
+            self.assertTrue(app.project_file.exists())
+
     def test_unknown_policy_stops_startup(self) -> None:
         with patch.dict(os.environ, {"CONTENT_STARTUP_SYNC_POLICY": "legacy"}):
             with self.assertRaises(ValueError):

@@ -7,6 +7,7 @@ import {
   notifications,
   openProjectEditor,
   stubXhr,
+  typeInLine,
   type EditorHarness,
 } from './edit-harness';
 
@@ -19,7 +20,6 @@ let harness: EditorHarness;
 beforeEach(() => {
   vi.useFakeTimers();
   harness = installHarness();
-  installImagePipeline();
 });
 
 afterEach(() => {
@@ -29,26 +29,6 @@ afterEach(() => {
 async function savedMarkdown(): Promise<unknown> {
   await vi.advanceTimersByTimeAsync(AUTO_SAVE_MS);
   return harness.lastSave().markdown;
-}
-
-/** jsdom has no canvas or image decoding; these stand in with a loaded 3000x1500 image. */
-function installImagePipeline(): void {
-  class LoadedImage {
-    width = 3000;
-    height = 1500;
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    set src(_value: string) {
-      queueMicrotask(() => this.onload?.());
-    }
-  }
-  vi.stubGlobal('Image', LoadedImage);
-  URL.createObjectURL = vi.fn(() => 'blob:x');
-  URL.revokeObjectURL = vi.fn();
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage: vi.fn() })) as never;
-  HTMLCanvasElement.prototype.toBlob = function toBlob(callback: BlobCallback) {
-    callback(new Blob(['webp'], { type: 'image/webp' }));
-  };
 }
 
 function dropFile(zone: HTMLElement, file: File): void {
@@ -88,7 +68,47 @@ describe('image blocks', () => {
     expect(notifications()).toContain('Image uploaded!');
     const upload = harness.calls.find((call) => call.url === '/api/upload-media')?.body as FormData;
     expect(Array.from(upload.keys())).toEqual(['file']);
+    const sent = upload.get('file') as File;
+    expect([sent.name, sent.type, await sent.text()]).toEqual(['my photo.png', 'image/png', 'x']);
     expect(String(await savedMarkdown()).startsWith('![my photo](https://cdn.example/new.webp)')).toBe(true);
+  });
+
+  it('fills the block it started on even if the blocks move during the upload', async () => {
+    let finish!: (response: Response) => void;
+    harness.respond('/api/upload-media', () => new Promise<Response>((resolve) => { finish = resolve; }));
+    await openProjectEditor(harness, 'Text');
+    document.querySelector<HTMLButtonElement>('.add-block-wrapper-top .merge-add-btn')!.click();
+    document.querySelector<HTMLButtonElement>('.slash-menu-item[data-command="image"]')!.click();
+    dropFile(blockWrappers()[0]!.querySelector('.upload-zone')!, new File(['x'], 'a.png', { type: 'image/png' }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    document.querySelector<HTMLButtonElement>('.add-block-wrapper-top .merge-add-btn')!.click();
+    document.querySelector<HTMLButtonElement>('.slash-menu-item[data-command="divider"]')!.click();
+    finish(jsonResponse({ url: 'https://cdn.example/moved.webp' }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(blockWrappers().map((wrapper) => wrapper.dataset.blockType)).toEqual(['divider', 'image', 'text']);
+    expect(blockWrappers()[1]!.querySelector<HTMLImageElement>('.block-image')?.src).toBe('https://cdn.example/moved.webp');
+  });
+
+  it('says so when the block is gone by the time the upload finishes', async () => {
+    let finish!: (response: Response) => void;
+    harness.respond('/api/upload-media', () => new Promise<Response>((resolve) => { finish = resolve; }));
+    await openProjectEditor(harness, 'Text');
+    document.querySelector<HTMLButtonElement>('.add-block-wrapper-top .merge-add-btn')!.click();
+    document.querySelector<HTMLButtonElement>('.slash-menu-item[data-command="image"]')!.click();
+    dropFile(blockWrappers()[0]!.querySelector('.upload-zone')!, new File(['x'], 'a.png', { type: 'image/png' }));
+    await vi.advanceTimersByTimeAsync(0);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { pressKey } = await import('./edit-harness');
+    pressKey(document, 'z', { metaKey: true });
+    pressKey(document, 'z', { metaKey: true });
+    finish(jsonResponse({ url: 'https://cdn.example/late.webp' }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(notifications()).toContain('Target block not found');
+    expect(document.querySelector('.block-image')).toBeNull();
   });
 
   it('reports a failed upload', async () => {
@@ -238,6 +258,23 @@ describe('video blocks', () => {
     expect(await savedMarkdown()).toBe('<video src="https://cdn.example/v.mp4" controls></video>');
   });
 
+  it('puts an uploaded poster on its own video even if the blocks move during the upload', async () => {
+    let finish!: (response: Response) => void;
+    harness.respond('/api/upload-media', () => new Promise<Response>((resolve) => { finish = resolve; }));
+    await openProjectEditor(harness, `Text\n\n<!-- block -->\n\n${VIDEO}`);
+    const input = blockWrappers()[1]!.querySelector<HTMLInputElement>('.video-poster-upload-input')!;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'p.png', { type: 'image/png' })], configurable: true });
+    input.dispatchEvent(new Event('change'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    document.querySelector<HTMLButtonElement>('.add-block-wrapper-top .merge-add-btn')!.click();
+    document.querySelector<HTMLButtonElement>('.slash-menu-item[data-command="divider"]')!.click();
+    finish(jsonResponse({ url: 'https://cdn.example/new-poster.webp' }));
+    await vi.advanceTimersByTimeAsync(AUTO_SAVE_MS);
+
+    expect(harness.lastSave().markdown).toBe('---\n\n<!-- block -->\n\nText\n\n<!-- block -->\n\n<video src="https://cdn.example/v.mp4" poster="https://cdn.example/new-poster.webp" controls></video>');
+  });
+
   it('uploads a video with progress, then shows it', async () => {
     const xhr = stubXhr();
     await openProjectEditor(harness, 'Text');
@@ -279,15 +316,46 @@ describe('video blocks', () => {
 });
 
 describe('pasting an image', () => {
+  function pasteImage(): ClipboardEvent {
+    const file = new File(['x'], 'pasted.png', { type: 'image/png' });
+    const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(event, 'clipboardData', { value: { items: [{ type: 'image/png', getAsFile: () => file }] } });
+    document.dispatchEvent(event);
+    return event;
+  }
+
+  it('puts it in a new image block after a focused text block, keeping the text', async () => {
+    harness.respond('/api/upload-media', () => jsonResponse({ url: 'https://cdn.example/pasted.webp' }));
+    await openProjectEditor(harness, 'First\n\n<!-- block -->\n\nLast');
+    typeInLine('First', 0);
+
+    expect(pasteImage().defaultPrevented).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(blockWrappers().map((wrapper) => wrapper.dataset.blockType)).toEqual(['text', 'image', 'text']);
+    expect(blockWrappers()[1]!.querySelector<HTMLImageElement>('.block-image')?.src).toBe('https://cdn.example/pasted.webp');
+    expect(notifications()).toContain('Image uploaded!');
+    expect(await savedMarkdown()).toBe('First\n\n<!-- block -->\n\n![pasted](https://cdn.example/pasted.webp)\n\n<!-- block -->\n\nLast');
+  });
+
+  it('puts it after the row when focus is in a text column', async () => {
+    harness.respond('/api/upload-media', () => jsonResponse({ url: 'https://cdn.example/pasted.webp' }));
+    await openProjectEditor(harness, '<!-- row -->\nLeft\n<!-- col -->\nRight\n<!-- /row -->');
+    const row = document.querySelector<HTMLElement>('.row-column-left .text-block-line')!;
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+    pasteImage();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(blockWrappers().map((wrapper) => wrapper.dataset.blockType)).toEqual(['row', 'image']);
+  });
+
   it('uploads into the focused image block', async () => {
     harness.respond('/api/upload-media', () => jsonResponse({ url: 'https://cdn.example/pasted.webp' }));
     await openProjectEditor(harness, IMAGE);
     blockWrappers()[0]!.querySelector<HTMLInputElement>('.image-alt-input')!.focus();
 
-    const file = new File(['x'], 'pasted.png', { type: 'image/png' });
-    const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
-    Object.defineProperty(event, 'clipboardData', { value: { items: [{ type: 'image/png', getAsFile: () => file }] } });
-    document.dispatchEvent(event);
+    const event = pasteImage();
     await vi.advanceTimersByTimeAsync(0);
 
     expect(event.defaultPrevented).toBe(true);

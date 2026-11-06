@@ -2,14 +2,20 @@
 import hashlib
 import json
 import logging
-from typing import Callable
+import re
+from pathlib import Path
+from typing import Iterable
+from urllib.parse import unquote
 
 from cms import sync
 from cms.paths import get_content_paths
-from media.keys import hero_root, hero_version
+from media.keys import hero_set
 from object_storage import delete_object, extract_public_asset_urls, list_keys, object_keys
 
 logger = logging.getLogger(__name__)
+
+# Matched in raw text, whatever the host: hero folder names can hold commas and percent escapes.
+_HERO_MANIFEST = re.compile(r"videos/[^\s\"'<>]+?\.m3u8")
 
 
 def _load_registry() -> dict:
@@ -51,18 +57,29 @@ def _unregister_asset(object_key: str) -> None:
         _save_registry(registry)
 
 
-def _referenced_keys() -> set[str]:
-    """Object keys referenced by any content file."""
+def _content_files() -> list[Path]:
     paths = get_content_paths()
     files = [paths.about_file, paths.settings_file]
     if paths.projects_dir.exists():
         files.extend(paths.projects_dir.glob("*.md"))
+    return [path for path in files if path.exists()]
 
+
+def _referenced_keys() -> set[str]:
+    """Object keys referenced by any content file."""
     keys: set[str] = set()
-    for path in files:
-        if path.exists():
-            keys |= object_keys(extract_public_asset_urls(path.read_text(encoding="utf-8")))
+    for path in _content_files():
+        keys |= object_keys(extract_public_asset_urls(path.read_text(encoding="utf-8")))
     return keys
+
+
+def _referenced_hero_sets() -> set[str]:
+    """The hero sets (see media.keys.hero_set) any content file points at, under either spelling of a URL."""
+    sets: set[str] = set()
+    for path in _content_files():
+        for manifest in _HERO_MANIFEST.findall(path.read_text(encoding="utf-8")):
+            sets |= {hero_set(manifest), hero_set(unquote(manifest))}
+    return sets - {None}
 
 
 def cleanup_orphans(keys_to_check: set[str]) -> list[str]:
@@ -71,46 +88,32 @@ def cleanup_orphans(keys_to_check: set[str]) -> list[str]:
         return []
 
     referenced = _referenced_keys()
+    hero_sets = _referenced_hero_sets()
     deleted = []
     for key in keys_to_check - referenced:
-        if delete_object(key):
+        if hero_set(key) not in hero_sets and delete_object(key):
             _unregister_asset(key)
             deleted.append(key)
             logger.info("Deleted orphaned asset: %s", key)
     return deleted
 
 
-def _delete_keys_under(prefix: str, should_delete: Callable[[str], bool]) -> list[str]:
-    """Best-effort: a listing failure is logged and must not fail the edit that triggered it."""
-    deleted = []
-    try:
-        for key in list_keys(prefix):
-            if should_delete(key) and delete_object(key):
-                deleted.append(key)
-                logger.info("Deleted hero video file: %s", key)
-    except Exception:
-        logger.exception("Error deleting object-storage keys under %s", prefix)
-    return deleted
+def cleanup_hero_folders(folders: Iterable[str], live_hero_sets: Iterable[str] = ()) -> list[str]:
+    """Delete files under these `videos/<folder>/` prefixes that no content references.
 
-
-def delete_hero_videos(project_slug: str) -> list[str]:
-    return _delete_keys_under(f"{hero_root(project_slug)}/", lambda _key: True)
-
-
-def cleanup_old_hero_versions(project_slug: str, current_hls_url: str | None) -> list[str]:
-    """Delete hero versions other than the one current_hls_url uses.
-
-    Older projects keep their HLS unversioned, directly under the root. Those
-    files go only when the current URL isn't under this project's root at all.
+    References, not paths, decide: a project keeps its hero folder through a rename, and 58
+    projects have one that never matched their slug. `live_hero_sets` are encodes in progress,
+    which no content can reference yet. Best-effort: a failure must not fail the triggering edit.
     """
-    root = f"{hero_root(project_slug)}/"
-    current_is_managed = f"/{root}" in (current_hls_url or "")
-    current_version = hero_version(project_slug, current_hls_url or "")
-
-    def is_stale(key: str) -> bool:
-        version = hero_version(project_slug, key)
-        if version:
-            return version != current_version
-        return not current_is_managed
-
-    return _delete_keys_under(root, is_stale)
+    keep = _referenced_hero_sets() | set(live_hero_sets)
+    prefixes = {spelling for folder in folders for spelling in (folder, unquote(folder))}
+    deleted = []
+    for prefix in prefixes:
+        try:
+            for key in list_keys(prefix):
+                if hero_set(key) not in keep and delete_object(key):
+                    deleted.append(key)
+                    logger.info("Deleted hero video file: %s", key)
+        except Exception:
+            logger.exception("Error deleting object-storage keys under %s", prefix)
+    return deleted

@@ -4,7 +4,7 @@ import { isShowDraftsActive, rememberShowDrafts, withoutShowDrafts, withShowDraf
 import { getHomepageRuntime } from '../core/runtime-registry';
 import { ICONS } from './icons';
 import { aboutPage, projectPage } from './page-adapter';
-import { isAboutPage } from './page-content';
+import { findDetailScroller, isAboutPage } from './page-content';
 import { showProjectCreateDialog } from './project-create';
 import { restorePersistedScroll } from './scroll';
 import { openEditor } from './session';
@@ -108,9 +108,21 @@ function listenForEditShortcut(): void {
   });
 }
 
+/** A project's detail is still opening when this runs, and the position belongs inside it. */
+async function restoreScrollAfterEditing(): Promise<void> {
+  const runtime = getHomepageRuntime();
+  const opening = runtime?.getOpenProjectSlug();
+  if (runtime && opening) {
+    await runtime.waitForProjectReady(opening);
+    restorePersistedScroll(findDetailScroller());
+  } else {
+    restorePersistedScroll(null);
+  }
+}
+
 /** edit.js is deferred, so the document is parsed and homepage.js has already run. */
 export function init(): void {
-  restorePersistedScroll();
+  void restoreScrollAfterEditing();
 
   const showDrafts = isShowDraftsActive();
   rememberShowDrafts(showDrafts);

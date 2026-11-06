@@ -1,5 +1,7 @@
 const HLS_JS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.12';
 const HLS_MIME_TYPE = 'application/vnd.apple.mpegurl';
+// In a row, with no fragment loading between them. hls.js has done its own retries before any of these.
+const MAX_FATAL_RECOVERIES = 3;
 
 const HLS_CONFIG: HlsConfig = {
   abrEwmaDefaultEstimate: 5000000,
@@ -89,10 +91,10 @@ function attachHlsJsPlayback(HlsClass: typeof Hls, options: AttachHlsPlaybackOpt
       resolve();
     };
     const fail = (error: Error): void => {
+      destroyHlsInstance(videoElement);
       if (settled) return;
       settled = true;
       cleanup();
-      destroyHlsInstance(videoElement);
       reject(error);
     };
     const handleAbort = (): void => {
@@ -113,12 +115,23 @@ function attachHlsJsPlayback(HlsClass: typeof Hls, options: AttachHlsPlaybackOpt
       finish();
     });
 
+    let fatalRecoveries = 0;
+    hls.on(HlsClass.Events.FRAG_LOADED, () => {
+      fatalRecoveries = 0;
+    });
+
     hls.on(HlsClass.Events.ERROR, (_event: string, data: unknown) => {
       const errorData = data as { fatal?: boolean; type?: string; details?: string } | null;
       if (!errorData?.fatal) {
         if (errorData?.details === 'bufferAppendError') {
           hls.recoverMediaError();
         }
+        return;
+      }
+
+      fatalRecoveries += 1;
+      if (fatalRecoveries > MAX_FATAL_RECOVERIES) {
+        fail(new Error(errorData.details || 'HLS.js could not recover'));
         return;
       }
 

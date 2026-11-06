@@ -10,6 +10,8 @@ interface UpdateOptions {
 export interface BlockStore {
   readonly blocks: Block[];
   blockAt(context: BlockContext): Block | null;
+  /** Where a block is now. Anything holding on to a block across an await re-finds it with this. */
+  contextOf(blockId: string): BlockContext | null;
   update(context: BlockContext, updater: (block: Block) => Block, options?: UpdateOptions): void;
   updateFields(context: BlockContext, updates: Partial<Block>, options?: UpdateOptions): void;
   insert(index: number, type: BlockType): number;
@@ -34,14 +36,14 @@ interface StoreDeps {
 }
 
 /**
- * Only image URLs count: the poster and OG fields are typed by hand, so a partial URL
- * must not become a candidate.
+ * Only image and hero manifest URLs count: the poster and OG fields are typed by hand, so a
+ * partial URL must not become a candidate. A manifest stands for the whole hero video.
  */
 function isAssetUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return (parsed.protocol === 'http:' || parsed.protocol === 'https:')
-      && /\.(webp|png|jpe?g|gif|avif)$/i.test(parsed.pathname);
+      && /\.(webp|png|jpe?g|gif|avif|m3u8)$/i.test(parsed.pathname);
   } catch {
     return false;
   }
@@ -112,6 +114,17 @@ export function createBlockStore(initial: Block[], deps: StoreDeps): BlockStore 
       if (!block) return null;
       if (!rowSide) return block;
       return block.type === 'row' ? block[rowSide] : null;
+    },
+
+    contextOf(blockId) {
+      for (const [index, block] of blocks.entries()) {
+        if (block.id === blockId) return { index };
+        if (block.type === 'row') {
+          if (block.left.id === blockId) return { index, rowSide: 'left' };
+          if (block.right.id === blockId) return { index, rowSide: 'right' };
+        }
+      }
+      return null;
     },
 
     update,

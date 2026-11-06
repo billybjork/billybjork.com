@@ -2,7 +2,7 @@ import { applyAlignment } from '../../core/alignment';
 import type { BlockContext, HtmlBlock, ImageBlock, VideoBlock } from '../../types/blocks';
 import type { EditorContext } from '../context';
 import { ICONS } from '../icons';
-import { capturePosterFromVideo, uploadProcessedImage, type VideoUploadProgressUpdate } from '../media-upload';
+import { capturePosterFromVideo, uploadImage, type VideoUploadProgressUpdate } from '../media-upload';
 import { showNotification } from '../notify';
 import { clamp } from '../clamp';
 
@@ -83,7 +83,7 @@ export function renderImageBlock(ctx: EditorContext, block: ImageBlock, context:
     wrapper.appendChild(altInput);
     wrapper.appendChild(createMediaCaptionInput(ctx, block.caption, context));
   } else {
-    wrapper.appendChild(createUploadZone(ctx, context, 'image'));
+    wrapper.appendChild(createUploadZone(ctx, block.id, 'image'));
   }
 
   return wrapper;
@@ -176,7 +176,9 @@ export function renderVideoBlock(ctx: EditorContext, block: VideoBlock, context:
       if (currentPoster !== cleanPoster) ctx.store.addCleanupCandidate(currentPoster);
       currentPoster = cleanPoster;
       applyVideoPoster(video, cleanPoster);
-      ctx.store.updateFields(context, { poster: cleanPoster }, { render: false });
+      // An upload or capture may have finished after the blocks around this one moved.
+      const current = ctx.store.contextOf(block.id);
+      if (current) ctx.store.updateFields(current, { poster: cleanPoster }, { render: false });
       clearPosterBtn.hidden = cleanPoster.length === 0;
       if (posterInput.value !== cleanPoster) {
         posterInput.value = cleanPoster;
@@ -204,7 +206,7 @@ export function renderVideoBlock(ctx: EditorContext, block: VideoBlock, context:
 
       setPosterActionState(true);
       try {
-        const posterUrl = await uploadProcessedImage(file);
+        const posterUrl = await uploadImage(file);
         syncPosterToBlock(posterUrl);
         showNotification('Poster uploaded!', 'success');
       } catch (error) {
@@ -245,13 +247,13 @@ export function renderVideoBlock(ctx: EditorContext, block: VideoBlock, context:
     wrapper.appendChild(posterControls);
     wrapper.appendChild(createMediaCaptionInput(ctx, block.caption, context));
   } else {
-    wrapper.appendChild(createUploadZone(ctx, context, 'video'));
+    wrapper.appendChild(createUploadZone(ctx, block.id, 'video'));
   }
 
   return wrapper;
 }
 
-function createUploadZone(ctx: EditorContext, context: BlockContext, type: 'image' | 'video'): HTMLElement {
+function createUploadZone(ctx: EditorContext, blockId: string, type: 'image' | 'video'): HTMLElement {
   const zone = document.createElement('div');
   zone.className = 'upload-zone';
   const isVideo = type === 'video';
@@ -293,14 +295,14 @@ function createUploadZone(ctx: EditorContext, context: BlockContext, type: 'imag
 
     try {
       if (type === 'image') {
-        await ctx.media.uploadImageInto(file, context);
+        await ctx.media.uploadImageInto(file, blockId);
       } else {
         updateVideoProgress({
           stage: 'uploading',
           progress: 0,
           message: 'Starting upload...',
         });
-        await ctx.media.uploadVideoInto(file, context, updateVideoProgress);
+        await ctx.media.uploadVideoInto(file, blockId, updateVideoProgress);
       }
     } finally {
       uploadInFlight = false;

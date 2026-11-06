@@ -27,7 +27,8 @@ function setEditQuery(editing: boolean): void {
 function startSession(page: PageAdapter, content: HTMLElement, loaded: LoadedContent): void {
   const sessionListeners = new AbortController();
   const { signal } = sessionListeners;
-  const scrollAnchors = createScrollAnchors();
+  const scrollContainer = page.scrollContainer();
+  const scrollAnchors = createScrollAnchors(scrollContainer);
   const restoreReaderPosition = scrollAnchors.captureModeSwitch(content);
 
   const editorRoot = document.createElement('div');
@@ -64,7 +65,7 @@ function startSession(page: PageAdapter, content: HTMLElement, loaded: LoadedCon
   };
 
   const reloadOutOfEditor = (): void => {
-    persistScrollForNavigation();
+    persistScrollForNavigation(scrollContainer);
     leave(() => window.location.reload());
   };
 

@@ -24,5 +24,5 @@ def load_about() -> About:
     return About(document.markdown, document.revision) if document else About()
 
 
-def save_about(markdown_content: str) -> None:
-    write_document(get_content_paths().about_file, {"title": "About"}, markdown_content)
+def save_about(markdown_content: str) -> bool:
+    return write_document(get_content_paths().about_file, {"title": "About"}, markdown_content)

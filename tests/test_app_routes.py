@@ -126,6 +126,49 @@ class AppRoutesIntegrationTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("About integration body", response.text)
 
+    def _add_draft(self, app) -> None:
+        (app.projects_dir / "secret-draft.md").write_text(
+            "---\nname: Secret Draft\nslug: secret-draft\ndate: 2024-01-15\ndraft: true\n---\n\nUnpublished\n",
+            encoding="utf-8",
+        )
+
+    def test_drafts_are_hidden_from_the_public(self) -> None:
+        with managed_test_app() as app:
+            self._add_draft(app)
+            self.assertEqual(app.client.get("/secret-draft").status_code, 404)
+            self.assertEqual(app.client.get("/secret-draft?_partial=1").status_code, 404)
+
+    def test_editors_can_open_a_draft_directly(self) -> None:
+        with managed_test_app() as app:
+            self._add_draft(app)
+            app.login()
+
+            page = app.client.get("/secret-draft")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn('data-open-project="secret-draft"', page.text)
+            self.assertNotIn('data-open-project="secret-draft"', app.client.get("/").text)
+
+            fragment = app.client.get("/secret-draft?_partial=1")
+            self.assertEqual(fragment.status_code, 200)
+            self.assertIn("Unpublished", fragment.text)
+
+    def test_a_published_project_opens_from_the_drafts_only_list(self) -> None:
+        with managed_test_app() as app:
+            app.login()
+            page = app.client.get("/sample-project?show_drafts=true")
+            self.assertIn('data-open-project="sample-project"', page.text)
+
+    def test_pages_are_cached_publicly_only_for_the_public(self) -> None:
+        with managed_test_app() as app:
+            self._add_draft(app)
+            public = app.client.get("/")
+            self.assertEqual(public.headers["cache-control"], "public, max-age=300, stale-while-revalidate=60")
+            self.assertIn("Cookie", public.headers["vary"])
+
+            app.login()
+            for path in ("/", "/me", "/sample-project", "/secret-draft", "/secret-draft?_partial=1"):
+                self.assertEqual(app.client.get(path).headers["cache-control"], "private, no-store", path)
+
     def test_media_route_serves_object_storage_assets(self) -> None:
         with managed_test_app() as app:
             app.storage.put("images/test.webp", b"test-image-bytes", "image/webp")

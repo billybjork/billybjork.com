@@ -8,6 +8,7 @@ declare namespace Hls {
   const Events: {
     MEDIA_ATTACHED: string;
     MANIFEST_PARSED: string;
+    FRAG_LOADED: string;
     LEVEL_SWITCHED: string;
     ERROR: string;
   };

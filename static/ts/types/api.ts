@@ -34,6 +34,8 @@ export interface AboutData {
 export interface SaveResult {
   revision?: string;
   slug?: string;
+  /** False when the server wrote the file but its upload failed: the next deploy would lose it. */
+  synced?: boolean;
 }
 
 export interface VideoThumbnailsResult {

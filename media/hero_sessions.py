@@ -10,12 +10,14 @@ import logging
 import os
 import secrets
 import threading
+import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Generic, TypeVar
 
-from cms.assets import cleanup_old_hero_versions
+from cms.assets import cleanup_hero_folders
 from cms.projects import load_project
+from media.keys import hero_hls_prefix, hero_root
 from media.video import (
     encode_and_upload_hls,
     extract_thumbnail_frames,
@@ -51,6 +53,7 @@ class TempVideo:
 @dataclass
 class HlsSession:
     slug: str
+    version: str
     status: str = "processing"
     stage: str = "Starting HLS encoding..."
     progress: float = 0
@@ -152,13 +155,15 @@ def _remove_local_source(temp_video: TempVideo) -> None:
 
 
 def start_hls_encoding(source: str, slug: str) -> str:
-    session_id = hls_sessions.add(HlsSession(slug=slug))
+    version = str(int(time.time()))
+    session_id = hls_sessions.add(HlsSession(slug=slug, version=version))
 
     def encode() -> None:
         try:
             hls_url = encode_and_upload_hls(
                 source,
                 slug,
+                version,
                 lambda stage, progress: hls_sessions.update(session_id, stage=stage, progress=progress),
             )
             hls_sessions.update(
@@ -174,6 +179,15 @@ def start_hls_encoding(source: str, slug: str) -> str:
 
     threading.Thread(target=encode, daemon=True).start()
     return session_id
+
+
+def live_hero_sets() -> set[str]:
+    """Where encodes in progress or awaiting their sprite are writing; hero cleanup must leave these."""
+    return {
+        f"{hero_hls_prefix(session.slug, session.version)}/"
+        for _, session in hls_sessions.items()
+        if session.status != "error"
+    }
 
 
 class HeroVideoError(Exception):
@@ -205,7 +219,8 @@ async def finish_hero_video(
 ) -> dict:
     """Once the sprite range is chosen: wait out the encode, then produce the sprite and poster.
 
-    Returns the project's new `video` metadata. The sessions end either way.
+    Returns the project's new `video` metadata. The sessions end on success; a failure keeps
+    them, so the editor can retry, until they expire.
     """
     temp_video = temp_videos.get(temp_id)
     if not temp_video:
@@ -213,29 +228,27 @@ async def finish_hero_video(
     if not temp_video.is_remote and not os.path.exists(temp_video.source):
         raise HeroVideoError("Temp file not found", 400)
 
-    try:
-        hls_url = await _wait_for_hls(hls_session_id) if hls_session_id else None
-        if not hls_url:
-            project = await asyncio.to_thread(load_project, slug)
-            hls_url = project.video.hls if project else None
-        if not hls_url:
-            raise HeroVideoError("HLS URL unavailable for sprite generation")
+    hls_url = await _wait_for_hls(hls_session_id) if hls_session_id else None
+    if not hls_url:
+        project = await asyncio.to_thread(load_project, slug)
+        hls_url = project.video.hls if project else None
+    if not hls_url:
+        raise HeroVideoError("HLS URL unavailable for sprite generation")
 
-        assets = await asyncio.to_thread(
-            generate_sprite_and_poster, temp_video.source, slug, sprite_start, sprite_duration
-        )
-        return {
-            "hls": hls_url,
-            "thumbnail": assets["thumbnail"],
-            "spriteSheet": assets["spriteSheet"],
-            **assets["spriteMeta"],
-            "video_width": temp_video.video_width,
-            "video_height": temp_video.video_height,
-        }
-    finally:
-        discard_temp_video(temp_id)
-        if hls_session_id:
-            hls_sessions.pop(hls_session_id)
+    assets = await asyncio.to_thread(
+        generate_sprite_and_poster, temp_video.source, slug, sprite_start, sprite_duration
+    )
+    discard_temp_video(temp_id)
+    if hls_session_id:
+        hls_sessions.pop(hls_session_id)
+    return {
+        "hls": hls_url,
+        "thumbnail": assets["thumbnail"],
+        "spriteSheet": assets["spriteSheet"],
+        **assets["spriteMeta"],
+        "video_width": temp_video.video_width,
+        "video_height": temp_video.video_height,
+    }
 
 
 def _cleanup_expired() -> None:
@@ -249,10 +262,9 @@ def _cleanup_expired() -> None:
 
     for session_id, session in hls_sessions.items():
         if now - session.timestamp > _SESSION_LIFETIME:
-            if session.status == "complete":
-                project = load_project(session.slug)
-                cleanup_old_hero_versions(session.slug, project.video.hls if project else None)
             hls_sessions.pop(session_id)
+            if session.status == "complete":
+                cleanup_hero_folders({f"{hero_root(session.slug)}/"}, live_hero_sets())
 
 
 async def run_cleanup_loop() -> None:

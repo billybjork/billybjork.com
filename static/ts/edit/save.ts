@@ -11,6 +11,7 @@ type SaveAction = 'edit' | 'save_start' | 'save_ok' | 'save_error' | 'conflict' 
 const AUTO_SAVE_DELAY_MS = 2000;
 const RETRY_DELAY_MS = 5000;
 const SAVED_FADE_DELAY_MS = 3000;
+const NOT_SYNCED_WARNING_MS = 8000;
 
 function nextStatus(status: SaveStatus, action: SaveAction): SaveStatus {
   switch (action) {
@@ -57,6 +58,7 @@ export function createSaveController({ page, store, revision: initialRevision, o
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let fadeTimer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: { finished: Promise<SaveOutcome>; controller: AbortController } | null = null;
+  let warnedNotSynced = false;
 
   const dispatch = (action: SaveAction): void => {
     status = nextStatus(status, action);
@@ -90,6 +92,15 @@ export function createSaveController({ page, store, revision: initialRevision, o
     if (result.revision) revision = result.revision;
     store.forgetCleanupCandidates(candidatesSent);
     page.onSaved(result);
+    // Not durable yet, so it isn't saved: the edit stays dirty and the usual retry uploads it again.
+    if (result.synced === false) {
+      if (!warnedNotSynced) {
+        showNotification('The upload to storage failed, so this edit would be lost on the next deploy. Retrying...', 'error', NOT_SYNCED_WARNING_MS);
+      }
+      warnedNotSynced = true;
+      throw new Error('Saved on the server but not uploaded to storage');
+    }
+    warnedNotSynced = false;
     if (editCount === editsSent) dirty = false;
     return 'saved';
   };

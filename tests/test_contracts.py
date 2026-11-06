@@ -27,6 +27,21 @@ class BlockFormatTests(unittest.TestCase):
         self.assertNotIn("<!--", self.html)
 
 
+class PublishedBlockStyleTests(unittest.TestCase):
+    def test_every_block_class_the_editor_can_write_is_styled(self) -> None:
+        css = (FIXTURES.parent.parent / "static/ts/project/styles.css").read_text(encoding="utf-8")
+        self.assertIn(".callout", css)
+
+
+class AboutContentTests(unittest.TestCase):
+    """The about page loads no project code, so a click-to-copy link there does nothing."""
+
+    def test_git_copy_uses_a_link_that_works_there(self) -> None:
+        about = (FIXTURES.parent.parent / "content/about.md").read_text(encoding="utf-8")
+        self.assertNotIn("copy-text-link", about)
+        self.assertIn('<a href="mailto:billy@billybjork.com">', markdown_to_html(about))
+
+
 class SlugTests(unittest.TestCase):
     def test_slug_rules(self) -> None:
         cases = json.loads((FIXTURES / "slugs.json").read_text(encoding="utf-8"))

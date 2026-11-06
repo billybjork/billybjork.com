@@ -23,6 +23,13 @@ export function pushProjectUrl(slug: string | null): void {
   }
 }
 
+/** Puts back the URL of the project being edited, in the form the editor gave it, after history moved away. */
+export function restoreEditingUrl(slug: string): void {
+  const url = new URL(buildProjectUrl(slug, false));
+  url.searchParams.set('edit', '');
+  window.history.pushState(null, '', url.toString());
+}
+
 export function replaceProjectUrl(slug: string | null, options: { preserveHash?: boolean } = {}): void {
   window.history.replaceState(null, '', buildProjectUrl(slug, options.preserveHash === true));
 }

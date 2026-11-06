@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-import { blocksToMarkdown, parseIntoBlocks } from '../../static/ts/edit/blocks';
+import { blocksToMarkdown, createBlock, parseIntoBlocks } from '../../static/ts/edit/blocks';
 
 const SEPARATOR = '\n\n<!-- block -->\n\n';
 
@@ -162,6 +162,25 @@ describe('html', () => {
     const once = roundTrip('<!-- html style="display: block; width: 524px;;; margin-left: auto; margin-right: auto" -->\n<b>x</b>\n<!-- /html -->');
     expect(once).toBe('<!-- html style="display: block; width: 524px; margin-left: auto; margin-right: auto" -->\n<b>x</b>\n<!-- /html -->');
     expect(roundTrip(once)).toBe(once);
+  });
+});
+
+describe('image alt text', () => {
+  it.each(['A "quoted" word', 'Tom & Jerry', 'x > y', "it's", 'literal &amp; text'])('round-trips %s through the sized form', (alt) => {
+    const markdown = blocksToMarkdown([createBlock('image', { src: 'a.webp', alt, style: 'width: 300px' })]);
+    expect(markdown).toContain('style="');
+    expect(markdown.match(/<img [^>]*>/)).not.toBeNull();
+
+    expect(parseOne(markdown)).toMatchObject({ type: 'image', src: 'a.webp', alt, style: expect.stringContaining('width: 300px') });
+  });
+
+  it('keeps a quote from ending the attribute', () => {
+    const markdown = blocksToMarkdown([createBlock('image', { src: 'a.webp', alt: 'x" onerror="y', style: 'width: 300px' })]);
+    expect(markdown).toContain('alt="x&quot; onerror=&quot;y"');
+  });
+
+  it('reads alt text already stored with entities', () => {
+    expect(parseOne('<img src="a.webp" alt="a &amp; b" style="width: 1px">')).toMatchObject({ alt: 'a & b' });
   });
 });
 

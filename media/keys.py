@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 
 PUBLIC_MEDIA_PREFIXES = ("images/", "videos/", "videos_mp4/")
+_HERO_FILE = re.compile(r"(?:^|/)(videos/[^/]+/)(\d+/)?")
 
 
 def _timestamped(extension: str) -> str:
@@ -20,10 +21,16 @@ def hero_hls_prefix(project_slug: str, version: str) -> str:
     return f"{hero_root(project_slug)}/{version}"
 
 
-def hero_version(project_slug: str, key_or_url: str) -> str | None:
-    """The version in a hero HLS key or URL; None for files directly under the root."""
-    match = re.search(rf"(?:^|/){re.escape(hero_root(project_slug))}/(\d+)/", key_or_url)
+def hero_folder(key_or_url: str) -> str | None:
+    """The `videos/<folder>/` a hero file lives in. The folder need not match any project's slug."""
+    match = _HERO_FILE.search(key_or_url)
     return match.group(1) if match else None
+
+
+def hero_set(key_or_url: str) -> str | None:
+    """The directory holding one hero video's files: `videos/<folder>/<version>/`, or `videos/<folder>/` when unversioned."""
+    match = _HERO_FILE.search(key_or_url)
+    return f"{match.group(1)}{match.group(2) or ''}" if match else None
 
 
 def hero_sprite_key(project_slug: str, version: str) -> str:

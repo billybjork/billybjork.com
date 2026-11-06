@@ -8,16 +8,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from cms.about import load_about, save_about
-from cms.assets import cleanup_old_hero_versions, cleanup_orphans, delete_hero_videos
+from cms.assets import cleanup_hero_folders, cleanup_orphans
+from cms.documents import ArchiveFailed
 from cms.projects import (
     ProjectVideo,
     delete_project,
     load_project,
     referenced_asset_urls,
+    rename_project,
     save_project,
     validate_slug,
 )
 from edit_auth import require_edit_mode
+from media.hero_sessions import live_hero_sets
+from media.keys import hero_folder, hero_root
 from object_storage import extract_public_asset_urls, object_keys
 
 logger = logging.getLogger(__name__)
@@ -66,6 +70,22 @@ def _cleanup_candidates(urls: Any) -> set[str]:
         for item in urls[:_MAX_CLEANUP_CANDIDATES]
         if isinstance(item, str) and item.strip()
     }
+
+
+def _cleanup_unused(keys: set[str], slug: str | None = None) -> None:
+    """Delete these assets if nothing references them, with the rest of any hero video among them."""
+    cleanup_orphans(keys)
+    folders = {hero_folder(key) for key in keys}
+    if slug:
+        folders.add(f"{hero_root(slug)}/")
+    cleanup_hero_folders(folders - {None}, live_hero_sets())
+
+
+def _archive_failed(slug: str) -> HTTPException:
+    return HTTPException(
+        status_code=502,
+        detail=f"Could not archive {slug} to object storage, so nothing was changed",
+    )
 
 
 def _save_slugs(data: dict[str, Any]) -> tuple[str, str]:
@@ -129,18 +149,19 @@ def _apply_project_save(data: dict[str, Any]):
     frontmatter = _project_frontmatter(data, slug, video)
     markdown_content = _markdown_field(data)
 
-    save_project(slug, frontmatter, markdown_content)
     if renamed:
-        delete_project(original_slug)
+        try:
+            synced = rename_project(original_slug, slug, frontmatter, markdown_content)
+        except ArchiveFailed:
+            raise _archive_failed(original_slug)
+    else:
+        synced = save_project(slug, frontmatter, markdown_content)
 
     new_refs = referenced_asset_urls(markdown_content, video, frontmatter.get("og_image"))
     removed = old_project.asset_urls | _cleanup_candidates(data.get("cleanup_candidates"))
-    cleanup_orphans(object_keys(removed - new_refs))
+    _cleanup_unused(object_keys(removed - new_refs), original_slug)
 
-    # A rename leaves the hero video files under the original slug's prefix.
-    cleanup_old_hero_versions(original_slug, video.hls)
-
-    return {"success": True, "slug": slug, "revision": load_project(slug).revision}
+    return {"success": True, "slug": slug, "revision": load_project(slug).revision, "synced": synced}
 
 
 @router.get("/project/{slug}")
@@ -171,17 +192,19 @@ async def create_project(request: Request):
     frontmatter = _project_frontmatter(
         {"date": datetime.now().strftime("%Y-%m-%d"), **data}, slug, ProjectVideo()
     )
-    await asyncio.to_thread(save_project, slug, frontmatter, _markdown_field(data))
-    return {"success": True, "slug": slug}
+    synced = await asyncio.to_thread(save_project, slug, frontmatter, _markdown_field(data))
+    return {"success": True, "slug": slug, "synced": synced}
 
 
 def _apply_project_delete(slug: str) -> None:
     project = load_project(slug)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    delete_project(slug)
-    cleanup_orphans(object_keys(project.asset_urls))
-    delete_hero_videos(slug)
+    try:
+        delete_project(slug)
+    except ArchiveFailed:
+        raise _archive_failed(slug)
+    _cleanup_unused(object_keys(project.asset_urls), slug)
 
 
 @router.delete("/project/{slug}")
@@ -204,10 +227,10 @@ def _apply_about_save(data: dict[str, Any]):
     if conflict:
         return conflict
 
-    save_about(markdown_content)
+    synced = save_about(markdown_content)
     removed = extract_public_asset_urls(old.markdown) - extract_public_asset_urls(markdown_content)
     cleanup_orphans(object_keys(removed))
-    return {"success": True, "revision": load_about().revision}
+    return {"success": True, "revision": load_about().revision, "synced": synced}
 
 
 @router.post("/save-about")
@@ -220,5 +243,5 @@ async def cleanup_assets_endpoint(request: Request):
     """Run orphan cleanup for asset URLs the editor stopped using before they were ever saved."""
     data = await _json_object(request)
     keys = object_keys(_cleanup_candidates(data.get("urls")))
-    await asyncio.to_thread(cleanup_orphans, keys)
+    await asyncio.to_thread(_cleanup_unused, keys)
     return {"success": True, "checked": len(keys)}

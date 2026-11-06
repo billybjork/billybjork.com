@@ -1,6 +1,6 @@
 import type { ProjectData } from '../types/api';
 import { openHeroVideoEditor } from './hero-video/editor';
-import { capturePosterFromVideo, uploadProcessedImage } from './media-upload';
+import { capturePosterFromVideo, uploadImage } from './media-upload';
 import { showNotification } from './notify';
 import { SLUG_INPUT_PATTERN } from './slug';
 import type { BlockStore } from './store';
@@ -180,6 +180,8 @@ function createHeroControls(scene: HTMLElement, deps: ProjectControlsDeps): HTML
       slug: savedSlug(),
       file,
       onVideoSaved(video) {
+        // Uploaded but not saved yet; the server keeps candidates that a save has come to reference.
+        [video.hls, video.thumbnail, video.spriteSheet].forEach((url) => store.addCleanupCandidate(url));
         project.video = { ...video };
         refresh();
         markDirty();
@@ -222,7 +224,7 @@ function createHeroControls(scene: HTMLElement, deps: ProjectControlsDeps): HTML
     uploadButton.textContent = 'Uploading...';
     showNotification('Uploading OG image override...', 'info');
     try {
-      setOgOverride(await uploadProcessedImage(file));
+      setOgOverride(await uploadImage(file));
       showNotification('OG image override uploaded!', 'success');
     } catch (error) {
       showNotification(`Upload failed: ${(error as Error).message}`, 'error');

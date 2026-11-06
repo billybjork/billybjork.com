@@ -6,7 +6,13 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from functools import cached_property
 
-from cms.documents import delete_document, read_document, write_document
+from cms.documents import (
+    archive_document,
+    delete_document,
+    read_document,
+    remove_document,
+    write_document,
+)
 from cms.markdown import html_excerpt, markdown_to_html
 from cms.paths import get_content_paths
 from media.sprite_format import DEFAULT_SPRITE_COLUMNS, DEFAULT_SPRITE_FRAMES, sprite_rows
@@ -260,8 +266,17 @@ def load_all_projects(include_drafts: bool = False) -> list[ProjectInfo]:
     )
 
 
-def save_project(slug: str, frontmatter: dict, markdown_content: str) -> None:
-    write_document(_project_file(slug), frontmatter, markdown_content)
+def save_project(slug: str, frontmatter: dict, markdown_content: str) -> bool:
+    return write_document(_project_file(slug), frontmatter, markdown_content)
+
+
+def rename_project(original_slug: str, slug: str, frontmatter: dict, markdown_content: str) -> bool:
+    """Archives first, so a failed archive leaves both slugs exactly as they were."""
+    original = _project_file(original_slug)
+    archive_document(original)
+    synced = save_project(slug, frontmatter, markdown_content)
+    remove_document(original)
+    return synced
 
 
 def delete_project(slug: str) -> None:

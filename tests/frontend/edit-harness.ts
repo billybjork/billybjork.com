@@ -135,15 +135,17 @@ export function mountProjectPage(slug: string = PROJECT.slug): void {
   document.body.innerHTML = `
     <header id="main-header"><h1><a href="/" class="site-title">Billy Bjork</a></h1><nav></nav></header>
     <section id="homepage-detail-scene">
-      <div class="homepage-detail-header">
-        <h2 class="homepage-detail-title">Sample Project</h2>
-        <div class="homepage-detail-date">Jan 2024</div>
+      <div class="homepage-detail-scroll">
+        <div class="homepage-detail-header">
+          <h2 class="homepage-detail-title">Sample Project</h2>
+          <div class="homepage-detail-date">Jan 2024</div>
+        </div>
+        <div class="homepage-detail-actions edit-buttons">
+          <button type="button" data-homepage-edit-project>Edit</button>
+        </div>
+        <div class="video-container"><video></video></div>
+        <section id="homepage-detail-content"><div class="project-content"><p>Rendered</p></div></section>
       </div>
-      <div class="homepage-detail-actions edit-buttons">
-        <button type="button" data-homepage-edit-project>Edit</button>
-      </div>
-      <div class="video-container"><video></video></div>
-      <section id="homepage-detail-content"><div class="project-content"><p>Rendered</p></div></section>
     </section>
   `;
 }

@@ -96,7 +96,7 @@ function parseImageBlock(trimmed: string): ImageBlock {
   const style = parseAttribute(trimmed, 'style');
   return createBlock('image', {
     src: parseAttribute(trimmed, 'src') ?? '',
-    alt: parseAttribute(trimmed, 'alt') ?? '',
+    alt: decodeHtmlEntities(parseAttribute(trimmed, 'alt') ?? ''),
     style,
     align: parseAlignmentFromStyle(style),
   });
@@ -183,7 +183,7 @@ function needsStyleAttribute(block: ImageBlock | VideoBlock): boolean {
 function formatImage(block: ImageBlock): string {
   const alt = block.alt || '';
   const image = needsStyleAttribute(block)
-    ? `<img src="${block.src}" alt="${alt}" style="${buildMediaStyleString(block)}">`
+    ? `<img src="${block.src}" alt="${escapeHtml(alt)}" style="${buildMediaStyleString(block)}">`
     : `![${alt}](${block.src})`;
   return image + formatCaption(block.caption);
 }

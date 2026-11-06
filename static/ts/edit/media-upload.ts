@@ -1,8 +1,7 @@
 import { API, postForm, postJSON, uploadWithProgress } from './api';
 import { formatMegabytes } from './text';
 
-const MAX_IMAGE_WIDTH = 2000;
-const IMAGE_QUALITY = 0.8;
+const CAPTURED_FRAME_QUALITY = 0.8;
 // Video upload stages share one bar: sending is 0-65%, then the server's processing.
 const UPLOAD_SHARE_OF_BAR = 0.65;
 const PROCESSING_BAR_PERCENT = 72;
@@ -12,56 +11,6 @@ export interface VideoUploadProgressUpdate {
   stage: 'uploading' | 'processing' | 'complete' | 'error';
   progress: number;
   message: string;
-}
-
-/** Downscales to the site's maximum width and converts to WebP. */
-function processImage(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      reject(new Error('Could not get canvas context'));
-      return;
-    }
-
-    img.onload = () => {
-      let width = img.width;
-      let height = img.height;
-
-      if (width > MAX_IMAGE_WIDTH) {
-        height = Math.round((height * MAX_IMAGE_WIDTH) / width);
-        width = MAX_IMAGE_WIDTH;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Failed to create blob'));
-          }
-        },
-        'image/webp',
-        IMAGE_QUALITY
-      );
-
-      URL.revokeObjectURL(img.src);
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(img.src);
-      reject(new Error('Failed to load image'));
-    };
-
-    img.src = URL.createObjectURL(file);
-  });
 }
 
 function ensureVideoFrameReady(video: HTMLVideoElement): Promise<void> {
@@ -128,15 +77,12 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
   });
 }
 
-async function uploadImage(file: File | Blob): Promise<string> {
+/** The server resizes and encodes (media/image.py), so a file goes up as it is. */
+export async function uploadImage(file: File | Blob): Promise<string> {
   const formData = new FormData();
   formData.append('file', file);
   const { url } = await postForm<{ url: string }>(API.uploadMedia, formData, 'Image upload failed');
   return url;
-}
-
-export async function uploadProcessedImage(file: File): Promise<string> {
-  return uploadImage(await processImage(file));
 }
 
 export async function uploadContentVideo(
@@ -198,7 +144,7 @@ export async function capturePosterFromVideo(video: HTMLVideoElement): Promise<s
     if (!context) throw new Error('Could not initialize frame capture.');
 
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return await uploadImage(await canvasToBlob(canvas, 'image/webp', IMAGE_QUALITY));
+    return await uploadImage(await canvasToBlob(canvas, 'image/webp', CAPTURED_FRAME_QUALITY));
   } catch (error) {
     if (!sourceUrl) throw error;
     console.warn('Browser frame capture failed; asking the server.', error);

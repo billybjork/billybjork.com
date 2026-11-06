@@ -718,3 +718,57 @@ function mountFailingProject(h: EditorHarness): void {
   document.body.innerHTML = '<section class="project-content"></section>';
   h.respond(`/api/project/${PROJECT.slug}`, () => jsonResponse({ detail: 'gone' }, 404));
 }
+
+describe('a save the server could not upload', () => {
+  const warnings = (): string[] => notifications().filter((text) => text.includes('lost on the next deploy'));
+
+  it('warns once, stays dirty, and retries until the upload lands', async () => {
+    await openAboutEditor(harness, 'Body');
+    let synced = false;
+    harness.respond('/api/save-about', () => jsonResponse({ success: true, revision: `rev-${harness.saves().length + 1}`, synced }));
+
+    typeInLine('Edited');
+    await settle(AUTO_SAVE_MS);
+    expect(warnings()).toHaveLength(1);
+    expect(statusText()).toBe('Save failed');
+
+    await settle(RETRY_MS);
+    expect(harness.saves()).toHaveLength(2);
+    expect(warnings()).toHaveLength(1);
+
+    synced = true;
+    await settle(RETRY_MS);
+    expect(harness.saves()).toHaveLength(3);
+    expect(statusText()).toBe('All changes saved');
+  });
+
+  it('does not leave the editor on Save, so the warning and the edit survive', async () => {
+    await openAboutEditor(harness, 'Body');
+    harness.respond('/api/save-about', () => jsonResponse({ success: true, revision: 'rev-2', synced: false }));
+
+    typeInLine('Edited');
+    toolbarButton('save').click();
+    await settle();
+
+    expect(harness.reload).not.toHaveBeenCalled();
+    expect(warnings()).toHaveLength(1);
+  });
+
+  it('follows a rename the server applied even though the upload failed', async () => {
+    await openProjectEditor(harness, 'Body');
+    harness.respond('/api/save-project', (call) => jsonResponse({
+      success: true,
+      slug: (call.body as { slug: string }).slug,
+      revision: 'rev-2',
+      synced: harness.saves().length > 1,
+    }));
+    const slug = document.querySelector<HTMLInputElement>('#inline-settings-slug')!;
+    slug.value = 'renamed';
+    slug.dispatchEvent(new Event('input', { bubbles: true }));
+
+    await settle(AUTO_SAVE_MS + RETRY_MS);
+
+    expect(harness.saves()[1]).toMatchObject({ slug: 'renamed', original_slug: 'renamed' });
+    expect(statusText()).toBe('All changes saved');
+  });
+});

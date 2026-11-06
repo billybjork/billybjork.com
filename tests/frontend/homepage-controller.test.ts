@@ -150,6 +150,98 @@ describe('HomepageController', () => {
     controller.destroy();
   });
 
+  describe('while the editor holds the page', () => {
+    async function openAndEdit(): Promise<ReturnType<typeof createHomepageFixture>> {
+      stubDetailFetch();
+      const fixture = createHomepageFixture();
+      fixture.controller.init();
+      fixture.openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+      window.history.replaceState(null, '', 'http://localhost/project-one?edit=');
+      document.body.classList.add('editing');
+      return fixture;
+    }
+
+    it('keeps the editor through browser back, and puts the URL back', async () => {
+      const { controller, detailScene, detailContent } = await openAndEdit();
+
+      navigateBack('http://localhost/');
+      await flushAsyncWork();
+
+      expect(isDetailOpen(detailScene)).toBe(true);
+      expect(detailContent.querySelector('.project-content')).not.toBeNull();
+      expect(controller.getOpenProjectSlug()).toBe('project-one');
+      expect(window.location.pathname).toBe('/project-one');
+      expect(new URLSearchParams(window.location.search).has('edit')).toBe(true);
+
+      controller.destroy();
+    });
+
+    it('puts back the renamed URL after a rename', async () => {
+      const { controller } = await openAndEdit();
+      controller.renameProjectSlug('project-renamed');
+
+      navigateBack('http://localhost/');
+      await flushAsyncWork();
+
+      expect(window.location.pathname).toBe('/project-renamed');
+      controller.destroy();
+    });
+
+    it('stays open on a click outside the project', async () => {
+      const { controller, detailScene } = await openAndEdit();
+
+      detailScene.querySelector('.homepage-detail-scroll')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+
+      expect(isDetailOpen(detailScene)).toBe(true);
+      controller.destroy();
+    });
+  });
+
+  describe('clicking outside the project', () => {
+    async function open(): Promise<ReturnType<typeof createHomepageFixture>> {
+      stubDetailFetch();
+      const fixture = createHomepageFixture();
+      fixture.controller.init();
+      fixture.openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+      return fixture;
+    }
+
+    it('closes it and records the move in history', async () => {
+      const { controller, detailScene } = await open();
+
+      detailScene.querySelector('.homepage-detail-scroll')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+
+      expect(isDetailOpen(detailScene)).toBe(false);
+      expect(window.location.pathname).toBe('/');
+      controller.destroy();
+    });
+
+    it('does nothing for a click inside it', async () => {
+      const { controller, detailScene } = await open();
+
+      detailScene.querySelector('.homepage-detail-shell')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+
+      expect(isDetailOpen(detailScene)).toBe(true);
+      controller.destroy();
+    });
+
+    it('does nothing when the click ends a drag that selected text', async () => {
+      const { controller, detailScene } = await open();
+      vi.spyOn(window, 'getSelection').mockReturnValue({ isCollapsed: false } as Selection);
+
+      detailScene.querySelector('.homepage-detail-scroll')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+
+      expect(isDetailOpen(detailScene)).toBe(true);
+      controller.destroy();
+    });
+  });
+
   it('names the project being opened before it has landed', async () => {
     stubDetailFetch();
     const { controller, openButton } = createHomepageFixture();
@@ -298,6 +390,74 @@ describe('HomepageController', () => {
     expect(document.activeElement).toBe(openButton);
 
     controller.destroy();
+  });
+
+  describe('a hero video that will not load', () => {
+    const fatalNetworkError = { fatal: true, type: FakeHls.ErrorTypes.NETWORK_ERROR, details: 'manifestLoadError' };
+
+    afterEach(() => {
+      FakeHls.manifestLoads = true;
+    });
+
+    async function openWithBrokenVideo(): Promise<ReturnType<typeof createHomepageFixture>> {
+      FakeHls.instances = [];
+      FakeHls.manifestLoads = false;
+      vi.stubGlobal('Hls', FakeHls);
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      stubDetailFetch(FULL_DETAIL_HTML);
+      const fixture = createHomepageFixture();
+      fixture.controller.init();
+      fixture.openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+      return fixture;
+    }
+
+    it('stops retrying and uncovers the hero', async () => {
+      await openWithBrokenVideo();
+      const heroFrame = document.getElementById('homepage-detail-hero-frame') as HTMLElement;
+      const hls = FakeHls.instances[0]!;
+      expect(heroFrame.querySelector('.homepage-hero-bridge')).not.toBeNull();
+
+      for (let attempt = 0; attempt < 3; attempt += 1) hls.emit(FakeHls.Events.ERROR, fatalNetworkError);
+      await flushAsyncWork();
+      expect(hls.startLoads).toBe(3);
+      expect(hls.destroyed).toBe(false);
+      expect(heroFrame.querySelector('.homepage-hero-bridge')).not.toBeNull();
+
+      hls.emit(FakeHls.Events.ERROR, fatalNetworkError);
+      await flushAsyncWork();
+      expect(hls.startLoads).toBe(3);
+      expect(hls.destroyed).toBe(true);
+      expect(heroFrame.querySelector('.homepage-hero-bridge')).toBeNull();
+    });
+
+    it('allows fresh retries once a fragment has loaded', async () => {
+      await openWithBrokenVideo();
+      const hls = FakeHls.instances[0]!;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) hls.emit(FakeHls.Events.ERROR, fatalNetworkError);
+      hls.emit(FakeHls.Events.FRAG_LOADED);
+      hls.emit(FakeHls.Events.ERROR, fatalNetworkError);
+
+      expect(hls.startLoads).toBe(4);
+      expect(hls.destroyed).toBe(false);
+    });
+
+    it('also stops a player that fails after it started', async () => {
+      FakeHls.instances = [];
+      vi.stubGlobal('Hls', FakeHls);
+      stubDetailFetch(FULL_DETAIL_HTML);
+      const { controller, openButton } = createHomepageFixture();
+      controller.init();
+      openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushAsyncWork();
+      const hls = FakeHls.instances[0]!;
+
+      for (let attempt = 0; attempt < 4; attempt += 1) hls.emit(FakeHls.Events.ERROR, fatalNetworkError);
+
+      expect(hls.startLoads).toBe(3);
+      expect(hls.destroyed).toBe(true);
+    });
   });
 
   it('covers the hero with the card frame until the video paints, and tears the player down on close', async () => {
