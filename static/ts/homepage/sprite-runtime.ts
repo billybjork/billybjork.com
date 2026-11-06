@@ -72,6 +72,7 @@ export class SpriteThumbnail {
     this.thumbMedia.appendChild(spriteNode);
     this.spriteNode = spriteNode;
     this.applyFrame(0);
+    this.measureSheet();
   }
 
   freeze(): void {
@@ -132,7 +133,8 @@ export class SpriteThumbnail {
     return node;
   }
 
-  primeSheetDimensions(): void {
+  /** The sheet's real shape replaces data-sprite-aspect-ratio once it has loaded. */
+  private measureSheet(): void {
     if (!this.sheet) return;
     const image = new Image();
     image.decoding = 'async';
@@ -224,7 +226,6 @@ export class HomepageSpriteRuntime {
   }
 
   init(): void {
-    this.thumbnails.forEach((thumbnail) => thumbnail.primeSheetDimensions());
     this.initActivationObserver();
     window.addEventListener('scroll', this.boundOnScroll, { passive: true });
     window.addEventListener('resize', this.boundOnResize, { passive: true });

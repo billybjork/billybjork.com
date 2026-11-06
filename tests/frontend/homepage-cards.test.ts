@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { readProjectCards } from '../../static/ts/homepage/card';
+import { HomepageSpriteRuntime } from '../../static/ts/homepage/sprite-runtime';
 
 function renderCard(attributes: string, clientWidth = 400): HTMLElement {
   document.body.innerHTML = `
@@ -18,6 +19,66 @@ function renderCard(attributes: string, clientWidth = 400): HTMLElement {
   Object.defineProperty(frame, 'clientHeight', { configurable: true, value: clientWidth * 9 / 16 });
   return document.getElementById('list') as HTMLElement;
 }
+
+describe('sprite sheet loading', () => {
+  const SPRITE_CARD = `
+    data-sprite-sheet="/sheet.webp" data-frames="60" data-columns="5" data-rows="12"
+    data-sprite-aspect-ratio="1.7777778" data-hero-aspect-ratio="0.5625"
+  `;
+
+  function stubImageRequests(): string[] {
+    const requested: string[] = [];
+    vi.stubGlobal('Image', class {
+      set src(url: string) {
+        requested.push(url);
+      }
+    });
+    return requested;
+  }
+
+  /** The harness's observer reports every target as visible, so this one reports nothing until told to. */
+  function stubIntersectionObserver(): { reveal(target: Element): void } {
+    let callback: IntersectionObserverCallback | null = null;
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(cb: IntersectionObserverCallback) {
+        callback = cb;
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    });
+    return {
+      reveal(target) {
+        callback?.([{ isIntersecting: true, target } as IntersectionObserverEntry], { unobserve() {} } as unknown as IntersectionObserver);
+      },
+    };
+  }
+
+  it('requests no sheet until the card nears the viewport, then requests it once', () => {
+    const requested = stubImageRequests();
+    const observer = stubIntersectionObserver();
+    const [card] = readProjectCards(renderCard(SPRITE_CARD));
+    const runtime = new HomepageSpriteRuntime([card!.thumbnail]);
+
+    runtime.init();
+    expect(requested).toEqual([]);
+    expect(document.querySelector('.homepage-sprite-sheet')).toBeNull();
+
+    observer.reveal(card!.cardEl);
+    observer.reveal(card!.cardEl);
+    expect(requested).toEqual(['/sheet.webp']);
+    expect(document.querySelector('.homepage-sprite-sheet')).not.toBeNull();
+
+    runtime.destroy();
+  });
+
+  it('frames with the declared aspect ratio until the sheet has loaded', () => {
+    stubImageRequests();
+    const [card] = readProjectCards(renderCard(SPRITE_CARD));
+    card!.thumbnail.activate();
+    expect(card!.thumbnail.getSourceAspectRatio()).toBeCloseTo(16 / 9);
+  });
+});
 
 describe('readProjectCards', () => {
   it('falls back to a 16:9 hero and the slug as title when the card states neither', () => {
