@@ -4,11 +4,13 @@ import {
   blockWrappers,
   installHarness,
   jsonResponse,
+  lineInputs,
   mountProjectPage,
   notifications,
   openAboutEditor,
   openProjectEditor,
   PROJECT,
+  pressKey,
   statusText,
   toolbarButton,
   typeInLine,
@@ -583,6 +585,40 @@ describe('project metadata', () => {
 
     expect(harness.lastSave()).toMatchObject({ name: 'Renamed', pinned: true, markdown: 'Hello' });
     expect(document.querySelector('.edit-project-name')?.textContent).toBe('Editing: Renamed');
+  });
+});
+
+describe('keys pressed in the header inputs', () => {
+  function nameInput(): HTMLInputElement {
+    const input = document.querySelector<HTMLInputElement>('.edit-project-header-name-input')!;
+    input.focus();
+    return input;
+  }
+
+  it('Cmd+S saves', async () => {
+    await openProjectEditor(harness, 'Hello');
+    typeInLine('Edited');
+    pressKey(nameInput(), 's', { metaKey: true });
+    await settle();
+
+    expect(harness.lastSave().markdown).toBe('Edited');
+  });
+
+  it('Escape discards', async () => {
+    await openProjectEditor(harness, 'Hello');
+    pressKey(nameInput(), 'Escape');
+    await settle();
+
+    expect(harness.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('Cmd+Z undoes', async () => {
+    await openProjectEditor(harness, 'Hello');
+    typeInLine('Edited');
+    await settle(500);
+    pressKey(nameInput(), 'z', { metaKey: true });
+
+    expect(lineInputs()[0]?.value).toBe('Hello');
   });
 });
 
