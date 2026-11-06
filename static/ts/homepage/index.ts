@@ -1,10 +1,12 @@
 import './styles.css';
 import { registerHomepageRuntime } from '../core/runtime-registry';
+import { initProjectInteractions } from '../project/interactions';
 import { HomepageController } from './controller';
 
 function initHomepage(): void {
   const listScene = document.getElementById('homepage-list-scene');
   const detailScene = document.getElementById('homepage-detail-scene');
+  const detailScroll = detailScene?.querySelector('.homepage-detail-scroll');
   const detailDate = document.getElementById('homepage-detail-date');
   const detailTitle = document.getElementById('homepage-detail-title');
   const detailHeroFrame = document.getElementById('homepage-detail-hero-frame');
@@ -15,6 +17,7 @@ function initHomepage(): void {
   if (
     !(listScene instanceof HTMLElement)
     || !(detailScene instanceof HTMLElement)
+    || !(detailScroll instanceof HTMLElement)
     || !(detailDate instanceof HTMLElement)
     || !(detailTitle instanceof HTMLElement)
     || !(detailHeroFrame instanceof HTMLElement)
@@ -28,6 +31,7 @@ function initHomepage(): void {
   const controller = new HomepageController({
     listScene,
     detailScene,
+    detailScroll,
     detailDate,
     detailTitle,
     detailHeroFrame,
@@ -36,6 +40,7 @@ function initHomepage(): void {
     transitionLayer,
   });
 
+  initProjectInteractions();
   registerHomepageRuntime(controller);
   controller.init();
 }

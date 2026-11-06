@@ -2,11 +2,10 @@
 
 {% block main_class %}test-depth-pointcloud{% endblock %}
 
-{% block preconnect %}<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>{% endblock %}
-
-{% block deferred_scripts %}<script src="{{ static_url(request, 'build/project.js') }}" defer></script>{% endblock %}
-
 {% block additional_head %}
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="{{ static_url(request, 'build/project.css') }}">
+<script src="{{ static_url(request, 'build/project.js') }}" defer></script>
 <link rel="stylesheet" href="/static/test/test-page.css">
 {% endblock %}
 
@@ -25,7 +24,7 @@
         {% set project = entry.project %}
         {% set stage_aspect_ratio = entry.stage_aspect_ratio %}
         <article
-            class="pc-project no-fade"
+            class="pc-project"
             data-slug="{{ project.slug }}"
             data-sprite="{{ entry.sprite_id }}"
             data-stage-aspect-ratio="{{ stage_aspect_ratio | round(8) }}"

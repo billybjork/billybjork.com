@@ -1,10 +1,4 @@
-/**
- * Project Runtime Entry Point
- * Loaded on pages that use project-detail hydration and interactions.
- */
+import './styles.css';
+import { initProjectInteractions } from './interactions';
 
-import ProjectInteractions from './interactions';
-import { hydrateProjectDetail } from './detail-runtime';
-
-ProjectInteractions.init();
-hydrateProjectDetail();
+initProjectInteractions();

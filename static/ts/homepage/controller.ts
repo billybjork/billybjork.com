@@ -1,6 +1,6 @@
 import type { HomepageRuntimeApi } from '../core/runtime-registry';
-import { projectDetailRuntime } from '../project/detail-runtime';
-import { scrollToHashTarget } from '../project/hash-scroll';
+import { cleanupProjectDetail, hydrateProjectDetail, prepareHeroVideo, syncDetailScroll } from '../project/detail-runtime';
+import { isEditingActive } from '../core/edit-state';
 import {
   createHomepageSpriteRuntime,
   type HomepageSpriteRuntimeApi,
@@ -14,17 +14,12 @@ const HERO_BRIDGE_FADE_MS = 180;
 const EASING_STANDARD = 'cubic-bezier(0.2, 0.0, 0, 1)';
 const MORPH_KEYFRAME_STEPS = 12;
 
-type SceneState =
-  | 'idle:list'
-  | 'opening:measure'
-  | 'opening:animate'
-  | 'open:detail'
-  | 'closing:measure'
-  | 'closing:animate';
+type SceneState = 'closed' | 'opening' | 'open' | 'closing';
 
 interface HomepageControllerOptions {
   listScene: HTMLElement;
   detailScene: HTMLElement;
+  detailScroll: HTMLElement;
   detailDate: HTMLElement;
   detailTitle: HTMLElement;
   detailHeroFrame: HTMLElement;
@@ -43,7 +38,6 @@ interface HomepageProjectCard {
   title: string;
   formattedDate: string;
   thumbnail: string;
-  hlsUrl: string;
   thumbnailAspectRatio: number | null;
   spriteAspectRatio: number | null;
   heroAspectRatio: number | null;
@@ -70,30 +64,13 @@ interface Box {
   height: number;
 }
 
-interface OpenProjectOptions {
-  reason?: string;
-  pushHistory?: boolean;
-  historyMode?: 'none' | 'push' | 'replace';
-  preferInstant?: boolean;
-}
-
-interface CloseProjectOptions {
-  reason?: string;
-  pushHistory?: boolean;
-  historyMode?: 'none' | 'push' | 'replace';
-  preferInstant?: boolean;
-}
+type HistoryMode = 'none' | 'push' | 'replace';
 
 interface ReadyWaiter {
   requestedSlug: string | null;
   resolve: (slug: string | null) => void;
   timeoutId: number;
 }
-
-type FrameAwareVideoElement = HTMLVideoElement & {
-  requestVideoFrameCallback?: (callback: (...args: unknown[]) => void) => number;
-  cancelVideoFrameCallback?: (handle: number) => void;
-};
 
 function waitForAnimationFinish(animation: Animation | null): Promise<void> {
   if (!animation) return Promise.resolve();
@@ -206,6 +183,7 @@ export class HomepageController implements HomepageRuntimeApi {
   private readonly detailDate: HTMLElement;
   private readonly detailTitle: HTMLElement;
   private readonly detailHeading: HTMLElement;
+  private readonly detailScroll: HTMLElement;
   private readonly detailHeroFrame: HTMLElement;
   private readonly detailHeroMedia: HTMLElement;
   private readonly detailContent: HTMLElement;
@@ -216,14 +194,10 @@ export class HomepageController implements HomepageRuntimeApi {
   private spriteRuntime: HomepageSpriteRuntimeApi | null = null;
   private openSlug: string | null = null;
   private lastFocusedBeforeOpen: Element | null = null;
-  private state: SceneState = 'idle:list';
-  private transitionToken = 0;
-  private activeTransitionToken: number | null = null;
+  private state: SceneState = 'closed';
+  private transition = new AbortController();
   private activeAnimations: Animation[] = [];
   private headingFlights: HTMLElement[] = [];
-  private activeFetchController: AbortController | null = null;
-  private isDestroying = false;
-  private isHandlingPopState = false;
   private activeHeroVideoReadyPromise: Promise<boolean> = Promise.resolve(false);
   private readonly boundOnClick = this.onClick.bind(this);
   private readonly boundOnKeyDown = this.onKeyDown.bind(this);
@@ -235,6 +209,7 @@ export class HomepageController implements HomepageRuntimeApi {
     this.detailDate = options.detailDate;
     this.detailTitle = options.detailTitle;
     this.detailHeading = options.detailTitle.closest<HTMLElement>('.homepage-detail-heading') ?? options.detailTitle;
+    this.detailScroll = options.detailScroll;
     this.detailHeroFrame = options.detailHeroFrame;
     this.detailHeroMedia = options.detailHeroMedia;
     this.detailContent = options.detailContent;
@@ -248,12 +223,10 @@ export class HomepageController implements HomepageRuntimeApi {
     document.addEventListener('click', this.boundOnClick, true);
     document.addEventListener('keydown', this.boundOnKeyDown);
     window.addEventListener('popstate', this.boundOnPopState);
-    this.ensureHistoryStateFromLocation();
     this.bootstrapInitialState();
   }
 
   destroy(): void {
-    this.isDestroying = true;
     document.removeEventListener('click', this.boundOnClick, true);
     document.removeEventListener('keydown', this.boundOnKeyDown);
     window.removeEventListener('popstate', this.boundOnPopState);
@@ -263,8 +236,6 @@ export class HomepageController implements HomepageRuntimeApi {
     this.applyListSceneState({ activeSlug: null, dimmed: false });
     this.applyDetailSceneVisibility(false);
     this.setNavHidden(false);
-    this.detailScene.setAttribute('aria-hidden', 'true');
-    this.detailScene.dataset.sceneState = 'closed';
     this.syncSceneProjectSlug(null);
     this.spriteRuntime?.destroy();
     this.spriteRuntime = null;
@@ -363,7 +334,6 @@ export class HomepageController implements HomepageRuntimeApi {
         title: (cardEl.dataset.title || slug).trim(),
         formattedDate: (cardEl.dataset.formattedDate || '').trim(),
         thumbnail: (cardEl.dataset.thumbnail || '').trim(),
-        hlsUrl: (cardEl.dataset.hlsUrl || '').trim(),
         thumbnailAspectRatio,
         spriteAspectRatio,
         heroAspectRatio,
@@ -383,112 +353,38 @@ export class HomepageController implements HomepageRuntimeApi {
       const slug = openTrigger.getAttribute('data-open-project');
       if (!slug) return;
       event.preventDefault();
-      void this.openProject(slug, {
-        reason: 'user-open',
-        pushHistory: true,
-      });
+      void this.openProject(slug, 'push');
       return;
     }
 
-    const closeTrigger = target.closest<HTMLElement>('[data-close-detail]');
-    if (closeTrigger && this.openSlug) {
+    if (target.closest('[data-close-detail]') && this.openSlug) {
       event.preventDefault();
-      void this.closeProject({
-        reason: 'user-close',
-        pushHistory: true,
-      });
-      return;
+      void this.closeProject('push');
     }
-
-    const siteTitle = target.closest<HTMLAnchorElement>('a.site-title');
-    if (!siteTitle || !this.openSlug) {
-      return;
-    }
-
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-    if (siteTitle.target && siteTitle.target !== '_self') {
-      return;
-    }
-
-    let destination: URL;
-    try {
-      destination = new URL(siteTitle.href, window.location.origin);
-    } catch {
-      return;
-    }
-    if (destination.origin !== window.location.origin || destination.pathname !== '/') {
-      return;
-    }
-
-    event.preventDefault();
-    void this.closeProject({
-      reason: 'site-title-close',
-      pushHistory: true,
-    });
   }
 
   private onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || !this.openSlug) {
+    if (event.key !== 'Escape' || event.defaultPrevented || isEditingActive() || !this.openSlug) {
       return;
     }
     event.preventDefault();
-    void this.closeProject({
-      reason: 'escape',
-      pushHistory: true,
-    });
+    void this.closeProject('push');
   }
 
   private onPopState(): void {
-    this.isHandlingPopState = true;
     const targetSlug = this.extractSlugFromLocation();
-    if (targetSlug && targetSlug === this.openSlug && this.state === 'open:detail') {
-      this.syncHashScrollAfterNavigation(targetSlug);
-      this.isHandlingPopState = false;
-      return;
+    if (targetSlug) {
+      void this.openProject(targetSlug, 'none');
+    } else {
+      void this.closeProject('none');
     }
-
-    if (!targetSlug) {
-      if (!this.openSlug) {
-        this.isHandlingPopState = false;
-        return;
-      }
-      void this.closeProject({
-        reason: 'popstate-close',
-        historyMode: 'none',
-      }).finally(() => {
-        this.isHandlingPopState = false;
-      });
-      return;
-    }
-
-    void this.openProject(targetSlug, {
-      reason: 'popstate-open',
-      historyMode: 'none',
-    }).finally(() => {
-      this.isHandlingPopState = false;
-    });
   }
 
   private bootstrapInitialState(): void {
     const initialSlug = this.extractSlugFromLocation();
-    if (!initialSlug) return;
-
-    void this.openProject(initialSlug, {
-      reason: 'initial-route',
-      historyMode: 'replace',
-      preferInstant: true,
-    });
-  }
-
-  private ensureHistoryStateFromLocation(): void {
-    const slug = this.extractSlugFromLocation();
-    const currentState = window.history.state;
-    if (currentState && currentState.homepage === true && currentState.slug === slug) {
-      return;
+    if (initialSlug) {
+      void this.openProject(initialSlug, 'replace');
     }
-    window.history.replaceState({ homepage: true, slug }, '', window.location.href);
   }
 
   private extractSlugFromPathname(pathnameValue: string): string | null {
@@ -527,71 +423,37 @@ export class HomepageController implements HomepageRuntimeApi {
   private pushHistoryState(slug: string | null): void {
     const nextUrl = this.buildUrlForSlug(slug);
     if (window.location.href === nextUrl) return;
-    window.history.pushState({ homepage: true, slug }, '', nextUrl);
+    window.history.pushState(null, '', nextUrl);
   }
 
   private replaceHistoryState(slug: string | null, options: { preserveHash?: boolean } = {}): void {
-    window.history.replaceState({ homepage: true, slug }, '', this.buildUrlForSlug(slug, options));
+    window.history.replaceState(null, '', this.buildUrlForSlug(slug, options));
   }
 
-  private getDetailScrollContainer(): HTMLElement | null {
-    return this.detailScene.querySelector<HTMLElement>('.homepage-detail-scroll');
-  }
-
-  private scrollOpenDetailToTop(): void {
-    const scrollContainer = this.getDetailScrollContainer();
-    if (scrollContainer) {
-      scrollContainer.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  private syncHashScrollAfterNavigation(slug: string): void {
+    if (this.extractSlugFromLocation() !== slug) {
       return;
     }
-
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-  }
-
-  private syncHashScrollAfterNavigation(slug: string | null): void {
-    if (!slug || this.extractSlugFromLocation() !== slug) {
-      return;
-    }
-
-    const performScrollSync = (): void => {
-      if (this.openSlug !== slug || this.state !== 'open:detail') {
-        return;
-      }
-
-      if (window.location.hash) {
-        scrollToHashTarget('auto');
-        return;
-      }
-
-      this.scrollOpenDetailToTop();
-    };
 
     requestAnimationFrame(() => {
-      requestAnimationFrame(performScrollSync);
+      requestAnimationFrame(() => {
+        if (this.openSlug === slug && this.state === 'open') {
+          syncDetailScroll(this.detailScroll);
+        }
+      });
     });
   }
 
-  private beginTransition(): number {
+  private beginTransition(): AbortSignal {
     this.cancelInFlight();
-    this.transitionToken += 1;
-    this.activeTransitionToken = this.transitionToken;
-    return this.transitionToken;
-  }
-
-  private isTokenActive(token: number): boolean {
-    return token === this.transitionToken && !this.isDestroying;
+    this.transition = new AbortController();
+    return this.transition.signal;
   }
 
   private cancelInFlight(): void {
+    this.transition.abort();
     this.cancelRunningAnimations();
-    this.abortActiveFetch();
     this.clearTransitionLayer();
-    this.activeTransitionToken = null;
-  }
-
-  private abortActiveFetch(): void {
-    this.activeFetchController?.abort();
-    this.activeFetchController = null;
   }
 
   private cancelRunningAnimations(): void {
@@ -648,8 +510,7 @@ export class HomepageController implements HomepageRuntimeApi {
   }
 
   private resetDetailContent(): void {
-    this.cleanupMountedDetail();
-    this.teardownHeroVideo();
+    cleanupProjectDetail(this.detailScene);
     this.clearHeroBridge();
     this.activeHeroVideoReadyPromise = Promise.resolve(false);
     this.detailHeroMedia.innerHTML = '';
@@ -668,7 +529,6 @@ export class HomepageController implements HomepageRuntimeApi {
 
   private syncSceneProjectSlug(slug: string | null): void {
     const resolvedSlug = slug?.trim() || '';
-    this.detailScene.dataset.openProjectSlug = resolvedSlug;
     const editButton = this.detailScene.querySelector<HTMLElement>('[data-homepage-edit-project]');
     if (editButton) {
       editButton.dataset.projectSlug = resolvedSlug;
@@ -736,7 +596,7 @@ export class HomepageController implements HomepageRuntimeApi {
     this.detailHeroFrame.appendChild(this.createHeroBridgeNode(card, frameIndex));
   }
 
-  private async fadeOutHeroBridge(token: number, durationMs: number = HERO_BRIDGE_FADE_MS): Promise<void> {
+  private async fadeOutHeroBridge(signal: AbortSignal, durationMs: number = HERO_BRIDGE_FADE_MS): Promise<void> {
     const bridge = this.detailHeroFrame.querySelector<HTMLElement>('.homepage-hero-bridge');
     if (!bridge) return;
 
@@ -756,12 +616,12 @@ export class HomepageController implements HomepageRuntimeApi {
       )
     );
     await waitForAnimationFinish(animation);
-    if (!this.isTokenActive(token)) return;
+    if (signal.aborted) return;
     bridge.remove();
   }
 
-  private async revealHeroVideoWhenReady(card: HomepageProjectCard, token: number, frameIndex: number): Promise<void> {
-    if (!this.isTokenActive(token)) return;
+  private async revealHeroVideoWhenReady(card: HomepageProjectCard, signal: AbortSignal, frameIndex: number): Promise<void> {
+    if (signal.aborted) return;
     const video = this.detailHeroMedia.querySelector('video');
     if (!video) {
       this.clearHeroBridge();
@@ -770,13 +630,13 @@ export class HomepageController implements HomepageRuntimeApi {
 
     this.installHeroBridge(card, frameIndex);
     const isReady = await this.activeHeroVideoReadyPromise.catch(() => false);
-    if (!this.isTokenActive(token)) return;
+    if (signal.aborted) return;
     if (!isReady) {
       this.clearHeroBridge();
       return;
     }
 
-    await this.fadeOutHeroBridge(token);
+    await this.fadeOutHeroBridge(signal);
   }
 
   /** Aspect ratio of the media the transition layer shows, before any frame crops it. */
@@ -878,9 +738,9 @@ export class HomepageController implements HomepageRuntimeApi {
     targetHeading: HeadingEnd | null;
     frameIndex: number;
     durationMs: number;
-    token: number;
+    signal: AbortSignal;
   }): Promise<void> {
-    if (!this.isTokenActive(options.token)) return;
+    if (options.signal.aborted) return;
 
     const mediaAspectRatio = this.resolveTransitionMediaAspectRatio(options.card);
     const keyframes = buildMorphKeyframes(options.sourceRect, options.targetRect, mediaAspectRatio);
@@ -941,175 +801,29 @@ export class HomepageController implements HomepageRuntimeApi {
     };
   }
 
-  private async fetchDetailsHtml(slug: string, token: number): Promise<string> {
+  private async fetchDetailsHtml(slug: string, signal: AbortSignal): Promise<string> {
     const cached = this.detailsHtmlCache.get(slug);
     if (cached) {
       return cached;
     }
 
-    this.abortActiveFetch();
-
     const projectUrl = new URL(`/${slug}`, window.location.origin);
     projectUrl.searchParams.set('_partial', '1');
-    const showDrafts = new URL(window.location.href).searchParams.get('show_drafts');
-    if (showDrafts === 'true') {
+    if (new URL(window.location.href).searchParams.get('show_drafts') === 'true') {
       projectUrl.searchParams.set('show_drafts', 'true');
     }
 
-    const controller = new AbortController();
-    this.activeFetchController = controller;
-
-    try {
-      const response = await fetch(projectUrl.toString(), {
-        method: 'GET',
-        headers: {
-          Accept: 'text/html',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch project detail (${response.status})`);
-      }
-
-      const html = await response.text();
-      if (!this.isTokenActive(token)) {
-        return '';
-      }
-
-      this.detailsHtmlCache.set(slug, html);
-      return html;
-    } finally {
-      if (this.activeFetchController === controller) {
-        this.activeFetchController = null;
-      }
-    }
-  }
-
-  private teardownHeroVideo(): void {
-    const video = this.detailHeroMedia.querySelector<HTMLVideoElement>('video');
-    if (video) {
-      try {
-        video.pause();
-      } catch {
-        // Ignore pause failures during teardown.
-      }
-      projectDetailRuntime.destroyHeroVideo(video);
-    }
-  }
-
-  private hydrateMountedDetail(): void {
-    projectDetailRuntime.hydrateDetail(this.detailScene);
-  }
-
-  private cleanupMountedDetail(): void {
-    projectDetailRuntime.cleanupDetail(this.detailScene);
-  }
-
-  private async setupHeroVideo(slug: string): Promise<void> {
-    const video = this.detailHeroMedia.querySelector<HTMLVideoElement>('video');
-    if (!video) return;
-
-    const card = this.cardsBySlug.get(slug);
-    if (card?.thumbnail && !video.poster) {
-      video.poster = card.thumbnail;
-    }
-    await projectDetailRuntime.setupHeroVideo(video);
-  }
-
-  private waitForFirstVideoFrame(video: FrameAwareVideoElement, token: number, timeoutMs: number = 7000): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      let finished = false;
-      let frameCallbackId: number | null = null;
-      let tokenWatcherId: number | null = null;
-
-      const finish = (ok: boolean, error?: unknown): void => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timeoutId);
-        if (tokenWatcherId !== null) {
-          clearInterval(tokenWatcherId);
-        }
-        video.removeEventListener('loadeddata', onMaybeReady);
-        video.removeEventListener('canplay', onMaybeReady);
-        video.removeEventListener('playing', onMaybeReady);
-        video.removeEventListener('timeupdate', onMaybeReady);
-        video.removeEventListener('error', onError);
-        if (frameCallbackId !== null) {
-          video.cancelVideoFrameCallback?.(frameCallbackId);
-        }
-        if (ok) {
-          resolve(true);
-        } else {
-          reject(error || new Error('Video did not render a first frame in time'));
-        }
-      };
-
-      const onMaybeReady = (): void => {
-        if (!this.isTokenActive(token)) {
-          finish(false, new Error('Transition cancelled'));
-          return;
-        }
-        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-          finish(true);
-        }
-      };
-
-      const onError = (): void => {
-        finish(false, new Error('Video error before first frame'));
-      };
-
-      const timeoutId = window.setTimeout(() => {
-        finish(false, new Error('Timed out waiting for first video frame'));
-      }, timeoutMs);
-
-      tokenWatcherId = window.setInterval(() => {
-        if (!this.isTokenActive(token)) {
-          finish(false, new Error('Transition cancelled'));
-        }
-      }, 80);
-
-      video.addEventListener('loadeddata', onMaybeReady);
-      video.addEventListener('canplay', onMaybeReady);
-      video.addEventListener('playing', onMaybeReady);
-      video.addEventListener('timeupdate', onMaybeReady);
-      video.addEventListener('error', onError, { once: true });
-
-      if (video.requestVideoFrameCallback) {
-        frameCallbackId = video.requestVideoFrameCallback(() => {
-          if (!this.isTokenActive(token)) {
-            finish(false, new Error('Transition cancelled'));
-            return;
-          }
-          finish(true);
-        });
-      }
-
-      onMaybeReady();
-    });
-  }
-
-  private async prepareHeroVideo(slug: string, token: number): Promise<boolean> {
-    const video = this.detailHeroMedia.querySelector<FrameAwareVideoElement>('video');
-    if (!video) {
-      return false;
+    const response = await fetch(projectUrl.toString(), { signal });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch project detail (${response.status})`);
     }
 
-    try {
-      await this.setupHeroVideo(slug);
-      if (!this.isTokenActive(token)) return false;
-      await this.waitForFirstVideoFrame(video, token, 7000);
-      this.detailHeroFrame.style.setProperty('--homepage-fallback-poster', 'none');
-      return this.isTokenActive(token);
-    } catch (error) {
-      if (this.isTokenActive(token)) {
-        console.warn('Hero video was not ready before reveal window:', error);
-      }
-      return false;
-    }
+    const html = await response.text();
+    this.detailsHtmlCache.set(slug, html);
+    return html;
   }
 
-  private async mountDetail(slug: string, token: number, frameIndex: number): Promise<void> {
+  private async mountDetail(slug: string, signal: AbortSignal, frameIndex: number): Promise<void> {
     const card = this.cardsBySlug.get(slug);
     if (!card) {
       throw new Error(`Card not found: ${slug}`);
@@ -1125,8 +839,8 @@ export class HomepageController implements HomepageRuntimeApi {
       card.thumbnail ? `url("${card.thumbnail.replace(/"/g, '\\"')}")` : 'none'
     );
 
-    const html = await this.fetchDetailsHtml(slug, token);
-    if (!this.isTokenActive(token)) return;
+    const html = await this.fetchDetailsHtml(slug, signal);
+    if (signal.aborted) return;
 
     const parser = document.createElement('div');
     parser.innerHTML = html;
@@ -1150,18 +864,30 @@ export class HomepageController implements HomepageRuntimeApi {
       this.detailContent.appendChild(fallbackNode);
     }
 
-    this.hydrateMountedDetail();
-    this.activeHeroVideoReadyPromise = this.prepareHeroVideo(slug, token);
+    hydrateProjectDetail(this.detailScene);
+    this.startHeroVideo(card, signal);
   }
 
-  async openProject(slug: string, options: OpenProjectOptions = {}): Promise<void> {
+  private startHeroVideo(card: HomepageProjectCard, signal: AbortSignal): void {
+    const video = this.detailHeroMedia.querySelector('video');
+    if (!video) return;
+
+    if (card.thumbnail && !video.poster) {
+      video.poster = card.thumbnail;
+    }
+    this.activeHeroVideoReadyPromise = prepareHeroVideo(video, signal).then((ready) => {
+      if (ready) {
+        this.detailHeroFrame.style.setProperty('--homepage-fallback-poster', 'none');
+      }
+      return ready;
+    });
+  }
+
+  async openProject(slug: string, historyMode: HistoryMode = 'none'): Promise<void> {
     const card = this.cardsBySlug.get(slug);
     if (!card) return;
 
-    const historyMode = options.historyMode || (options.pushHistory ? 'push' : 'none');
-    const preferInstant = options.preferInstant === true;
-
-    if (this.openSlug === slug && this.state === 'open:detail') {
+    if (this.openSlug === slug && this.state === 'open') {
       if (historyMode === 'push') this.pushHistoryState(slug);
       if (historyMode === 'replace') this.replaceHistoryState(slug, { preserveHash: true });
       this.syncHashScrollAfterNavigation(slug);
@@ -1169,24 +895,20 @@ export class HomepageController implements HomepageRuntimeApi {
     }
 
     if (this.openSlug && this.openSlug !== slug) {
-      await this.closeProject({
-        reason: `switch:${this.openSlug}->${slug}`,
-        historyMode: 'none',
-      });
+      await this.closeProject('none');
     }
 
     if (!this.openSlug) {
       this.lastFocusedBeforeOpen = document.activeElement;
     }
 
-    const token = this.beginTransition();
-    this.state = 'opening:measure';
-    this.detailScene.dataset.sceneState = this.state;
+    const signal = this.beginTransition();
+    this.state = 'opening';
     const transitionFrameIndex = this.getTransitionFrameIndex(card);
 
     try {
-      await this.mountDetail(slug, token, transitionFrameIndex);
-      if (!this.isTokenActive(token)) return;
+      await this.mountDetail(slug, signal, transitionFrameIndex);
+      if (signal.aborted) return;
 
       const snapshot = this.measureOpenSnapshot(slug);
       card.spriteController?.freeze();
@@ -1196,85 +918,68 @@ export class HomepageController implements HomepageRuntimeApi {
       this.markSourceVisibility(card, true);
       this.markTargetVisibility(true);
 
-      if (!snapshot || preferInstant || shouldUseReducedMotion()) {
-        this.commitOpen(token, slug, historyMode, transitionFrameIndex);
-        return;
+      // A direct entry (replace) lands open, with nothing on screen to fly from.
+      if (snapshot && historyMode !== 'replace' && !shouldUseReducedMotion()) {
+        await this.runMorphTransition({
+          card,
+          sourceRect: snapshot.sourceRect,
+          targetRect: snapshot.targetRect,
+          sourceHeading: snapshot.sourceHeading,
+          targetHeading: snapshot.targetHeading,
+          frameIndex: transitionFrameIndex,
+          durationMs: OPEN_DURATION_MS,
+          signal,
+        });
+        if (signal.aborted) return;
       }
 
-      this.state = 'opening:animate';
-      this.detailScene.dataset.sceneState = this.state;
-      await this.runMorphTransition({
-        card,
-        sourceRect: snapshot.sourceRect,
-        targetRect: snapshot.targetRect,
-        sourceHeading: snapshot.sourceHeading,
-        targetHeading: snapshot.targetHeading,
-        frameIndex: transitionFrameIndex,
-        durationMs: OPEN_DURATION_MS,
-        token,
-      });
-      if (!this.isTokenActive(token)) return;
-
-      this.commitOpen(token, slug, historyMode, transitionFrameIndex);
+      this.commitOpen(signal, slug, historyMode, transitionFrameIndex);
     } catch (error) {
-      if (!this.isTokenActive(token)) return;
+      if (signal.aborted) return;
       console.error('Failed to open homepage project detail:', error);
       this.rollbackToList();
     }
   }
 
-  private commitOpen(token: number, slug: string, historyMode: 'none' | 'push' | 'replace', frameIndex: number): void {
-    if (!this.isTokenActive(token)) return;
-
+  private commitOpen(signal: AbortSignal, slug: string, historyMode: HistoryMode, frameIndex: number): void {
     const card = this.cardsBySlug.get(slug);
     if (!card) return;
 
     this.clearTransitionLayer();
     this.markTargetVisibility(false);
-    this.detailScene.classList.add('homepage-visible');
-    this.detailScene.dataset.sceneState = 'open:detail';
     this.openSlug = slug;
     this.syncSceneProjectSlug(slug);
-    this.state = 'open:detail';
+    this.state = 'open';
     this.flushReadyWaiters();
 
-    void this.revealHeroVideoWhenReady(card, token, frameIndex);
+    void this.revealHeroVideoWhenReady(card, signal, frameIndex);
 
     this.detailScene.querySelector<HTMLElement>('.homepage-close-button')?.focus({ preventScroll: true });
 
-    if (historyMode === 'push' && !this.isHandlingPopState) {
+    if (historyMode === 'push') {
       this.pushHistoryState(slug);
     } else if (historyMode === 'replace') {
       this.replaceHistoryState(slug, { preserveHash: true });
     }
 
     this.syncHashScrollAfterNavigation(slug);
-
-    if (this.activeTransitionToken === token) {
-      this.activeTransitionToken = null;
-    }
   }
 
-  async closeProject(options: CloseProjectOptions = {}): Promise<void> {
+  async closeProject(historyMode: 'none' | 'push' = 'none'): Promise<void> {
     if (!this.openSlug) {
       return;
     }
 
     const slug = this.openSlug;
     const card = this.cardsBySlug.get(slug);
-    const historyMode = options.historyMode || (options.pushHistory ? 'push' : 'none');
-    const preferInstant = options.preferInstant === true;
-
     if (!card) {
       this.rollbackToList();
       if (historyMode === 'push') this.pushHistoryState(null);
-      if (historyMode === 'replace') this.replaceHistoryState(null);
       return;
     }
 
-    const token = this.beginTransition();
-    this.state = 'closing:measure';
-    this.detailScene.dataset.sceneState = this.state;
+    const signal = this.beginTransition();
+    this.state = 'closing';
 
     try {
       const snapshot = this.measureCloseSnapshot(slug);
@@ -1282,36 +987,29 @@ export class HomepageController implements HomepageRuntimeApi {
       this.markTargetVisibility(true);
       this.applyDetailSceneVisibility(false);
 
-      if (!snapshot || preferInstant || shouldUseReducedMotion()) {
-        this.commitClose(token, historyMode);
-        return;
+      if (snapshot && !shouldUseReducedMotion()) {
+        await this.runMorphTransition({
+          card,
+          sourceRect: snapshot.sourceRect,
+          targetRect: snapshot.targetRect,
+          sourceHeading: snapshot.sourceHeading,
+          targetHeading: snapshot.targetHeading,
+          frameIndex: this.getTransitionFrameIndex(card),
+          durationMs: CLOSE_DURATION_MS,
+          signal,
+        });
+        if (signal.aborted) return;
       }
 
-      this.state = 'closing:animate';
-      this.detailScene.dataset.sceneState = this.state;
-      await this.runMorphTransition({
-        card,
-        sourceRect: snapshot.sourceRect,
-        targetRect: snapshot.targetRect,
-        sourceHeading: snapshot.sourceHeading,
-        targetHeading: snapshot.targetHeading,
-        frameIndex: this.getTransitionFrameIndex(card),
-        durationMs: CLOSE_DURATION_MS,
-        token,
-      });
-      if (!this.isTokenActive(token)) return;
-
-      this.commitClose(token, historyMode);
+      this.commitClose(historyMode);
     } catch (error) {
-      if (!this.isTokenActive(token)) return;
+      if (signal.aborted) return;
       console.error('Failed to close homepage project detail:', error);
       this.rollbackToList();
     }
   }
 
-  private commitClose(token: number, historyMode: 'none' | 'push' | 'replace'): void {
-    if (!this.isTokenActive(token)) return;
-
+  private commitClose(historyMode: 'none' | 'push'): void {
     const previousSlug = this.openSlug;
     const previousCard = previousSlug ? this.cardsBySlug.get(previousSlug) : null;
 
@@ -1327,8 +1025,7 @@ export class HomepageController implements HomepageRuntimeApi {
 
     this.openSlug = null;
     this.syncSceneProjectSlug(null);
-    this.state = 'idle:list';
-    this.detailScene.dataset.sceneState = 'closed';
+    this.state = 'closed';
     this.flushReadyWaiters(true);
 
     if (this.lastFocusedBeforeOpen instanceof HTMLElement) {
@@ -1338,14 +1035,8 @@ export class HomepageController implements HomepageRuntimeApi {
     }
     this.lastFocusedBeforeOpen = null;
 
-    if (historyMode === 'push' && !this.isHandlingPopState) {
+    if (historyMode === 'push') {
       this.pushHistoryState(null);
-    } else if (historyMode === 'replace') {
-      this.replaceHistoryState(null);
-    }
-
-    if (this.activeTransitionToken === token) {
-      this.activeTransitionToken = null;
     }
   }
 
@@ -1364,14 +1055,12 @@ export class HomepageController implements HomepageRuntimeApi {
     this.markTargetVisibility(false);
     this.openSlug = null;
     this.syncSceneProjectSlug(null);
-    this.state = 'idle:list';
-    this.detailScene.dataset.sceneState = 'closed';
-    this.activeTransitionToken = null;
+    this.state = 'closed';
     this.flushReadyWaiters(true);
   }
 
   private getReadySlug(): string | null {
-    if (this.state !== 'open:detail' || !this.openSlug) {
+    if (this.state !== 'open' || !this.openSlug) {
       return null;
     }
     return this.detailContent.querySelector('.project-content') ? this.openSlug : null;

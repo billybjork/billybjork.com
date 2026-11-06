@@ -7,6 +7,7 @@ import {
 import { readPositiveNumber } from '../core/numbers';
 
 const HLS_LEVEL_ASPECT_DRIFT_TOLERANCE = 0.0015;
+const FIRST_FRAME_TIMEOUT_MS = 7000;
 
 interface HeroPlayer {
   abortController: AbortController;
@@ -146,7 +147,7 @@ function applyStableHlsLevel(hls: Hls, videoElement: HTMLVideoElement): void {
   hls.startLevel = stableLevel;
 }
 
-export async function setupHeroVideoPlayer(videoElement: HTMLVideoElement): Promise<void> {
+async function setupHeroVideoPlayer(videoElement: HTMLVideoElement): Promise<void> {
   const streamUrl = videoElement.dataset.hlsUrl;
   if (!streamUrl) {
     throw new Error('No HLS URL provided for video element');
@@ -181,4 +182,68 @@ export function destroyHeroVideoPlayer(videoElement: HTMLVideoElement): void {
 
   destroyHlsInstance(videoElement);
   resetVideoElementSource(videoElement);
+}
+
+type FrameAwareVideoElement = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: (...args: unknown[]) => void) => number;
+  cancelVideoFrameCallback?: (handle: number) => void;
+};
+
+/** Resolves once the video has something to paint; rejects on error, timeout, or abort. */
+function waitForFirstVideoFrame(video: FrameAwareVideoElement, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const MEDIA_EVENTS = ['loadeddata', 'canplay', 'playing', 'timeupdate'];
+    let frameCallbackId: number | null = null;
+
+    const finish = (error?: Error): void => {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onAbort);
+      video.removeEventListener('error', onError);
+      MEDIA_EVENTS.forEach((type) => video.removeEventListener(type, onMaybeReady));
+      if (frameCallbackId !== null) {
+        video.cancelVideoFrameCallback?.(frameCallbackId);
+      }
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+
+    const onMaybeReady = (): void => {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        finish();
+      }
+    };
+    const onError = (): void => finish(new Error('Video error before first frame'));
+    const onAbort = (): void => finish(new Error('Transition cancelled'));
+    const timeoutId = window.setTimeout(() => {
+      finish(new Error('Timed out waiting for first video frame'));
+    }, FIRST_FRAME_TIMEOUT_MS);
+
+    signal.addEventListener('abort', onAbort, { once: true });
+    video.addEventListener('error', onError, { once: true });
+    MEDIA_EVENTS.forEach((type) => video.addEventListener(type, onMaybeReady));
+    frameCallbackId = video.requestVideoFrameCallback?.(() => finish()) ?? null;
+
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      onMaybeReady();
+    }
+  });
+}
+
+/** Starts the player and resolves true once its first frame can show; never rejects. */
+export async function prepareHeroVideo(video: HTMLVideoElement, signal: AbortSignal): Promise<boolean> {
+  try {
+    await setupHeroVideoPlayer(video);
+    await waitForFirstVideoFrame(video, signal);
+    return true;
+  } catch (error) {
+    if (!signal.aborted) {
+      console.warn('Hero video was not ready before reveal window:', error);
+    }
+    return false;
+  }
 }

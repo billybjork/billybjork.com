@@ -94,6 +94,19 @@ class FrontendMarkupTests(unittest.TestCase):
             app.login()
             self.assert_contract(app.client.get("/").text, self.contract["homepageForEditors"])
 
+    def test_each_page_loads_only_its_own_bundle(self) -> None:
+        with managed_test_app() as app:
+            homepage = app.client.get("/").text
+            self.assertIn("build/homepage.js", homepage)
+            self.assertNotIn("build/project.js", homepage)
+
+            point_cloud = app.client.get("/test").text
+            self.assertIn("build/project.js", point_cloud)
+            self.assertIn("build/project.css", point_cloud)
+            self.assertNotIn("build/homepage.js", point_cloud)
+
+            self.assertNotIn("static/build/", app.client.get("/me").text)
+
 
 if __name__ == "__main__":
     unittest.main()

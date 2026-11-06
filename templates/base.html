@@ -21,7 +21,6 @@
     <!-- Font and network setup -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    {% block preconnect %}{% endblock %}
 
     <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@100..900&display=block" rel="stylesheet">
     <!-- Main stylesheet -->
@@ -39,7 +38,7 @@
     <header id="main-header">
         <h1><a href="/" class="site-title">Billy Bjork</a></h1>
         <nav>
-            <a href="https://www.magicbutton.studio/" class="magic-button-btn" target="_blank" rel="noopener">
+            <a href="https://www.magicbutton.studio/" class="magic-button-btn" target="_blank" rel="noopener noreferrer">
                 <img src="{{ static_url(request, 'assets/magic-button.webp') }}" alt="Magic Button icon" class="magic-button-icon" fetchpriority="high">
                 Magic Button
             </a>
@@ -52,8 +51,6 @@
 
     {% include "footer.html" %}
 
-    <!-- Deferred scripts (generated frontend runtimes) -->
-    {% block deferred_scripts %}{% endblock %}
     {% if is_dev_mode %}
     <script src="{{ static_url(request, 'build/edit.js') }}" defer></script>
     {% endif %}

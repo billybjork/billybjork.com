@@ -2,11 +2,8 @@
 
 {% block main_class %}homepage-shared-element{% endblock %}
 
-{% block preconnect %}<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>{% endblock %}
-
-{% block deferred_scripts %}<script src="{{ static_url(request, 'build/project.js') }}" defer></script>{% endblock %}
-
 {% block additional_head %}
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="stylesheet" href="{{ static_url(request, 'build/homepage.css') }}">
 {% endblock %}
 
@@ -35,7 +32,6 @@
                 {% if homepage_thumb_aspect_ratio %}data-thumbnail-aspect-ratio="{{ homepage_thumb_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.hero_aspect_ratio %}data-hero-aspect-ratio="{{ project.hero_aspect_ratio | round(8) }}"{% endif %}
                 {% if project.thumbnail_link %}data-thumbnail="{{ project.thumbnail_link }}"{% endif %}
-                {% if project.video_link %}data-hls-url="{{ project.video_link }}"{% endif %}
                 {% if homepage_thumb_aspect_ratio %}
                 style="--homepage-thumb-aspect: {{ homepage_thumb_aspect_ratio | round(8) }};"
                 {% endif %}>
@@ -76,9 +72,7 @@
 <section
     class="homepage-detail-scene"
     id="homepage-detail-scene"
-    aria-hidden="true"
-    data-scene-state="closed"
-    data-open-project-slug="">
+    aria-hidden="true">
     <div class="homepage-detail-backdrop" data-close-detail></div>
     <div class="homepage-detail-scroll">
         <article class="homepage-detail-shell" role="dialog" aria-modal="true" aria-labelledby="homepage-detail-title">
@@ -92,7 +86,6 @@
                     <button
                         class="edit-project-btn homepage-edit-project-btn"
                         type="button"
-                        data-action="edit"
                         data-homepage-edit-project
                         data-project-slug=""
                         aria-label="Edit project"
@@ -111,8 +104,7 @@
             </div>
             <section
                 class="homepage-detail-content"
-                id="homepage-detail-content"
-                data-homepage-detail-content></section>
+                id="homepage-detail-content"></section>
         </article>
     </div>
 </section>
