@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
     "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -12,9 +12,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "noEmit": true,
-    "rootDir": "./static/ts",
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["static/ts/**/*.ts"],
+  "include": ["static/ts/**/*.ts", "tests/frontend/**/*.ts"],
   "exclude": ["node_modules", "static/build"]
 }

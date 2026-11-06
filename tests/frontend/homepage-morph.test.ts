@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pinFlightTypography } from '../../static/ts/homepage/flight';
 import { buildMorphKeyframes, coverBox } from '../../static/ts/homepage/morph';
 
-function parseKeyframe(keyframe: Keyframe): { tx: number; ty: number; scale: number; inset: number[] } {
+function parseKeyframe(keyframe: Keyframe): { tx: number; ty: number; scale: number; inset: [number, number, number, number] } {
   const transform = String(keyframe.transform);
   const translate = /translate3d\(([-\d.e]+)px, ([-\d.e]+)px/.exec(transform);
   const scale = /scale\(([-\d.e]+)\)/.exec(transform);
@@ -12,7 +12,7 @@ function parseKeyframe(keyframe: Keyframe): { tx: number; ty: number; scale: num
     tx: Number(translate[1]),
     ty: Number(translate[2]),
     scale: Number(scale[1]),
-    inset: inset[1].split(' ').map((value) => Number.parseFloat(value)),
+    inset: inset[1]!.split(' ').map((value) => Number.parseFloat(value)) as [number, number, number, number],
   };
 }
 
@@ -45,8 +45,8 @@ describe('buildMorphKeyframes', () => {
   it('starts on the thumbnail frame and ends on the hero frame across aspect ratios', () => {
     const keyframes = buildMorphKeyframes(thumb, portraitHero, 16 / 9);
     const sourceMedia = coverBox(thumb, 16 / 9);
-    const start = visibleBox(sourceMedia, keyframes[0]);
-    const end = visibleBox(sourceMedia, keyframes[keyframes.length - 1]);
+    const start = visibleBox(sourceMedia, keyframes[0]!);
+    const end = visibleBox(sourceMedia, keyframes[keyframes.length - 1]!);
 
     for (const [actual, expected] of [[start, thumb], [end, portraitHero]] as const) {
       expect(actual.left).toBeCloseTo(expected.left);
@@ -89,7 +89,7 @@ describe('pinFlightTypography', () => {
 
     pinFlightTypography(source, clone);
 
-    const [date, title] = clone.children as HTMLCollectionOf<HTMLElement>;
+    const [date, title] = Array.from(clone.children) as [HTMLElement, HTMLElement];
     expect(clone.style.lineHeight).toBe('25.6px');
     expect(date.style.lineHeight).toBe('18.432px');
     expect(date.style.fontSize).toBe('11.52px');

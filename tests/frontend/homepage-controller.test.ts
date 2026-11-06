@@ -78,7 +78,7 @@ describe('HomepageController', () => {
 
     expect(isDetailOpen(detailScene)).toBe(false);
     expect(flightsMidAnimation).toHaveLength(2);
-    expect(flightsMidAnimation[1][0]).toBe('2024 Project One');
+    expect(flightsMidAnimation[1]![0]).toBe('2024 Project One');
     expect(document.querySelector('.homepage-heading-flight')).toBeNull();
     expect(cardHeading?.classList.contains('homepage-source-hidden')).toBe(false);
 
