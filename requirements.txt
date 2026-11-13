@@ -48,7 +48,7 @@ markdown==3.11.1
     # via billybjork-site
 markupsafe==3.0.4
     # via jinja2
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
     # via fastapi
 pillow==13.0.0
     # via billybjork-site
@@ -70,7 +70,7 @@ s3transfer==0.19.2
     # via boto3
 six==1.17.0
     # via python-dateutil
-soupsieve==3.0.3
+soupsieve==4.1
     # via beautifulsoup4
 starlette==1.8.0
     # via fastapi
